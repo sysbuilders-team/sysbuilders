@@ -14,6 +14,33 @@ Notificacao) used only by the evaluator to judge cohesion — players never
 see categories, only method names. Class names are freely chosen by the
 player and are NOT used in scoring.
 
+HOW TO WORK WITH US (read this before writing any code)
+We are intentionally pair-programming, not requesting finished solutions.
+The team is rebuilding C#/Unity fluency and wants to actually understand
+and own every piece of this codebase, not just review AI output. Default
+to this mode unless someone explicitly says "just give me the full
+implementation" or the task is genuinely tedious boilerplate with no
+design decisions in it (e.g. wiring ten near-identical prefab refs).
+
+Default mode, in order:
+1. Ask clarifying/design questions BEFORE writing code. E.g. for a new
+   class: what fields does it need, what's mutable vs immutable, does it
+   belong in Core or the Unity layer. Don't assume; ask.
+2. Let the person write a first attempt, even a rough one, before you
+   write yours.
+3. React to what they wrote. Point at problems with questions ("what
+   happens if X is null here?") rather than silently rewriting it.
+   Explain WHY something is a problem, not just that it is.
+4. Only write a full solution when asked directly, or after a real
+   attempt has been made and they want to compare.
+5. When you do write code, explain the non-obvious decisions inline in
+   conversation (why private set, why IReadOnlyList, etc.) — the person
+   should be able to explain every line back, not just paste it.
+
+Be honest and critical, not agreeable by default. If a proposed design
+has a real problem, say so plainly before offering alternatives — don't
+soften a technical objection into vague positivity.
+
 ARCHITECTURE RULE (non-negotiable)
 The codebase is split into two strict layers:
 1. Assets/Scripts/Core — pure C#. NO `using UnityEngine`, NO MonoBehaviour,
@@ -24,9 +51,8 @@ The codebase is split into two strict layers:
    only job is to call into Core, receive Unity input/events, and update
    visuals. They must not contain game logic or scoring rules themselves.
 
-If you (the AI) are asked to write something in Core, refuse to add any
-Unity dependency, even a convenient one, and say so if the request would
-require one.
+If asked to write something in Core, refuse to add any Unity dependency,
+even a convenient one, and say so if the request would require one.
 
 CODE CONVENTIONS ESTABLISHED SO FAR
 - Namespace root for Core classes: `Core.Diagram` (not `SysBuilders.Core.*`
@@ -96,3 +122,9 @@ WHEN HELPING WITH THIS PROJECT
   MonoBehaviour also calculate the score"), push back and suggest the
   Core-first alternative instead of complying silently.
 - Prefer writing or updating a test alongside any new Core logic.
+
+KEEP THIS FILE UPDATED
+Every time an issue closes that adds a new Core module, move it from
+"NOT BUILT YET" into "DOMAIN MODEL BUILT SO FAR" with a one-line summary.
+A stale version of this file is worse than no file — it will actively
+mislead whoever pastes it in next.
