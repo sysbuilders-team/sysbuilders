@@ -10,8 +10,18 @@ namespace Core.Turns
             Active,
             Ended
         }
-        public int CurrentTurn { get; private set; }
 
+        public enum AdvanceTurnResult
+        {
+            Success,
+            DiagramIsNull,
+            ClassesStillUnlocked,
+            MatchAlreadyEnded
+        }
+
+        private const int MaxTurns = 5;
+
+        public int CurrentTurn { get; private set; }
         public TurnState State { get; private set; }
 
         public TurnManager()
@@ -19,23 +29,35 @@ namespace Core.Turns
             CurrentTurn = 1;
             State = TurnState.Active;
         }
-        public bool AdvanceTurn(ClassDiagram playerDiagram)
+
+        public AdvanceTurnResult AdvanceTurn(ClassDiagram playerDiagram)
         {
+            if (State == TurnState.Ended)
+            {
+                return AdvanceTurnResult.MatchAlreadyEnded;
+            }
+
             if (playerDiagram == null)
             {
-                return false;
+                return AdvanceTurnResult.DiagramIsNull;
             }
 
             bool unlockedClasses = playerDiagram.Classes.Any(node => !node.IsLocked);
             if (unlockedClasses)
             {
-                return false;
+                return AdvanceTurnResult.ClassesStillUnlocked;
             }
 
-            CurrentTurn++;
-            State = TurnState.Active;
-            return true;
-        }
+            if (CurrentTurn >= MaxTurns)
+            {
+                State = TurnState.Ended;
+            }
+            else
+            {
+                CurrentTurn++;
+            }
 
+            return AdvanceTurnResult.Success;
+        }
     }
 }
