@@ -5,15 +5,14 @@ namespace Core.Diagram
     public class ClassNode
     {
         public string Name { get; }
-        public List<MethodData> Methods { get; }
-        // o set sendo private significa que so pode ser setado dentro dessa classe
+        private readonly List<MethodData> _methods = new List<MethodData>();
+        public IReadOnlyList<MethodData> Methods => _methods;
         public bool IsLocked { get; private set; }
         
 
         public ClassNode(string name)
         {
             Name = name;
-            Methods = new List<MethodData>();
             IsLocked = false;
         }
 
@@ -21,7 +20,7 @@ namespace Core.Diagram
         {
             if (!IsLocked)
             {
-                Methods.Add(method);
+                _methods.Add(method);
             }
         }
 
