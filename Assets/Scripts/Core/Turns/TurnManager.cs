@@ -1,63 +1,113 @@
-using System.Linq;
-using Core.Diagram;
+using System.Collections.Generic;
 
 namespace Core.Turns
 {
+    public enum PlayerSlot
+    {
+        PlayerOne,
+        PlayerTwo
+    }
+
+    public enum TurnPhase
+    {
+        Show,
+        Build,
+        Evaluate,
+        Completed
+    }
+
+    public enum SetPlayerReadyResult
+    {
+        Success,
+        AlreadyReady,
+        MatchAlreadyCompleted
+    }
+
     public class TurnManager
     {
-        public enum TurnState
-        {
-            Active,
-            Ended
-        }
-
-        public enum AdvanceTurnResult
-        {
-            Success,
-            DiagramIsNull,
-            ClassesStillUnlocked,
-            MatchAlreadyEnded
-        }
-
+        private const int MaxPlayers = 2;
         private const int MaxTurns = 5;
 
         public int CurrentTurn { get; private set; }
-        public TurnState State { get; private set; }
+        public TurnPhase CurrentPhase { get; private set; }
+
+        private readonly HashSet<PlayerSlot> _readyPlayers = new HashSet<PlayerSlot>();
+        public IReadOnlyCollection<PlayerSlot> ReadyPlayers => _readyPlayers;
 
         public TurnManager()
         {
             CurrentTurn = 1;
-            State = TurnState.Active;
+            CurrentPhase = TurnPhase.Show;
         }
 
-        public AdvanceTurnResult AdvanceTurn(ClassDiagram playerDiagram)
+        public bool IsBothPlayersReady()
         {
-            if (State == TurnState.Ended)
+            return _readyPlayers.Count >= MaxPlayers;
+        }
+
+        private void AdvanceCurrentPhase()
+        {
+            switch (CurrentPhase)
             {
-                return AdvanceTurnResult.MatchAlreadyEnded;
+                case TurnPhase.Show:
+                    CurrentPhase = TurnPhase.Build;
+                    break;
+                case TurnPhase.Build:
+                    CurrentPhase = TurnPhase.Evaluate;
+                    break;
+                case TurnPhase.Evaluate:
+                    if (CurrentTurn >= MaxTurns)
+                    {
+                        CurrentPhase = TurnPhase.Completed;
+                    }
+                    else
+                    {
+                        CurrentTurn++;
+                        CurrentPhase = TurnPhase.Show;
+                    }
+                    break;
+            }
+        }
+
+        public void AdvancePhase()
+        {
+            if (!IsBothPlayersReady() || CurrentPhase == TurnPhase.Completed) return;
+
+            _readyPlayers.Clear();
+
+            AdvanceCurrentPhase();
+        }
+
+        public void ForceAdvancePhase()
+        {
+            if (CurrentPhase == TurnPhase.Completed) return;
+
+            _readyPlayers.Clear();
+
+            AdvanceCurrentPhase();
+        }
+
+        public SetPlayerReadyResult SetPlayerReady(PlayerSlot player)
+        {
+            if (CurrentPhase == TurnPhase.Completed)
+            {
+                return SetPlayerReadyResult.MatchAlreadyCompleted;
             }
 
-            if (playerDiagram == null)
+            if (_readyPlayers.Contains(player))
             {
-                return AdvanceTurnResult.DiagramIsNull;
+                return SetPlayerReadyResult.AlreadyReady;
             }
 
-            bool unlockedClasses = playerDiagram.Classes.Any(node => !node.IsLocked);
-            if (unlockedClasses)
+            _readyPlayers.Add(player);
+
+            if (IsBothPlayersReady())
             {
-                return AdvanceTurnResult.ClassesStillUnlocked;
+                AdvancePhase();
             }
 
-            if (CurrentTurn >= MaxTurns)
-            {
-                State = TurnState.Ended;
-            }
-            else
-            {
-                CurrentTurn++;
-            }
-
-            return AdvanceTurnResult.Success;
+            return SetPlayerReadyResult.Success;
         }
     }
 }
+	
