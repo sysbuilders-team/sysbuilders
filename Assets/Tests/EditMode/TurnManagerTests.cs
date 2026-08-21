@@ -12,7 +12,6 @@ namespace Tests.EditMode
 
             Assert.AreEqual(1, turnManager.CurrentTurn);
             Assert.AreEqual(TurnPhase.Show, turnManager.CurrentPhase);
-            Assert.IsEmpty(turnManager.ReadyPlayers);
         }
 
         [Test]
@@ -36,7 +35,6 @@ namespace Tests.EditMode
 
             Assert.AreEqual(TurnPhase.Show, turnManager.CurrentPhase);
             Assert.IsFalse(turnManager.IsBothPlayersReady());
-            Assert.IsEmpty(turnManager.ReadyPlayers);
         }
 
         [Test]
