@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Core.Turns
+namespace Core.Session
 {
     public enum PlayerSlot
     {

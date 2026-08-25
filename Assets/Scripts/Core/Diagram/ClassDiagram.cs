@@ -10,6 +10,7 @@ namespace Core.Diagram
         public IReadOnlyList<ClassNode> Classes => _classes;
         public IReadOnlyList<Relation> Relations => _relations;
 
+        // TODO: Filtrar edge case de nome repetido
         public void AddClass(ClassNode classNode)
         {
             _classes.Add(classNode);
@@ -20,9 +21,16 @@ namespace Core.Diagram
             _relations.Add(relation);
         }
 
+        public void RemoveClass(ClassNode classNode)
+        {
+            _classes.Remove(classNode);
+        }
+
         public ClassNode FindClassByName(string name)
         {
             return _classes.Find(c => c.Name == name);
         }
+        
+        
     }
 }
