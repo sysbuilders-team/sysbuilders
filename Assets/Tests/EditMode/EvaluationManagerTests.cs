@@ -9,8 +9,6 @@ namespace Tests.EditMode
 {
     public class EvaluationEngineTests
     {
-        // Helpers pequenos só pra deixar o Arrange de cada teste legível,
-        // sem repetir "new MethodData(...)" com strings soltas em todo teste.
         private static MethodData Method(string name, string category) => new MethodData(name, category);
 
         private static Requirement RequirementFor(string description, params MethodData[] methods)
@@ -89,8 +87,6 @@ namespace Tests.EditMode
         [Test]
         public void CheckRequirements_ClassHasExtraUnrelatedMethods_StillFulfilled()
         {
-            // Confirma a regra combinada: métodos extras na classe não invalidam
-            // o requisito (isso é problema de Baixa Coesão, não de requisito).
             var engine = new EvaluationEngine();
             var diagram = new ClassDiagram();
             var classNode = new ClassNode("Aluno");
@@ -125,7 +121,6 @@ namespace Tests.EditMode
         [Test]
         public void DetectCodeSmells_ClassWithExactlyFourMethods_DoesNotTriggerLargeClass()
         {
-            // Limite é "> 4", não ">= 4" — 4 métodos é o teto aceitável, não smell.
             var engine = new EvaluationEngine();
             var diagram = new ClassDiagram();
             var classNode = new ClassNode("Aluno");
@@ -194,8 +189,6 @@ namespace Tests.EditMode
         [Test]
         public void DetectCodeSmells_ClassTriggersLargeClassAndLowCohesionSimultaneously_ReturnsBothOccurrences()
         {
-            // Um smell não deve "esconder" o outro: mesma classe pode aparecer
-            // em duas SmellOccurrence diferentes ao mesmo tempo.
             var engine = new EvaluationEngine();
             var diagram = new ClassDiagram();
             var classNode = new ClassNode("GerenciadorTotal");
@@ -238,9 +231,7 @@ namespace Tests.EditMode
                 classNode.AddMethod(Method($"Metodo{i}", $"Categoria{i}"));
             }
             diagram.AddClass(classNode);
-
-            // Sem requisitos cumpridos, só penalidades (Large Class + Baixa Coesão) —
-            // a soma das penalidades passaria de zero se não fosse o Math.Max(0, score).
+            
             var result = engine.Evaluate(diagram, new List<Requirement>());
 
             Assert.AreEqual(0, result.TotalScore);

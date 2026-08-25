@@ -8,9 +8,6 @@ namespace Core.Evaluation
 {
     public class EvaluationEngine
     {
-        // Constantes no topo, isoladas: são os únicos números "mágicos" da classe,
-        // e são exatamente os que vocês vão querer reequilibrar depois de testar o jogo.
-        // Nenhum outro número solto deve aparecer no corpo dos métodos abaixo.
         private const int ScorePerRequirement = 100;
         private const int PenaltyLargeClass = 30;
         private const int PenaltyLowCohesion = 40;
@@ -30,12 +27,7 @@ namespace Core.Evaluation
 
             return new EvaluationResult(totalScore, fulfilledRequirementIds, detectedSmells);
         }
-
-        // Etapa 1: um requisito só conta como atendido se TODOS os seus métodos
-        // exigidos estiverem dentro da MESMA ClassNode. Comparação é por Name
-        // (não por referência, não por Category) — decisão de vocês, porque a
-        // instância de MethodData dentro do Requirement nunca é a mesma instância
-        // que acaba dentro do ClassNode quando o jogador adiciona o método.
+        
         private List<string> CheckRequirements(ClassDiagram diagram, IReadOnlyList<Requirement> activeRequirements)
         {
             var fulfilledIds = new List<string>();
@@ -61,10 +53,7 @@ namespace Core.Evaluation
 
             return fulfilledIds;
         }
-
-        // Etapa 2: roda os 3 smells de forma independente. Cada um gera 0 ou mais
-        // SmellOccurrence — não paramos no primeiro smell encontrado, uma classe
-        // pode ser Large Class E ter Baixa Coesão ao mesmo tempo, por exemplo.
+        
         private List<SmellOccurrence> DetectCodeSmells(ClassDiagram diagram)
         {
             var smells = new List<SmellOccurrence>();
@@ -112,10 +101,6 @@ namespace Core.Evaluation
 
         private IEnumerable<SmellOccurrence> DetectDuplicateCode(ClassDiagram diagram)
         {
-            // Agrupa por nome de método, coletando em quais classes cada um aparece.
-            // Se um nome aparece em mais de uma classe, é uma ocorrência de duplicidade
-            // que afeta TODAS essas classes ao mesmo tempo (por isso AffectedClassNames
-            // como lista faz sentido aqui, diferente dos outros dois smells).
             var classesByMethodName = new Dictionary<string, List<string>>();
 
             foreach (var classNode in diagram.Classes)
@@ -146,10 +131,7 @@ namespace Core.Evaluation
                 }
             }
         }
-
-        // Etapa 3: switch centralizado no Type do enum, não em comparação de string
-        // (esse era o problema do código que veio do Gemini — string.StartsWith
-        // quebra silenciosamente se o texto do Description mudar; enum não quebra).
+        
         private int CalculateScore(int fulfilledRequirementCount, IReadOnlyList<SmellOccurrence> smells)
         {
             int score = fulfilledRequirementCount * ScorePerRequirement;
