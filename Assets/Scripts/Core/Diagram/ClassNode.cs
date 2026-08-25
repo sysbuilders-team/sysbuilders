@@ -28,5 +28,10 @@ namespace Core.Diagram
         {
             IsLocked = true;
         }
+
+        public void Unlock()
+        {
+            IsLocked = false;
+        }
     }
 }

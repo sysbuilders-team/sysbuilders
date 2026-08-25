@@ -1,5 +1,5 @@
+using Core.Session;
 using NUnit.Framework;
-using Core.Turns;
 
 namespace Tests.EditMode
 {
