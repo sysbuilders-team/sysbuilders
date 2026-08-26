@@ -136,13 +136,13 @@ namespace Core.Evaluation
 
         private int CalculateScore(int fulfilledRequirementCount, IReadOnlyList<SmellOccurrence> smells)
         {
-            int score = fulfilledRequirementCount * ScorePerRequirement;
+            var score = fulfilledRequirementCount * ScorePerRequirement;
 
             foreach (var smell in smells)
             {
                 switch (smell.Type)
                 {
-                    case CodeSmellType.LargeClass:
+                    case CodeSmellType.LargeClass:  
                         score -= PenaltyLargeClass;
                         break;
                     case CodeSmellType.LowCohesion:
@@ -151,6 +151,8 @@ namespace Core.Evaluation
                     case CodeSmellType.DuplicateCode:
                         score -= PenaltyDuplicateCode;
                         break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
                 }
             }
 
