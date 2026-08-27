@@ -36,7 +36,7 @@ namespace Core.Evaluation
             {
                 if (requirement.RequiredMethods.Count == 0)
                 {
-                    // TODO: decidir se um Requirement sem métodos deveria sinalizar erro em vez de ser silenciosamente ignorado.
+                    // TODO: decidir se um Requirement sem métodos deveria sinalizar erro em vez de ser silenciosamente ignorado (provável erro de configuração).
                     continue;
                 }
 
@@ -72,10 +72,7 @@ namespace Core.Evaluation
             {
                 if (classNode.Methods.Count > LargeClassThreshold)
                 {
-                    yield return new SmellOccurrence(
-                        CodeSmellType.LargeClass,
-                        new List<string> { classNode.Name },
-                        $"'{classNode.Name}' tem {classNode.Methods.Count} métodos (limite: {LargeClassThreshold}).");
+                    yield return new SmellOccurrence(CodeSmellType.LargeClass, new List<string> { classNode.Name });
                 }
             }
         }
@@ -92,17 +89,14 @@ namespace Core.Evaluation
 
                 if (distinctCategories >= 2)
                 {
-                    yield return new SmellOccurrence(
-                        CodeSmellType.LowCohesion,
-                        new List<string> { classNode.Name },
-                        $"'{classNode.Name}' mistura {distinctCategories} categorias diferentes de responsabilidade.");
+                    yield return new SmellOccurrence(CodeSmellType.LowCohesion, new List<string> { classNode.Name });
                 }
             }
         }
 
         private IEnumerable<SmellOccurrence> DetectDuplicateCode(ClassDiagram diagram)
         {
-            // TODO: Dictionary não garante ordem. DetectedSmells pode variar de ordem entre execuções.
+            // TODO: Dictionary não garante ordem. detectedSmells pode variar de ordem entre execuções.
             var classesByMethodName = new Dictionary<string, List<string>>();
 
             foreach (var classNode in diagram.Classes)
@@ -126,23 +120,20 @@ namespace Core.Evaluation
             {
                 if (entry.Value.Count > 1)
                 {
-                    yield return new SmellOccurrence(
-                        CodeSmellType.DuplicateCode,
-                        entry.Value,
-                        $"Método '{entry.Key}' duplicado em: {string.Join(", ", entry.Value)}.");
+                    yield return new SmellOccurrence(CodeSmellType.DuplicateCode, entry.Value);
                 }
             }
         }
 
         private int CalculateScore(int fulfilledRequirementCount, IReadOnlyList<SmellOccurrence> smells)
         {
-            var score = fulfilledRequirementCount * ScorePerRequirement;
+            int score = fulfilledRequirementCount * ScorePerRequirement;
 
             foreach (var smell in smells)
             {
                 switch (smell.Type)
                 {
-                    case CodeSmellType.LargeClass:  
+                    case CodeSmellType.LargeClass:
                         score -= PenaltyLargeClass;
                         break;
                     case CodeSmellType.LowCohesion:
@@ -151,8 +142,6 @@ namespace Core.Evaluation
                     case CodeSmellType.DuplicateCode:
                         score -= PenaltyDuplicateCode;
                         break;
-                    default:
-                        throw new ArgumentOutOfRangeException();
                 }
             }
 
@@ -160,4 +149,3 @@ namespace Core.Evaluation
         }
     }
 }
-

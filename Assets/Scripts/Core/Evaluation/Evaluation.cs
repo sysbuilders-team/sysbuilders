@@ -8,19 +8,15 @@ namespace Core.Evaluation
         DuplicateCode,
         LowCohesion
     }
-
     public class SmellOccurrence
     {
         public CodeSmellType Type { get; }
         public IReadOnlyList<string> AffectedClassNames { get; }
-        // TODO: Description é texto pronto pra ui, gerado aqui no Core, decidir se isso deveria sair daqui e virar responsabilidade da ui
-        public string Description { get; }
 
-        public SmellOccurrence(CodeSmellType type, IReadOnlyList<string> affectedClassNames, string description)
+        public SmellOccurrence(CodeSmellType type, IReadOnlyList<string> affectedClassNames)
         {
             Type = type;
             AffectedClassNames = affectedClassNames ?? new List<string>();
-            Description = description;
         }
     }
 
@@ -41,4 +37,3 @@ namespace Core.Evaluation
         }
     }
 }
-
