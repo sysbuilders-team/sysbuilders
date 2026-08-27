@@ -6,6 +6,8 @@ namespace Core.Session
     {
         public string Name { get; }
         private readonly ClassDiagram _classDiagram;
+
+        public ClassDiagram Diagram => _classDiagram;
         private int _refactorPoints;
 
         public int RefactorCost { get; }
