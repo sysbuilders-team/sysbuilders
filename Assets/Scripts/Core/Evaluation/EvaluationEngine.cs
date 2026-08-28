@@ -36,8 +36,8 @@ namespace Core.Evaluation
             {
                 if (requirement.RequiredMethods.Count == 0)
                 {
-                    // TODO: decidir se um Requirement sem métodos deveria sinalizar erro em vez de ser silenciosamente ignorado (provável erro de configuração).
-                    continue;
+                    throw new InvalidOperationException(
+                        $"Requirement '{requirement.Id}' has no required methods configured.");
                 }
 
                 bool isFulfilled = diagram.Classes.Any(classNode =>
@@ -96,7 +96,6 @@ namespace Core.Evaluation
 
         private IEnumerable<SmellOccurrence> DetectDuplicateCode(ClassDiagram diagram)
         {
-            // TODO: Dictionary não garante ordem. detectedSmells pode variar de ordem entre execuções.
             var classesByMethodName = new Dictionary<string, List<string>>();
 
             foreach (var classNode in diagram.Classes)
@@ -116,7 +115,7 @@ namespace Core.Evaluation
                 }
             }
 
-            foreach (var entry in classesByMethodName)
+            foreach (var entry in classesByMethodName.OrderBy(e => e.Key, StringComparer.Ordinal))
             {
                 if (entry.Value.Count > 1)
                 {

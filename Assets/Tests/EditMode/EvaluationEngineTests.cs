@@ -61,7 +61,7 @@ namespace Tests.EditMode
 
             var result = engine.Evaluate(diagram, new List<Requirement> { requirement });
 
-            Assert.Contains(requirement.Id, result.FulfilledRequirementIds.ToList());
+            Assert.That(result.FulfilledRequirementIds, Has.Member(requirement.Id));
         }
 
         [Test]
@@ -98,7 +98,7 @@ namespace Tests.EditMode
 
             var result = engine.Evaluate(diagram, new List<Requirement> { requirement });
 
-            Assert.Contains(requirement.Id, result.FulfilledRequirementIds.ToList());
+            Assert.That(result.FulfilledRequirementIds, Has.Member(requirement.Id));
         }
 
         [Test]
@@ -182,8 +182,8 @@ namespace Tests.EditMode
             var duplicate = result.DetectedSmells.SingleOrDefault(s => s.Type == CodeSmellType.DuplicateCode);
             Assert.IsNotNull(duplicate);
             Assert.AreEqual(2, duplicate.AffectedClassNames.Count);
-            Assert.Contains("ClasseA", duplicate.AffectedClassNames.ToList());
-            Assert.Contains("ClasseB", duplicate.AffectedClassNames.ToList());
+            Assert.That(duplicate.AffectedClassNames, Has.Member("ClasseA"));
+            Assert.That(duplicate.AffectedClassNames, Has.Member("ClasseB"));
         }
 
         [Test]

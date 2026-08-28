@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Core.Evaluation
@@ -15,8 +16,18 @@ namespace Core.Evaluation
 
         public SmellOccurrence(CodeSmellType type, IReadOnlyList<string> affectedClassNames)
         {
+            if (affectedClassNames == null || affectedClassNames.Count == 0)
+            {
+                throw new ArgumentException("A smell occurrence must affect at least one class.", nameof(affectedClassNames));
+            }
+
+            if (type == CodeSmellType.DuplicateCode && affectedClassNames.Count < 2)
+            {
+                throw new ArgumentException("DuplicateCode requires at least two affected classes.", nameof(affectedClassNames));
+            }
+
             Type = type;
-            AffectedClassNames = affectedClassNames ?? new List<string>();
+            AffectedClassNames = affectedClassNames;
         }
     }
 
