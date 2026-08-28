@@ -1,4 +1,6 @@
+using System;
 using Core.Diagram;
+using Core.Evaluation;
 
 namespace Core.Session
 {
@@ -8,8 +10,9 @@ namespace Core.Session
         public PlayerState PlayerTwo { get; }
         public TurnManager TurnManager { get; }
         private readonly RefactorHandler _refactorHandler;
-        private readonly Evaluator _evaluator;
-
+        private readonly EvaluationEngine _evaluator;
+        // TODO TROCAR PRA MANAGER, MATCHSESSION DEVE RECEBER O MANAGER NAO ENGINE
+        // TODO: FAZER O REQUIREMENT PROVIDER
         public event Action<EvaluationResult, EvaluationResult> OnEvaluationCompleted;
 
         public MatchSession(string playerOneName, string playerTwoName)
@@ -18,7 +21,7 @@ namespace Core.Session
             PlayerTwo = new PlayerState(playerTwoName);
             TurnManager = new TurnManager();
             _refactorHandler = new RefactorHandler();
-            _evaluator = new Evaluator();
+            _evaluator = new EvaluationEngine();
 
             TurnManager.OnPhaseChange += HandlePhaseChange;
         }
@@ -31,16 +34,18 @@ namespace Core.Session
                     EvaluateBothPlayer();
                     break;
                 case TurnPhase.Show:
+                    //TODO: UI reage trocando de tela e lendo o estado atualizado dos jogadores
                     break;
             }
         }
 
         private void EvaluateBothPlayer()
         {
-            var resultOne = _evaluator.Evaluate(PlayerOne.Diagram, TurnManager.CurrentTurn);
+            var resultOne = _evaluator.Evaluate(PlayerOne.Diagram, null);
             PlayerOne.AddEvaluationResult(resultOne);
 
-            var resultTwo = _evaluator.Evaluate(PlayerTwo.Diagram, TurnManager.CurrentTurn);
+            // TODO: DEVE PASSAR A LISTA DE REQUIREMENTS ATIVOS DO TURNO, TAREFA DO REQUIREMENTPROVIDER
+            var resultTwo = _evaluator.Evaluate(PlayerTwo.Diagram, null);
             PlayerTwo.AddEvaluationResult(resultTwo);
 
             OnEvaluationCompleted?.Invoke(resultOne, resultTwo);
@@ -69,6 +74,12 @@ namespace Core.Session
         {
             return TurnManager.SetPlayerReady(slot);
         }
+
+        private bool CanModifyDiagram()
+        {
+            return TurnManager.CurrentPhase == TurnPhase.Build;
+        }
+
 
         public void Dispose()
         {
