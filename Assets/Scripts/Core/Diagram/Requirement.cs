@@ -2,11 +2,11 @@
 using System.Collections.Generic;
 using Core.Diagram;
 
-namespace Core.Requirements
+namespace Core.Diagram
 {
     public class Requirement
     {
-        public string Id { get; }
+        public String Id { get; }
         public String Description { get; }
         private readonly List<MethodData> _requiredMethods = new List<MethodData>();
         public IReadOnlyList<MethodData> RequiredMethods => _requiredMethods;
@@ -21,5 +21,6 @@ namespace Core.Requirements
         {
             _requiredMethods.Add(method);
         }
+
     }
 }

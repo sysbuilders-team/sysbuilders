@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Core.Diagram;
-using Core.Requirements;
+using Core.Session;
 
 namespace Core.Evaluation
 {
@@ -14,7 +14,7 @@ namespace Core.Evaluation
         private const int PenaltyDuplicateCode = 50;
         private const int LargeClassThreshold = 4;
 
-        public EvaluationResult Evaluate(ClassDiagram diagram, IReadOnlyList<Requirement> activeRequirements)
+        public EvaluationResult Evaluate(IReadOnlyClassDiagram diagram, IReadOnlyList<Requirement> activeRequirements)
         {
             if (diagram == null || activeRequirements == null)
             {
@@ -28,7 +28,7 @@ namespace Core.Evaluation
             return new EvaluationResult(totalScore, fulfilledRequirementIds, detectedSmells);
         }
 
-        private List<string> CheckRequirements(ClassDiagram diagram, IReadOnlyList<Requirement> activeRequirements)
+        private List<string> CheckRequirements(IReadOnlyClassDiagram diagram, IReadOnlyList<Requirement> activeRequirements)
         {
             var fulfilledIds = new List<string>();
 
@@ -55,7 +55,7 @@ namespace Core.Evaluation
             return fulfilledIds;
         }
 
-        private List<SmellOccurrence> DetectCodeSmells(ClassDiagram diagram)
+        private List<SmellOccurrence> DetectCodeSmells(IReadOnlyClassDiagram diagram)
         {
             var smells = new List<SmellOccurrence>();
 
@@ -66,7 +66,7 @@ namespace Core.Evaluation
             return smells;
         }
 
-        private IEnumerable<SmellOccurrence> DetectLargeClasses(ClassDiagram diagram)
+        private IEnumerable<SmellOccurrence> DetectLargeClasses(IReadOnlyClassDiagram diagram)
         {
             foreach (var classNode in diagram.Classes)
             {
@@ -77,7 +77,7 @@ namespace Core.Evaluation
             }
         }
 
-        private IEnumerable<SmellOccurrence> DetectLowCohesion(ClassDiagram diagram)
+        private IEnumerable<SmellOccurrence> DetectLowCohesion(IReadOnlyClassDiagram diagram)
         {
             foreach (var classNode in diagram.Classes)
             {
@@ -94,7 +94,7 @@ namespace Core.Evaluation
             }
         }
 
-        private IEnumerable<SmellOccurrence> DetectDuplicateCode(ClassDiagram diagram)
+        private IEnumerable<SmellOccurrence> DetectDuplicateCode(IReadOnlyClassDiagram diagram)
         {
             var classesByMethodName = new Dictionary<string, List<string>>();
 

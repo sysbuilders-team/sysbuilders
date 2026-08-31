@@ -1,8 +1,9 @@
 ﻿using System.Collections.Generic;
+using Core.Session;
 
 namespace Core.Diagram
 {
-    public class ClassDiagram
+    public class ClassDiagram : IReadOnlyClassDiagram
     {
         private readonly List<ClassNode> _classes = new List<ClassNode>();
         private readonly List<Relation> _relations = new List<Relation>();
