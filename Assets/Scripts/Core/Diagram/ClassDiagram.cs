@@ -20,7 +20,6 @@ namespace Core.Diagram
             return true;
         }
 
-        // Unnecessary edge case is to see if the Origin and Destination classes exists 
         public bool AddRelation(Relation relation)
         {
             if (relation == null) return false;
@@ -46,7 +45,47 @@ namespace Core.Diagram
         {
             return _classes.Find(c => c.Name == name);
         }
-        
-        
+
+        public IReadOnlyList<IReadOnlyList<ClassNode>> GetConnectedComponents()
+        {
+            var visited = new HashSet<ClassNode>();
+            var components = new List<IReadOnlyList<ClassNode>>();
+
+            foreach (var classNode in _classes)
+            {
+                if (visited.Contains(classNode)) continue;
+
+                var component = new List<ClassNode>();
+                var queue = new Queue<ClassNode>();
+                queue.Enqueue(classNode);
+                visited.Add(classNode);
+
+                while (queue.Count > 0)
+                {
+                    var current = queue.Dequeue();
+                    component.Add(current);
+
+                    foreach (var neighbor in GetNeighbors(current))
+                    {
+                        if (visited.Contains(neighbor)) continue;
+                        visited.Add(neighbor);
+                        queue.Enqueue(neighbor);
+                    }
+                }
+
+                components.Add(component);
+            }
+
+            return components;
+        }
+
+        private IEnumerable<ClassNode> GetNeighbors(ClassNode node)
+        {
+            foreach (var relation in _relations)
+            {
+                if (relation.Origin == node) yield return relation.Destination;
+                else if (relation.Destination == node) yield return relation.Origin;
+            }
+        }
     }
 }

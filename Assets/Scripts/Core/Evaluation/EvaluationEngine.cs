@@ -28,9 +28,11 @@ namespace Core.Evaluation
             return new EvaluationResult(totalScore, fulfilledRequirementIds, detectedSmells);
         }
 
+        // ===== MÉTODO ALTERADO =====
         private List<string> CheckRequirements(IReadOnlyClassDiagram diagram, IReadOnlyList<Requirement> activeRequirements)
         {
-            var fulfilledIds = new List<string>();
+            var fulfilledIds = new HashSet<string>();
+            var components = diagram.GetConnectedComponents();
 
             foreach (var requirement in activeRequirements)
             {
@@ -40,10 +42,11 @@ namespace Core.Evaluation
                         $"Requirement '{requirement.Id}' has no required methods configured.");
                 }
 
-                bool isFulfilled = diagram.Classes.Any(classNode =>
+                bool isFulfilled = components.Any(component =>
                 {
-                    var methodNamesInClass = new HashSet<string>(classNode.Methods.Select(m => m.Name));
-                    return requirement.RequiredMethods.All(required => methodNamesInClass.Contains(required.Name));
+                    var methodNamesInComponent = new HashSet<string>(
+                        component.SelectMany(c => c.Methods).Select(m => m.Name));
+                    return requirement.RequiredMethods.All(required => methodNamesInComponent.Contains(required.Name));
                 });
 
                 if (isFulfilled)
@@ -52,7 +55,7 @@ namespace Core.Evaluation
                 }
             }
 
-            return fulfilledIds;
+            return fulfilledIds.ToList();
         }
 
         private List<SmellOccurrence> DetectCodeSmells(IReadOnlyClassDiagram diagram)
@@ -108,10 +111,7 @@ namespace Core.Evaluation
                         classesByMethodName[method.Name] = classNames;
                     }
 
-                    if (!classNames.Contains(classNode.Name))
-                    {
-                        classNames.Add(classNode.Name);
-                    }
+                    classNames.Add(classNode.Name);
                 }
             }
 
