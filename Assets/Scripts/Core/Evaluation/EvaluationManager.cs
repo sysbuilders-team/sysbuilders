@@ -1,9 +1,7 @@
 using System.Collections.Generic;
-using Core.Diagram;
-using Core.Evaluation;
 
-namespace Managers.Evaluation
-{
+namespace Core.Evaluation
+{ 
     public class EvaluationManager
     {
         private readonly EvaluationEngine _evaluationEngine;

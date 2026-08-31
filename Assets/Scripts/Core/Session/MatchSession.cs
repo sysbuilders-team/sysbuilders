@@ -1,6 +1,7 @@
 using System;
 using Core.Diagram;
 using Core.Evaluation;
+using Managers.Evaluation;
 
 namespace Core.Session
 {
@@ -10,7 +11,7 @@ namespace Core.Session
         public PlayerState PlayerTwo { get; }
         public TurnManager TurnManager { get; }
         private readonly RefactorHandler _refactorHandler;
-        private readonly EvaluationEngine _evaluator;
+        private readonly EvaluationManager _evaluator;
         // TODO TROCAR PRA MANAGER, MATCHSESSION DEVE RECEBER O MANAGER NAO ENGINE
         // TODO: FAZER O REQUIREMENT PROVIDER
         public event Action<EvaluationResult, EvaluationResult> OnEvaluationCompleted;
@@ -21,7 +22,7 @@ namespace Core.Session
             PlayerTwo = new PlayerState(playerTwoName);
             TurnManager = new TurnManager();
             _refactorHandler = new RefactorHandler();
-            _evaluator = new EvaluationEngine();
+            _evaluator = new EvaluationManager();
 
             TurnManager.OnPhaseChange += HandlePhaseChange;
         }
