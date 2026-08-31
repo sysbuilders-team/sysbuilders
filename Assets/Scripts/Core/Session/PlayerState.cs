@@ -6,10 +6,12 @@ namespace Core.Session
 {
     public interface IReadOnlyClassDiagram
     {
-        IReadOnlyList<ClassNode> Classes {get;}
-        IReadOnlyList<Relation> Relations {get;}
+        IReadOnlyList<ClassNode> Classes { get; }
+        IReadOnlyList<Relation> Relations { get; }
         ClassNode FindClassByName(string name);
+        IReadOnlyList<IReadOnlyList<ClassNode>> GetConnectedComponents();
     }
+
     public class PlayerState
     {
         public string Name { get; }
@@ -22,7 +24,6 @@ namespace Core.Session
         private readonly List<EvaluationResult> _evaluationHistory = new List<EvaluationResult>();
         public IReadOnlyList<EvaluationResult> EvaluationHistory => _evaluationHistory;
 
-        // TODO: Later, Need to add a list of EvaluationResult, or smthing equivalent, to player keep track of their Evaluation Points
         public PlayerState(string name)
         {
             Name = name;
@@ -41,7 +42,6 @@ namespace Core.Session
             _classDiagram.RemoveClass(classNode);
         }
 
-        // TODO: Need to test edge cases for this one
         public bool TryDeductPoints(int value)
         {
             if (_refactorPoints < value) return false;
@@ -56,4 +56,4 @@ namespace Core.Session
             _evaluationHistory.Add(result);
         }
     }
-}
+}    
