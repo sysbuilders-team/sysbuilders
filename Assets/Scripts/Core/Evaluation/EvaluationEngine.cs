@@ -2,11 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Core.Diagram;
+using Core.Requirements;
 using Core.Session;
 
 namespace Core.Evaluation
 {
-    public class EvaluationEngine
+    public class EvaluationEngine : IEvaluationService
     {
         private const int ScorePerRequirement = 100;
         private const int PenaltyLargeClass = 30;
@@ -35,10 +36,10 @@ namespace Core.Evaluation
 
             foreach (var requirement in activeRequirements)
             {
-                if (requirement.RequiredMethods.Count == 0)
+                if (requirement.RequiredMethods == null || requirement.RequiredMethods.Count == 0)
                 {
-                    throw new InvalidOperationException(
-                        $"Requirement '{requirement.Id}' has no required methods configured.");
+                    fulfilledIds.Add(requirement.Id);
+                    continue;
                 }
 
                 bool isFulfilled = components.Any(component =>

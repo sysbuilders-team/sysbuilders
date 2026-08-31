@@ -1,21 +1,22 @@
 using System.Collections.Generic;
-using Core.Diagram;
 using Core.Evaluation;
+using Core.Requirements;
+using Core.Session;
 
 namespace Managers.Evaluation
-{
+{ 
     public class EvaluationManager
     {
-        private readonly EvaluationEngine _evaluationEngine;
+        private readonly IEvaluationService _evaluationService;
 
-        public EvaluationManager(EvaluationEngine evaluationEngine = null)
+        public EvaluationManager(IEvaluationService evaluationService = null)
         {
-            _evaluationEngine = evaluationEngine ?? new EvaluationEngine();
+            _evaluationService = evaluationService ?? new EvaluationEngine();
         }
 
-        public EvaluationResult RunEvaluation(ClassDiagram diagram, IReadOnlyList<Requirement> activeRequirements)
+        public EvaluationResult RunEvaluation(IReadOnlyClassDiagram diagram, IReadOnlyList<Requirement> activeRequirements)
         {
-            return _evaluationEngine.Evaluate(diagram, activeRequirements);
+            return _evaluationService.Evaluate(diagram, activeRequirements);
         }
     }
 }
