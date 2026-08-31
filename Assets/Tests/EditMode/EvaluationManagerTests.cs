@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 using Core.Diagram;
-using Core.Requirements;
 using Managers.Evaluation;
 
 namespace Tests.EditMode

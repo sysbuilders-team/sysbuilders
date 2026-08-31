@@ -3,7 +3,6 @@ using System.Linq;
 using NUnit.Framework;
 using Core.Diagram;
 using Core.Evaluation;
-using Core.Requirements;
 
 namespace Tests.EditMode
 {

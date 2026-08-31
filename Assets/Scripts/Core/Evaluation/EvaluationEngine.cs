@@ -27,8 +27,7 @@ namespace Core.Evaluation
 
             return new EvaluationResult(totalScore, fulfilledRequirementIds, detectedSmells);
         }
-
-        // ===== MÉTODO ALTERADO =====
+        
         private List<string> CheckRequirements(IReadOnlyClassDiagram diagram, IReadOnlyList<Requirement> activeRequirements)
         {
             var fulfilledIds = new HashSet<string>();

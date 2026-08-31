@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using Core.Diagram;
 using Core.Evaluation;
-using Core.Requirements;
 
 namespace Managers.Evaluation
 {
