@@ -7,7 +7,8 @@ namespace Core.Evaluation
     {
         LargeClass,
         DuplicateCode,
-        LowCohesion
+        LowCohesion,
+        LowAffinityCoupling
     }
     public class SmellOccurrence
     {

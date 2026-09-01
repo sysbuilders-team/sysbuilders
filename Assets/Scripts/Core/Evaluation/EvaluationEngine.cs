@@ -11,6 +11,7 @@ namespace Core.Evaluation
         private const int PenaltyLargeClass = 30;
         private const int PenaltyLowCohesion = 40;
         private const int PenaltyDuplicateCode = 50;
+        private const int PenaltyLowAffinityCoupling = 30;
         private const int LargeClassThreshold = 4;
 
         public EvaluationResult Evaluate(IReadOnlyClassDiagram diagram, IReadOnlyList<Requirement> activeRequirements)
@@ -63,6 +64,7 @@ namespace Core.Evaluation
             smells.AddRange(DetectLargeClasses(diagram));
             smells.AddRange(DetectLowCohesion(diagram));
             smells.AddRange(DetectDuplicateCode(diagram));
+            smells.AddRange(DetectLowAffinityCoupling(diagram));
 
             return smells;
         }
@@ -122,6 +124,42 @@ namespace Core.Evaluation
             }
         }
 
+        private IEnumerable<SmellOccurrence> DetectLowAffinityCoupling(IReadOnlyClassDiagram diagram)
+        {
+            var seenPairs = new HashSet<(ClassNode, ClassNode)>();
+
+            foreach (var relation in diagram.Relations)
+            {
+                var pairKey = NormalizePair(relation.Origin, relation.Destination);
+                if (!seenPairs.Add(pairKey))
+                {
+                    continue; 
+                }
+
+                var sourceCategories = new HashSet<string>(
+                    relation.Origin.Methods.Select(m => m.Category).Where(c => !string.IsNullOrEmpty(c)));
+                var targetCategories = new HashSet<string>(
+                    relation.Destination.Methods.Select(m => m.Category).Where(c => !string.IsNullOrEmpty(c)));
+
+                bool sharesCategory = sourceCategories.Overlaps(targetCategories);
+
+                if (!sharesCategory)
+                {
+                    yield return new SmellOccurrence(
+                        CodeSmellType.LowAffinityCoupling,
+                        new List<string> { relation.Origin.Name, relation.Destination.Name });
+                }
+            }
+        }
+
+        private static (ClassNode, ClassNode) NormalizePair(ClassNode a, ClassNode b)
+        {
+            return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(a)
+                   <= System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(b)
+                ? (a, b)
+                : (b, a);
+        }
+
         private int CalculateScore(int fulfilledRequirementCount, IReadOnlyList<SmellOccurrence> smells)
         {
             int score = fulfilledRequirementCount * ScorePerRequirement;
@@ -138,6 +176,9 @@ namespace Core.Evaluation
                         break;
                     case CodeSmellType.DuplicateCode:
                         score -= PenaltyDuplicateCode;
+                        break;
+                    case CodeSmellType.LowAffinityCoupling:
+                        score -= PenaltyLowAffinityCoupling;
                         break;
                 }
             }
