@@ -4,14 +4,6 @@ using System.Collections.Generic;
 
 namespace Core.Session
 {
-    public interface IReadOnlyClassDiagram
-    {
-        IReadOnlyList<ClassNode> Classes { get; }
-        IReadOnlyList<Relation> Relations { get; }
-        ClassNode FindClassByName(string name);
-        IReadOnlyList<IReadOnlyList<ClassNode>> GetConnectedComponents();
-    }
-
     public class PlayerState
     {
         public string Name { get; }
@@ -56,4 +48,4 @@ namespace Core.Session
             _evaluationHistory.Add(result);
         }
     }
-}    
+}

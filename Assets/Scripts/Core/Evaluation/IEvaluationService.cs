@@ -2,10 +2,13 @@ using System.Collections.Generic;
 using Core.Diagram;
 using Core.Session;
 
-namespace Core.Evaluation
+namespace Core.Evaluation 
 {
-    public interface IEvaluationService
+    public interface IEvaluationService 
     {
-        EvaluationResult Evaluate(IReadOnlyClassDiagram diagram, IReadOnlyList<Requirement> activeRequirements);
+        EvaluationResult Evaluate(
+            Core.Session.IReadOnlyClassDiagram diagram, 
+            System.Collections.Generic.IReadOnlyList<Core.Requirements.Requirement> activeRequirements
+        );
     }
 }
