@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using Core.Diagram;
-using Core.Session;
 
 namespace Core.Evaluation
 {
