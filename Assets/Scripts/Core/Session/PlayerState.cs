@@ -7,7 +7,7 @@ namespace Core.Session
         public string Name { get; }
         private readonly ClassDiagram _classDiagram;
         private int _refactorPoints;
-
+        // TODO: Counter of classcreations this turns to limit how many allowed, generally 2 or 3 per turn.
         public int RefactorCost { get; }
         // TODO: Later, Need to add a list of EvaluationResult, or smthing equivalent, to player keep track of their Evaluation Points
         public PlayerState(string name)
