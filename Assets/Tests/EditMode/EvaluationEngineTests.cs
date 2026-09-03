@@ -235,5 +235,63 @@ namespace Tests.EditMode
 
             Assert.AreEqual(0, result.TotalScore);
         }
+        [Test]
+        public void DetectCodeSmells_SameMethodNameInDifferentCategories_DoesNotTriggerDuplicateCode()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+    
+            var classA = new ClassNode("UsuarioService");
+            classA.AddMethod(Method("Validar", "Autenticacao"));
+    
+            var classB = new ClassNode("PedidoService");
+            classB.AddMethod(Method("Validar", "Financeiro"));
+    
+            diagram.AddClass(classA);
+            diagram.AddClass(classB);
+
+            var result = engine.Evaluate(diagram, new List<Requirement>());
+
+            Assert.IsFalse(result.DetectedSmells.Any(s => s.Type == CodeSmellType.DuplicateCode));
+        }
+
+        [Test]
+        public void DetectCodeSmells_ClassWithThreeCategories_ScalesLowCohesionSeverity()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+            var classNode = new ClassNode("GodClass");
+    
+            classNode.AddMethod(Method("M1", "CatA"));
+            classNode.AddMethod(Method("M2", "CatB"));
+            classNode.AddMethod(Method("M3", "CatC"));
+            diagram.AddClass(classNode);
+
+            var result = engine.Evaluate(diagram, new List<Requirement>());
+
+            var smell = result.DetectedSmells.SingleOrDefault(s => s.Type == CodeSmellType.LowCohesion);
+            Assert.IsNotNull(smell);
+            Assert.AreEqual(2, smell.Severity); 
+        }
+
+        [Test]
+        public void Evaluate_SeparatesRawScoreAndPenaltyScoreCorrectly()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+    
+            var classNode = new ClassNode("Aluno");
+            classNode.AddMethod(Method("Matricular", "Usuario"));
+            classNode.AddMethod(Method("EnviarEmail", "Notificacao"));
+            diagram.AddClass(classNode);
+
+            var req = RequirementFor("Matricular Aluno", Method("Matricular", "Usuario"));
+
+            var result = engine.Evaluate(diagram, new List<Requirement> { req });
+
+            Assert.AreEqual(100, result.RawScore);
+            Assert.AreEqual(40, result.PenaltyScore);
+            Assert.AreEqual(60, result.TotalScore);
+        }
     }
 }
