@@ -99,23 +99,26 @@ namespace Core.Evaluation
 
         private IEnumerable<SmellOccurrence> DetectDuplicateCode(IReadOnlyClassDiagram diagram)
         {
-            var classesByMethodName = new Dictionary<string, List<string>>();
+            var classesByMethodIdentity = new Dictionary<(string Name, string Category), List<string>>();
 
             foreach (var classNode in diagram.Classes)
             {
                 foreach (var method in classNode.Methods)
                 {
-                    if (!classesByMethodName.TryGetValue(method.Name, out var classNames))
+                    var identity = (method.Name, method.Category ?? string.Empty);
+
+                    if (!classesByMethodIdentity.TryGetValue(identity, out var classNames))
                     {
                         classNames = new List<string>();
-                        classesByMethodName[method.Name] = classNames;
+                        classesByMethodIdentity[identity] = classNames;
                     }
 
                     classNames.Add(classNode.Name);
                 }
             }
 
-            foreach (var entry in classesByMethodName.OrderBy(e => e.Key, StringComparer.Ordinal))
+            foreach (var entry in classesByMethodIdentity.OrderBy(e => e.Key.Name, StringComparer.Ordinal)
+                                                          .ThenBy(e => e.Key.Category, StringComparer.Ordinal))
             {
                 if (entry.Value.Count > 1)
                 {
