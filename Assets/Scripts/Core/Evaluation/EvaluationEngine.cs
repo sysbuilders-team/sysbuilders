@@ -18,14 +18,15 @@ namespace Core.Evaluation
         {
             if (diagram == null || activeRequirements == null)
             {
-                return new EvaluationResult(0, new List<string>(), new List<SmellOccurrence>());
+                return new EvaluationResult(0, 0, new List<string>(), new List<SmellOccurrence>());
             }
 
             var fulfilledRequirementIds = CheckRequirements(diagram, activeRequirements);
             var detectedSmells = DetectCodeSmells(diagram);
-            var totalScore = CalculateScore(fulfilledRequirementIds.Count, detectedSmells);
+            var rawScore = fulfilledRequirementIds.Count * ScorePerRequirement;
+            var penaltyScore = CalculatePenalty(detectedSmells);
 
-            return new EvaluationResult(totalScore, fulfilledRequirementIds, detectedSmells);
+            return new EvaluationResult(rawScore, penaltyScore, fulfilledRequirementIds, detectedSmells);
         }
         
         private List<string> CheckRequirements(IReadOnlyClassDiagram diagram, IReadOnlyList<Requirement> activeRequirements)
@@ -92,7 +93,8 @@ namespace Core.Evaluation
 
                 if (distinctCategories >= 2)
                 {
-                    yield return new SmellOccurrence(CodeSmellType.LowCohesion, new List<string> { classNode.Name });
+                    var severity = distinctCategories - 1;
+                    yield return new SmellOccurrence(CodeSmellType.LowCohesion, new List<string> { classNode.Name }, severity);
                 }
             }
         }
@@ -163,30 +165,30 @@ namespace Core.Evaluation
                 : (b, a);
         }
 
-        private int CalculateScore(int fulfilledRequirementCount, IReadOnlyList<SmellOccurrence> smells)
+        private int CalculatePenalty(IReadOnlyList<SmellOccurrence> smells)
         {
-            int score = fulfilledRequirementCount * ScorePerRequirement;
+            int penalty = 0;
 
             foreach (var smell in smells)
             {
                 switch (smell.Type)
                 {
                     case CodeSmellType.LargeClass:
-                        score -= PenaltyLargeClass;
+                        penalty += PenaltyLargeClass * smell.Severity;
                         break;
                     case CodeSmellType.LowCohesion:
-                        score -= PenaltyLowCohesion;
+                        penalty += PenaltyLowCohesion * smell.Severity;
                         break;
                     case CodeSmellType.DuplicateCode:
-                        score -= PenaltyDuplicateCode;
+                        penalty += PenaltyDuplicateCode * smell.Severity;
                         break;
                     case CodeSmellType.LowAffinityCoupling:
-                        score -= PenaltyLowAffinityCoupling;
+                        penalty += PenaltyLowAffinityCoupling * smell.Severity;
                         break;
                 }
             }
 
-            return Math.Max(0, score);
+            return penalty;
         }
     }
 }
