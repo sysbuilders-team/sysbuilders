@@ -10,18 +10,18 @@ namespace Core.Session
         public PlayerState PlayerTwo { get; }
         public TurnManager TurnManager { get; }
         private readonly RefactorHandler _refactorHandler;
-        private readonly EvaluationEngine _evaluator;
-        // TODO TROCAR PRA MANAGER, MATCHSESSION DEVE RECEBER O MANAGER NAO ENGINE
+        private readonly IEvaluationService _evaluator;
+
         // TODO: FAZER O REQUIREMENT PROVIDER
         public event Action<EvaluationResult, EvaluationResult> OnEvaluationCompleted;
 
-        public MatchSession(string playerOneName, string playerTwoName)
+        public MatchSession(string playerOneName, string playerTwoName, IEvaluationService evaluator = null)
         {
             PlayerOne = new PlayerState(playerOneName);
             PlayerTwo = new PlayerState(playerTwoName);
             TurnManager = new TurnManager();
             _refactorHandler = new RefactorHandler();
-            _evaluator = new EvaluationEngine();
+            _evaluator = evaluator ?? new EvaluationEngine();
 
             TurnManager.OnPhaseChange += HandlePhaseChange;
         }
@@ -34,18 +34,18 @@ namespace Core.Session
                     EvaluateBothPlayer();
                     break;
                 case TurnPhase.Show:
-                    //TODO: UI reage trocando de tela e lendo o estado atualizado dos jogadores
+                    // TODO: UI reage trocando de tela e lendo o estado atualizado dos jogadores
                     break;
             }
         }
 
         private void EvaluateBothPlayer()
         {
-            var resultOne = _evaluator.Evaluate(PlayerOne.Diagram, null);
+            var resultOne = _evaluator.Evaluate(PlayerOne.Diagram, new System.Collections.Generic.List<Requirement>());
             PlayerOne.AddEvaluationResult(resultOne);
 
             // TODO: DEVE PASSAR A LISTA DE REQUIREMENTS ATIVOS DO TURNO, TAREFA DO REQUIREMENTPROVIDER
-            var resultTwo = _evaluator.Evaluate(PlayerTwo.Diagram, null);
+            var resultTwo = _evaluator.Evaluate(PlayerTwo.Diagram, new System.Collections.Generic.List<Requirement>());
             PlayerTwo.AddEvaluationResult(resultTwo);
 
             OnEvaluationCompleted?.Invoke(resultOne, resultTwo);
@@ -58,6 +58,7 @@ namespace Core.Session
             var player = GetPlayerBySlot(slot);
             return _refactorHandler.TryRefactor(classNode, player);
         }
+
         private PlayerState GetPlayerBySlot(PlayerSlot slot)
         {
             return slot == PlayerSlot.PlayerOne ? PlayerOne : PlayerTwo;
@@ -79,7 +80,6 @@ namespace Core.Session
         {
             return TurnManager.CurrentPhase == TurnPhase.Build;
         }
-
 
         public void Dispose()
         {

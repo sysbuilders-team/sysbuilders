@@ -1,6 +1,6 @@
 {
   "name": "Sys.Managers",
-  "rootNamespace": " ",
+  "rootNamespace": "",
   "references": [
     "Sys.Core"
   ],
