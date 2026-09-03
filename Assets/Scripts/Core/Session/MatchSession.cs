@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using Core.Diagram;
 using Core.Evaluation;
+using Core.Requirements;
+using TextMateSharp.Themes;
 
 namespace Core.Session
 {
@@ -13,16 +16,18 @@ namespace Core.Session
         private readonly EvaluationEngine _evaluator;
         // TODO TROCAR PRA MANAGER, MATCHSESSION DEVE RECEBER O MANAGER NAO ENGINE
         // TODO: FAZER O REQUIREMENT PROVIDER
+        private readonly IReadOnlyList<Requirement> _activeRequirements;
         public event Action<EvaluationResult, EvaluationResult> OnEvaluationCompleted;
 
-        public MatchSession(string playerOneName, string playerTwoName)
+        public MatchSession(string playerOneName, string playerTwoName, string theme, IRequirementProvider requirementProvider)
         {
             PlayerOne = new PlayerState(playerOneName);
             PlayerTwo = new PlayerState(playerTwoName);
-            TurnManager = new TurnManager();
+            TurnManager = new TurnManager();    
             _refactorHandler = new RefactorHandler();
             _evaluator = new EvaluationEngine();
 
+            _activeRequirements = requirementProvider.SelectTrailForMatch(theme, playerOneName, playerTwoName);
             TurnManager.OnPhaseChange += HandlePhaseChange;
         }
 
