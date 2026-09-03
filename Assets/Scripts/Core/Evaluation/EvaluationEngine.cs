@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using Core.Diagram;
 using Core.Session;
-
+using Core.Evaluation;
+using Core.Requirements;
 namespace Core.Evaluation
 {
     public class EvaluationEngine : IEvaluationService
@@ -35,7 +36,7 @@ namespace Core.Evaluation
 
             foreach (var requirement in activeRequirements)
             {
-                if (requirement.RequiredMethods == null || requirement.RequiredMethods.Count == 0)
+                if (requirement.RequirementMethods == null || requirement.RequirementMethods.Count == 0)
                 {
                     fulfilledIds.Add(requirement.Id);
                     continue;
@@ -45,7 +46,7 @@ namespace Core.Evaluation
                 {
                     var methodNamesInComponent = new HashSet<string>(
                         component.SelectMany(c => c.Methods).Select(m => m.Name));
-                    return requirement.RequiredMethods.All(required => methodNamesInComponent.Contains(required.Name));
+                    return requirement.RequirementMethods.All(required => methodNamesInComponent.Contains(required.Name));
                 });
 
                 if (isFulfilled)
