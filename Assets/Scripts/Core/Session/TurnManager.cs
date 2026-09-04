@@ -149,10 +149,6 @@ namespace Core.Session
             return _playerReadinessTracker.IsBothPlayersReady();
         }
         
-        
-
-        
-        
     }
 }
 	

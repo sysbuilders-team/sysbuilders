@@ -1,4 +1,6 @@
 ﻿using Core.Diagram;
+using Core.Evaluation;
+using System.Collections.Generic;
 
 namespace Core.Session
 {
@@ -6,10 +8,14 @@ namespace Core.Session
     {
         public string Name { get; }
         private readonly ClassDiagram _classDiagram;
+
+        public IReadOnlyClassDiagram Diagram => _classDiagram;
         private int _refactorPoints;
 
         public int RefactorCost { get; }
-        // TODO: Later, Need to add a list of EvaluationResult, or smthing equivalent, to player keep track of their Evaluation Points
+        private readonly List<EvaluationResult> _evaluationHistory = new List<EvaluationResult>();
+        public IReadOnlyList<EvaluationResult> EvaluationHistory => _evaluationHistory;
+
         public PlayerState(string name)
         {
             Name = name;
@@ -28,7 +34,6 @@ namespace Core.Session
             _classDiagram.RemoveClass(classNode);
         }
 
-        // TODO: Need to test edge cases for this one
         public bool TryDeductPoints(int value)
         {
             if (_refactorPoints < value) return false;
@@ -36,6 +41,11 @@ namespace Core.Session
             _refactorPoints -= value;
 
             return true;
+        }
+
+        public void AddEvaluationResult(EvaluationResult result)
+        {
+            _evaluationHistory.Add(result);
         }
     }
 }
