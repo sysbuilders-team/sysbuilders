@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
-using Newtonsoft.Json;
 using Core.Diagram;
 using System;
+using Unity.Plastic.Newtonsoft.Json;
 
 namespace Core.Requirements
 {
