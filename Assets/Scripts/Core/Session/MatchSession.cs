@@ -14,20 +14,18 @@ namespace Core.Session
         public TurnManager TurnManager { get; }
         private readonly RefactorHandler _refactorHandler;
         private readonly EvaluationEngine _evaluator;
-        // TODO TROCAR PRA MANAGER, MATCHSESSION DEVE RECEBER O MANAGER NAO ENGINE
-        // TODO: FAZER O REQUIREMENT PROVIDER
         private readonly IReadOnlyList<Requirement> _activeRequirements;
         public event Action<EvaluationResult, EvaluationResult> OnEvaluationCompleted;
 
-        public MatchSession(string playerOneName, string playerTwoName, string theme, IRequirementProvider requirementProvider)
+        public MatchSession(string playerOneId, string playerTwoId, string theme, IRequirementProvider requirementProvider)
         {
-            PlayerOne = new PlayerState(playerOneName);
-            PlayerTwo = new PlayerState(playerTwoName);
+            PlayerOne = new PlayerState(playerOneId);
+            PlayerTwo = new PlayerState(playerTwoId);
             TurnManager = new TurnManager();    
             _refactorHandler = new RefactorHandler();
             _evaluator = new EvaluationEngine();
 
-            _activeRequirements = requirementProvider.SelectTrailForMatch(theme, playerOneName, playerTwoName);
+            _activeRequirements = requirementProvider.SelectTrailForMatch(theme, playerOneId, playerTwoId);
             TurnManager.OnPhaseChange += HandlePhaseChange;
         }
 
@@ -46,11 +44,11 @@ namespace Core.Session
 
         private void EvaluateBothPlayer()
         {
-            var resultOne = _evaluator.Evaluate(PlayerOne.Diagram, null);
+            var resultOne = _evaluator.Evaluate(PlayerOne.Diagram, _activeRequirements);
             PlayerOne.AddEvaluationResult(resultOne);
 
             // TODO: DEVE PASSAR A LISTA DE REQUIREMENTS ATIVOS DO TURNO, TAREFA DO REQUIREMENTPROVIDER
-            var resultTwo = _evaluator.Evaluate(PlayerTwo.Diagram, null);
+            var resultTwo = _evaluator.Evaluate(PlayerTwo.Diagram, _activeRequirements);
             PlayerTwo.AddEvaluationResult(resultTwo);
 
             OnEvaluationCompleted?.Invoke(resultOne, resultTwo);
