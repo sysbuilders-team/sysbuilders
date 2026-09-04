@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Core.Diagram;
 using Core.Evaluation;
 using Core.Requirements;
-using TextMateSharp.Themes;
 
 namespace Core.Session
 {
@@ -44,14 +44,19 @@ namespace Core.Session
 
         private void EvaluateBothPlayer()
         {
-            var resultOne = _evaluator.Evaluate(PlayerOne.Diagram, _activeRequirements);
+            var requirementsSoFar = GetRequirementsUpToCurrentTurn();
+            var resultOne = _evaluator.Evaluate(PlayerOne.Diagram, requirementsSoFar);
             PlayerOne.AddEvaluationResult(resultOne);
 
-            // TODO: DEVE PASSAR A LISTA DE REQUIREMENTS ATIVOS DO TURNO, TAREFA DO REQUIREMENTPROVIDER
-            var resultTwo = _evaluator.Evaluate(PlayerTwo.Diagram, _activeRequirements);
+            var resultTwo = _evaluator.Evaluate(PlayerTwo.Diagram, requirementsSoFar);
             PlayerTwo.AddEvaluationResult(resultTwo);
 
             OnEvaluationCompleted?.Invoke(resultOne, resultTwo);
+        }
+
+        private IReadOnlyList<Requirement> GetRequirementsUpToCurrentTurn()
+        {
+            return _activeRequirements.Take(TurnManager.CurrentTurn).ToList();
         }
 
         public bool TryRefactorClass(PlayerSlot slot, ClassNode classNode)
