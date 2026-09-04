@@ -9,8 +9,7 @@ namespace Managers.Evaluation
     public class EvaluationManager : MonoBehaviour
     {
         private MatchSession _matchSession;
-        private readonly Dictionary<PlayerSlot, EvaluationResult> _lastResults =
-            new Dictionary<PlayerSlot, EvaluationResult>();
+        private readonly Dictionary<PlayerSlot, EvaluationResult> _lastResults = new Dictionary<PlayerSlot, EvaluationResult>();
 
         public event Action<PlayerSlot, EvaluationResult> OnUIEvaluationReady;
 

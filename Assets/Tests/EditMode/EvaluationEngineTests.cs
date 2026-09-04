@@ -3,6 +3,7 @@ using System.Linq;
 using NUnit.Framework;
 using Core.Diagram;
 using Core.Evaluation;
+using Core.Requirements;
 
 namespace Tests.EditMode
 {
@@ -10,14 +11,10 @@ namespace Tests.EditMode
     {
         private static MethodData Method(string name, string category) => new MethodData(name, category);
 
-        private static Requirement RequirementFor(string description, params MethodData[] methods)
+        private static Requirement RequirementFor(string reqbiblioteca, string id, MethodData description,
+            params MethodData[] methods)
         {
-            var requirement = new Requirement(description);
-            foreach (var method in methods)
-            {
-                requirement.AddRequirementMethods(method);
-            }
-            return requirement;
+            return new Requirement(id, description, methods);
         }
 
         [Test]
@@ -55,7 +52,7 @@ namespace Tests.EditMode
             classNode.AddMethod(Method("Cancelar", "Usuario"));
             diagram.AddClass(classNode);
 
-            var requirement = RequirementFor("Gerenciar matrícula",
+            var requirement = RequirementFor("reqBiblioteca_01", "Gerenciar matrícula",
                 Method("Matricular", "Usuario"), Method("Cancelar", "Usuario"));
 
             var result = engine.Evaluate(diagram, new List<Requirement> { requirement });
@@ -75,7 +72,7 @@ namespace Tests.EditMode
             diagram.AddClass(classA);
             diagram.AddClass(classB);
 
-            var requirement = RequirementFor("Gerenciar matrícula",
+            var requirement = RequirementFor("reqBiblioteca_02", "Gerenciar matrícula",
                 Method("Matricular", "Usuario"), Method("Cancelar", "Usuario"));
 
             var result = engine.Evaluate(diagram, new List<Requirement> { requirement });
@@ -93,7 +90,7 @@ namespace Tests.EditMode
             classNode.AddMethod(Method("EnviarEmail", "Notificacao"));
             diagram.AddClass(classNode);
 
-            var requirement = RequirementFor("Matricular aluno", Method("Matricular", "Usuario"));
+            var requirement = RequirementFor("reqBiblioteca_03", "Matricular aluno", Method("Matricular", "Usuario"));
 
             var result = engine.Evaluate(diagram, new List<Requirement> { requirement });
 
@@ -212,7 +209,7 @@ namespace Tests.EditMode
             var classNode = new ClassNode("Aluno");
             classNode.AddMethod(Method("Matricular", "Usuario"));
             diagram.AddClass(classNode);
-            var requirement = RequirementFor("Matricular aluno", Method("Matricular", "Usuario"));
+            var requirement = RequirementFor("reqBiblioteca_04", "Matricular aluno", Method("Matricular", "Usuario"));
 
             var result = engine.Evaluate(diagram, new List<Requirement> { requirement });
 

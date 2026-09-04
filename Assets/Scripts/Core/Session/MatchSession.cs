@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Core.Diagram;
 using Core.Evaluation;
+using Core.Requirements;
 
 namespace Core.Session
 {
@@ -11,18 +14,18 @@ namespace Core.Session
         public TurnManager TurnManager { get; }
         private readonly RefactorHandler _refactorHandler;
         private readonly IEvaluationService _evaluator;
-
-        // TODO: FAZER O REQUIREMENT PROVIDER
+        private readonly IReadOnlyList<Requirement> _activeRequirements;
         public event Action<EvaluationResult, EvaluationResult> OnEvaluationCompleted;
 
-        public MatchSession(string playerOneName, string playerTwoName, IEvaluationService evaluator = null)
+        public MatchSession(string playerOneId, string playerTwoId, string theme, IRequirementProvider requirementProvider)
         {
-            PlayerOne = new PlayerState(playerOneName);
-            PlayerTwo = new PlayerState(playerTwoName);
-            TurnManager = new TurnManager();
+            PlayerOne = new PlayerState(playerOneId);
+            PlayerTwo = new PlayerState(playerTwoId);
+            TurnManager = new TurnManager();    
             _refactorHandler = new RefactorHandler();
-            _evaluator = evaluator ?? new EvaluationEngine();
+            _evaluator = new EvaluationEngine();
 
+            _activeRequirements = requirementProvider.SelectTrailForMatch(theme, playerOneId, playerTwoId);
             TurnManager.OnPhaseChange += HandlePhaseChange;
         }
 
@@ -41,14 +44,19 @@ namespace Core.Session
 
         private void EvaluateBothPlayer()
         {
-            var resultOne = _evaluator.Evaluate(PlayerOne.Diagram, new System.Collections.Generic.List<Requirement>());
+            var requirementsSoFar = GetRequirementsUpToCurrentTurn();
+            var resultOne = _evaluator.Evaluate(PlayerOne.Diagram, requirementsSoFar);
             PlayerOne.AddEvaluationResult(resultOne);
 
-            // TODO: DEVE PASSAR A LISTA DE REQUIREMENTS ATIVOS DO TURNO, TAREFA DO REQUIREMENTPROVIDER
-            var resultTwo = _evaluator.Evaluate(PlayerTwo.Diagram, new System.Collections.Generic.List<Requirement>());
+            var resultTwo = _evaluator.Evaluate(PlayerTwo.Diagram, requirementsSoFar);
             PlayerTwo.AddEvaluationResult(resultTwo);
 
             OnEvaluationCompleted?.Invoke(resultOne, resultTwo);
+        }
+
+        private IReadOnlyList<Requirement> GetRequirementsUpToCurrentTurn()
+        {
+            return _activeRequirements.Take(TurnManager.CurrentTurn).ToList();
         }
 
         public bool TryRefactorClass(PlayerSlot slot, ClassNode classNode)

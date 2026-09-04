@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using Core.Diagram;
 using Managers.Evaluation;
+using Core.Requirements;
 
 namespace Tests.EditMode
 {
@@ -19,9 +20,8 @@ namespace Tests.EditMode
             node.AddMethod(method);
             diagram.AddClass(node);
 
-            var requirement = new Requirement("Login Req");
-            foreach (var methodData in new List<MethodData> { method }) requirement.AddRequirementMethods(methodData);
-
+            var requirement = new Requirement("req_login", "Login Req", new List<MethodData>{ method });
+            
             var result = manager.RunEvaluation(diagram, new List<Requirement> { requirement });
 
             Assert.IsNotNull(result);
