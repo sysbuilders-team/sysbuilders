@@ -8,7 +8,7 @@ namespace Core.Requirements
 {
     public static class RequirementLoader
     {
-        public static IReadOnlyDictionary<string, List<Trail>> LoadFromJson(string jsonContent){
+        public static IReadOnlyDictionary<string, IReadOnlyList<Trail>> LoadFromJson(string jsonContent){
 
             if(string.IsNullOrWhiteSpace(jsonContent)){
                 throw new ArgumentException("O conteúdo JSON não pode ser nulo ou vazio.", nameof(jsonContent));
@@ -81,8 +81,6 @@ namespace Core.Requirements
                 throw new FormatException($"Encontrado um requisito sem ID na trilha '{trailId}'.");
             }
         }
-        #region JSON DTOs (Privados)
-
         private class TrailDto
         {
             public string Id { get; set; }
@@ -101,8 +99,5 @@ namespace Core.Requirements
             public string Name { get; set; }
             public string Category { get; set;}
         }
-
-        #endregion
     }
-    
 }
