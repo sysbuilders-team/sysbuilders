@@ -28,7 +28,7 @@ namespace Core.Requirements
                 throw new FormatException("O JSON desserializado retornou um resultado nulo.");
             }
 
-            var result = new Dictionary<string, List<Trail>>();
+            var result = new Dictionary<string, IReadOnlyList<Trail>>();
 
             foreach(var (theme, trailDtos) in rawData)
             {
