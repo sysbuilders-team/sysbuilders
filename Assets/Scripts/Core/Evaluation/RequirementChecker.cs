@@ -27,9 +27,11 @@ namespace Core.Evaluation
 
                 bool isFulfilled = components.Any(component =>
                 {
-                    var methodNamesInComponent = new HashSet<string>(
-                        component.SelectMany(c => c.Methods).Select(m => m.Name));
-                    return requirement.RequirementMethods.All(required => methodNamesInComponent.Contains(required.Name));
+                    var methodsInComponent = new HashSet<(string Name, string Category)>(
+                        component.SelectMany(c => c.Methods).Select(m => (m.Name, m.Category ?? string.Empty)));
+
+                    return requirement.RequirementMethods.All(required =>
+                        methodsInComponent.Contains((required.Name, required.Category ?? string.Empty)));
                 });
 
                 if (isFulfilled)
