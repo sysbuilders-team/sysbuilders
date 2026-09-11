@@ -18,12 +18,22 @@ namespace Core.Session
         public event Action<EvaluationResult, EvaluationResult> OnEvaluationCompleted;
 
         public MatchSession(string playerOneId, string playerTwoId, string theme, IRequirementProvider requirementProvider)
+            : this(playerOneId, playerTwoId, theme, requirementProvider, new EvaluationEngine())
+        {
+        }
+
+        public MatchSession(
+            string playerOneId,
+            string playerTwoId,
+            string theme,
+            IRequirementProvider requirementProvider,
+            IEvaluationService evaluator)
         {
             PlayerOne = new PlayerState(playerOneId);
             PlayerTwo = new PlayerState(playerTwoId);
-            TurnManager = new TurnManager();    
+            TurnManager = new TurnManager();
             _refactorHandler = new RefactorHandler();
-            _evaluator = new EvaluationEngine();
+            _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
 
             _activeRequirements = requirementProvider.SelectTrailForMatch(theme, playerOneId, playerTwoId);
             TurnManager.OnPhaseChange += HandlePhaseChange;
@@ -34,6 +44,8 @@ namespace Core.Session
             switch (newPhase)
             {
                 case TurnPhase.Evaluate:
+                    PlayerOne.LockAllClasses();
+                    PlayerTwo.LockAllClasses();
                     EvaluateBothPlayer();
                     break;
                 case TurnPhase.Show:
