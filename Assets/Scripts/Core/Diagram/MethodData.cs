@@ -7,8 +7,8 @@ namespace Core.Diagram
 
         public MethodData(string name, string category)
         {
-            Name = name;
-            Category = category;
+            Name = name ?? string.Empty;
+            Category = category ?? string.Empty;
         }
     }
 }

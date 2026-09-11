@@ -3,6 +3,7 @@ using System.Linq;
 using NUnit.Framework;
 using Core.Diagram;
 using Core.Evaluation;
+using Core.Requirements;
 
 namespace Tests.EditMode
 {
@@ -10,14 +11,9 @@ namespace Tests.EditMode
     {
         private static MethodData Method(string name, string category) => new MethodData(name, category);
 
-        private static Requirement RequirementFor(string description, params MethodData[] methods)
+        private static Requirement RequirementFor(string id, string description, params MethodData[] methods)
         {
-            var requirement = new Requirement(description);
-            foreach (var method in methods)
-            {
-                requirement.AddRequirementMethods(method);
-            }
-            return requirement;
+            return new Requirement(id, description, new List<MethodData>(methods));
         }
 
         [Test]
@@ -55,7 +51,7 @@ namespace Tests.EditMode
             classNode.AddMethod(Method("Cancelar", "Usuario"));
             diagram.AddClass(classNode);
 
-            var requirement = RequirementFor("Gerenciar matrícula",
+            var requirement = RequirementFor("reqBiblioteca_01", "Gerenciar matrícula",
                 Method("Matricular", "Usuario"), Method("Cancelar", "Usuario"));
 
             var result = engine.Evaluate(diagram, new List<Requirement> { requirement });
@@ -75,7 +71,7 @@ namespace Tests.EditMode
             diagram.AddClass(classA);
             diagram.AddClass(classB);
 
-            var requirement = RequirementFor("Gerenciar matrícula",
+            var requirement = RequirementFor("reqBiblioteca_02", "Gerenciar matrícula",
                 Method("Matricular", "Usuario"), Method("Cancelar", "Usuario"));
 
             var result = engine.Evaluate(diagram, new List<Requirement> { requirement });
@@ -93,7 +89,7 @@ namespace Tests.EditMode
             classNode.AddMethod(Method("EnviarEmail", "Notificacao"));
             diagram.AddClass(classNode);
 
-            var requirement = RequirementFor("Matricular aluno", Method("Matricular", "Usuario"));
+            var requirement = RequirementFor("reqBiblioteca_03", "Matricular aluno", Method("Matricular", "Usuario"));
 
             var result = engine.Evaluate(diagram, new List<Requirement> { requirement });
 
@@ -212,7 +208,7 @@ namespace Tests.EditMode
             var classNode = new ClassNode("Aluno");
             classNode.AddMethod(Method("Matricular", "Usuario"));
             diagram.AddClass(classNode);
-            var requirement = RequirementFor("Matricular aluno", Method("Matricular", "Usuario"));
+            var requirement = RequirementFor("reqBiblioteca_04", "Matricular aluno", Method("Matricular", "Usuario"));
 
             var result = engine.Evaluate(diagram, new List<Requirement> { requirement });
 
@@ -234,6 +230,150 @@ namespace Tests.EditMode
             var result = engine.Evaluate(diagram, new List<Requirement>());
 
             Assert.AreEqual(0, result.TotalScore);
+        }
+
+        [Test]
+        public void DetectCodeSmells_SameMethodNameInDifferentCategories_DoesNotTriggerDuplicateCode()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+
+            var classA = new ClassNode("UsuarioService");
+            classA.AddMethod(Method("Validar", "Autenticacao"));
+
+            var classB = new ClassNode("PedidoService");
+            classB.AddMethod(Method("Validar", "Financeiro"));
+
+            diagram.AddClass(classA);
+            diagram.AddClass(classB);
+
+            var result = engine.Evaluate(diagram, new List<Requirement>());
+
+            Assert.IsFalse(result.DetectedSmells.Any(s => s.Type == CodeSmellType.DuplicateCode));
+        }
+
+        [Test]
+        public void DetectCodeSmells_ClassWithThreeCategories_ScalesLowCohesionSeverity()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+            var classNode = new ClassNode("GodClass");
+
+            classNode.AddMethod(Method("M1", "CatA"));
+            classNode.AddMethod(Method("M2", "CatB"));
+            classNode.AddMethod(Method("M3", "CatC"));
+            diagram.AddClass(classNode);
+
+            var result = engine.Evaluate(diagram, new List<Requirement>());
+
+            var smell = result.DetectedSmells.SingleOrDefault(s => s.Type == CodeSmellType.LowCohesion);
+            Assert.IsNotNull(smell);
+            Assert.AreEqual(2, smell.Severity);
+        }
+
+        [Test]
+        public void Evaluate_SeparatesRawScoreAndPenaltyScoreCorrectly()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+
+            var classNode = new ClassNode("Aluno");
+            classNode.AddMethod(Method("Matricular", "Usuario"));
+            classNode.AddMethod(Method("EnviarEmail", "Notificacao"));
+            diagram.AddClass(classNode);
+
+            var req = RequirementFor("req_matricular", "Matricular Aluno", Method("Matricular", "Usuario"));
+
+            var result = engine.Evaluate(diagram, new List<Requirement> { req });
+
+            Assert.AreEqual(100, result.RawScore);
+            Assert.AreEqual(40, result.PenaltyScore);
+            Assert.AreEqual(60, result.TotalScore);
+        }
+
+        [Test]
+        public void CheckRequirements_SameMethodNameDifferentCategory_IsNotFulfilled()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+            var classNode = new ClassNode("Aluno");
+            classNode.AddMethod(Method("Validar", "Financeiro"));
+            diagram.AddClass(classNode);
+
+            var req = RequirementFor("req_validar_user", "Validar Usuario", Method("Validar", "Usuario"));
+
+            var result = engine.Evaluate(diagram, new List<Requirement> { req });
+
+            Assert.IsEmpty(result.FulfilledRequirementIds);
+        }
+
+        [Test]
+        public void DetectCodeSmells_LowAffinityCoupling_EmptyClasses_DoesNotTriggerSmell()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+
+            var classA = new ClassNode("ClasseA");
+            var classB = new ClassNode("ClasseB");
+            diagram.AddClass(classA);
+            diagram.AddClass(classB);
+            diagram.AddRelation(new Relation(classA, classB, RelationType.Association));
+
+            var result = engine.Evaluate(diagram, new List<Requirement>());
+
+            Assert.IsFalse(result.DetectedSmells.Any(s => s.Type == CodeSmellType.LowAffinityCoupling));
+        }
+
+        [Test]
+        public void DetectCodeSmells_LowAffinityCoupling_SelfRelation_DoesNotTriggerSmell()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+
+            var classA = new ClassNode("ClasseA");
+            classA.AddMethod(Method("M1", "CatA"));
+            diagram.AddClass(classA);
+            diagram.AddRelation(new Relation(classA, classA, RelationType.Association));
+
+            var result = engine.Evaluate(diagram, new List<Requirement>());
+
+            Assert.IsFalse(result.DetectedSmells.Any(s => s.Type == CodeSmellType.LowAffinityCoupling));
+        }
+
+        [Test]
+        public void DetectCodeSmells_DuplicateCode_SameClassInternalDuplicates_DeduplicatesClassNames()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+
+            var classA = new ClassNode("ClasseA");
+            classA.AddMethod(Method("M1", "CatA"));
+            classA.AddMethod(Method("M1", "CatA"));
+            diagram.AddClass(classA);
+
+            var result = engine.Evaluate(diagram, new List<Requirement>());
+
+            Assert.IsFalse(result.DetectedSmells.Any(s => s.Type == CodeSmellType.DuplicateCode));
+        }
+
+        [Test]
+        public void DetectCodeSmells_ClassWithSixMethods_ScalesLargeClassSeverity()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+
+            var classNode = new ClassNode("BigClass");
+            for (int i = 0; i < 6; i++)
+            {
+                classNode.AddMethod(Method($"M{i}", "CatA"));
+            }
+            diagram.AddClass(classNode);
+
+            var result = engine.Evaluate(diagram, new List<Requirement>());
+
+            var smell = result.DetectedSmells.SingleOrDefault(s => s.Type == CodeSmellType.LargeClass);
+            Assert.IsNotNull(smell);
+            Assert.AreEqual(2, smell.Severity);
         }
     }
 }
