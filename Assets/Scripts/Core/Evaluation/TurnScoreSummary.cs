@@ -10,8 +10,8 @@ namespace Core.Evaluation
     public readonly struct TurnScoreSummary
     {
         public string PlayerName { get; }
-        public int TurnGainedPoints { get; }    // RawScore
-        public int TurnPenaltyPoints { get; }  // PenaltyScore
+        public int TurnGainedPoints { get; }
+        public int TurnPenaltyPoints { get; }
         public int TurnNetScore => TurnGainedPoints - TurnPenaltyPoints;
         public int TotalScore { get; }
 
