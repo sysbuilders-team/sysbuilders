@@ -3,6 +3,7 @@ using System.Linq;
 using NUnit.Framework;
 using Core.Diagram;
 using Core.Evaluation;
+using Core.Requirements;
 
 namespace Tests.EditMode
 {
@@ -10,14 +11,9 @@ namespace Tests.EditMode
     {
         private static MethodData Method(string name, string category) => new MethodData(name, category);
 
-        private static Requirement RequirementFor(string description, params MethodData[] methods)
+        private static Requirement RequirementFor(string id, string description, params MethodData[] methods)
         {
-            var requirement = new Requirement(description);
-            foreach (var method in methods)
-            {
-                requirement.AddRequirementMethods(method);
-            }
-            return requirement;
+            return new Requirement(id, description, new List<MethodData>(methods));
         }
 
         [Test]
@@ -55,7 +51,7 @@ namespace Tests.EditMode
             classNode.AddMethod(Method("Cancelar", "Usuario"));
             diagram.AddClass(classNode);
 
-            var requirement = RequirementFor("Gerenciar matrícula",
+            var requirement = RequirementFor("reqBiblioteca_01", "Gerenciar matrícula",
                 Method("Matricular", "Usuario"), Method("Cancelar", "Usuario"));
 
             var result = engine.Evaluate(diagram, new List<Requirement> { requirement });
@@ -75,7 +71,7 @@ namespace Tests.EditMode
             diagram.AddClass(classA);
             diagram.AddClass(classB);
 
-            var requirement = RequirementFor("Gerenciar matrícula",
+            var requirement = RequirementFor("reqBiblioteca_02", "Gerenciar matrícula",
                 Method("Matricular", "Usuario"), Method("Cancelar", "Usuario"));
 
             var result = engine.Evaluate(diagram, new List<Requirement> { requirement });
@@ -93,7 +89,7 @@ namespace Tests.EditMode
             classNode.AddMethod(Method("EnviarEmail", "Notificacao"));
             diagram.AddClass(classNode);
 
-            var requirement = RequirementFor("Matricular aluno", Method("Matricular", "Usuario"));
+            var requirement = RequirementFor("reqBiblioteca_03", "Matricular aluno", Method("Matricular", "Usuario"));
 
             var result = engine.Evaluate(diagram, new List<Requirement> { requirement });
 
@@ -212,7 +208,7 @@ namespace Tests.EditMode
             var classNode = new ClassNode("Aluno");
             classNode.AddMethod(Method("Matricular", "Usuario"));
             diagram.AddClass(classNode);
-            var requirement = RequirementFor("Matricular aluno", Method("Matricular", "Usuario"));
+            var requirement = RequirementFor("reqBiblioteca_04", "Matricular aluno", Method("Matricular", "Usuario"));
 
             var result = engine.Evaluate(diagram, new List<Requirement> { requirement });
 
@@ -235,18 +231,19 @@ namespace Tests.EditMode
 
             Assert.AreEqual(0, result.TotalScore);
         }
+
         [Test]
         public void DetectCodeSmells_SameMethodNameInDifferentCategories_DoesNotTriggerDuplicateCode()
         {
             var engine = new EvaluationEngine();
             var diagram = new ClassDiagram();
-    
+
             var classA = new ClassNode("UsuarioService");
             classA.AddMethod(Method("Validar", "Autenticacao"));
-    
+
             var classB = new ClassNode("PedidoService");
             classB.AddMethod(Method("Validar", "Financeiro"));
-    
+
             diagram.AddClass(classA);
             diagram.AddClass(classB);
 
@@ -261,7 +258,7 @@ namespace Tests.EditMode
             var engine = new EvaluationEngine();
             var diagram = new ClassDiagram();
             var classNode = new ClassNode("GodClass");
-    
+
             classNode.AddMethod(Method("M1", "CatA"));
             classNode.AddMethod(Method("M2", "CatB"));
             classNode.AddMethod(Method("M3", "CatC"));
@@ -271,7 +268,7 @@ namespace Tests.EditMode
 
             var smell = result.DetectedSmells.SingleOrDefault(s => s.Type == CodeSmellType.LowCohesion);
             Assert.IsNotNull(smell);
-            Assert.AreEqual(2, smell.Severity); 
+            Assert.AreEqual(2, smell.Severity);
         }
 
         [Test]
@@ -279,13 +276,13 @@ namespace Tests.EditMode
         {
             var engine = new EvaluationEngine();
             var diagram = new ClassDiagram();
-    
+
             var classNode = new ClassNode("Aluno");
             classNode.AddMethod(Method("Matricular", "Usuario"));
             classNode.AddMethod(Method("EnviarEmail", "Notificacao"));
             diagram.AddClass(classNode);
 
-            var req = RequirementFor("Matricular Aluno", Method("Matricular", "Usuario"));
+            var req = RequirementFor("req_matricular", "Matricular Aluno", Method("Matricular", "Usuario"));
 
             var result = engine.Evaluate(diagram, new List<Requirement> { req });
 
