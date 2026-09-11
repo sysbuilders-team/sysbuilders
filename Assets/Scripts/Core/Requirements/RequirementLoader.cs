@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Core.Diagram;
 using System;
-using Unity.Plastic.Newtonsoft.Json;
+using Newtonsoft.Json;
 
 namespace Core.Requirements
 {
@@ -91,7 +91,7 @@ namespace Core.Requirements
         {
             public string Id { get; set; }
             public string Description { get; set; }
-            public List<MethodData> RequiredMethods { get; set;}
+            public List<MethodDto> RequiredMethods { get; set;}
         }
 
         private class MethodDto

@@ -28,12 +28,7 @@ namespace Core.Requirements
             if (string.IsNullOrWhiteSpace(playerTwoId))
                 throw new ArgumentException("O ID do jogador 2 não pode ser vazio.", nameof(playerTwoId));
 
-            if (!_trailByTheme.TryGetValue(theme, out var candidatas) || candidatas.Count == 0)
-            {
-                throw new InvalidOperationException($"Nenhuma trilha configurada para o tema '{theme}'.");
-            }
-
-            if(!_trailByTheme.TryGetValue(theme, out var candidateTrails) || candidateTrails.Count == 0)
+            if (!_trailByTheme.TryGetValue(theme, out var candidateTrails) || candidateTrails.Count == 0)
             {
                 throw new InvalidOperationException($"Nenhuma trilha configurada para o tema '{theme}'.");
             }
