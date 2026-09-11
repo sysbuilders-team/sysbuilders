@@ -32,7 +32,8 @@ namespace Core.Evaluation
             {
                 if (classNode.Methods.Count > LargeClassThreshold)
                 {
-                    yield return new SmellOccurrence(CodeSmellType.LargeClass, new List<string> { classNode.Name });
+                    var severity = classNode.Methods.Count - LargeClassThreshold;
+                    yield return new SmellOccurrence(CodeSmellType.LargeClass, new List<string> { classNode.Name }, severity);
                 }
             }
         }
@@ -57,7 +58,7 @@ namespace Core.Evaluation
 
         private IEnumerable<SmellOccurrence> DetectDuplicateCode(IReadOnlyClassDiagram diagram)
         {
-            var classesByMethodIdentity = new Dictionary<(string Name, string Category), List<string>>();
+            var classesByMethodIdentity = new Dictionary<(string Name, string Category), HashSet<string>>();
 
             foreach (var classNode in diagram.Classes)
             {
@@ -67,7 +68,7 @@ namespace Core.Evaluation
 
                     if (!classesByMethodIdentity.TryGetValue(identity, out var classNames))
                     {
-                        classNames = new List<string>();
+                        classNames = new HashSet<string>();
                         classesByMethodIdentity[identity] = classNames;
                     }
 
@@ -80,7 +81,7 @@ namespace Core.Evaluation
             {
                 if (entry.Value.Count > 1)
                 {
-                    yield return new SmellOccurrence(CodeSmellType.DuplicateCode, entry.Value);
+                    yield return new SmellOccurrence(CodeSmellType.DuplicateCode, entry.Value.ToList());
                 }
             }
         }
@@ -91,6 +92,11 @@ namespace Core.Evaluation
 
             foreach (var relation in diagram.Relations)
             {
+                if (relation.Origin == relation.Destination)
+                {
+                    continue;
+                }
+
                 var pairKey = NormalizePair(relation.Origin, relation.Destination);
                 if (!seenPairs.Add(pairKey))
                 {
@@ -101,6 +107,11 @@ namespace Core.Evaluation
                     relation.Origin.Methods.Select(m => m.Category).Where(c => !string.IsNullOrEmpty(c)));
                 var targetCategories = new HashSet<string>(
                     relation.Destination.Methods.Select(m => m.Category).Where(c => !string.IsNullOrEmpty(c)));
+
+                if (sourceCategories.Count == 0 || targetCategories.Count == 0)
+                {
+                    continue;
+                }
 
                 bool sharesCategory = sourceCategories.Overlaps(targetCategories);
 
