@@ -13,7 +13,7 @@ namespace Core.Session
         public PlayerState PlayerTwo { get; }
         public TurnManager TurnManager { get; }
         private readonly RefactorHandler _refactorHandler;
-        private readonly EvaluationEngine _evaluator;
+        private readonly IEvaluationService _evaluator;
         private readonly IReadOnlyList<Requirement> _activeRequirements;
         public event Action<EvaluationResult, EvaluationResult> OnEvaluationCompleted;
 
@@ -37,7 +37,7 @@ namespace Core.Session
                     EvaluateBothPlayer();
                     break;
                 case TurnPhase.Show:
-                    //TODO: UI reage trocando de tela e lendo o estado atualizado dos jogadores
+                    // TODO: UI reage trocando de tela e lendo o estado atualizado dos jogadores
                     break;
             }
         }
@@ -66,6 +66,7 @@ namespace Core.Session
             var player = GetPlayerBySlot(slot);
             return _refactorHandler.TryRefactor(classNode, player);
         }
+
         private PlayerState GetPlayerBySlot(PlayerSlot slot)
         {
             return slot == PlayerSlot.PlayerOne ? PlayerOne : PlayerTwo;
@@ -87,7 +88,6 @@ namespace Core.Session
         {
             return TurnManager.CurrentPhase == TurnPhase.Build;
         }
-
 
         public void Dispose()
         {

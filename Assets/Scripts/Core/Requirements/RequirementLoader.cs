@@ -1,14 +1,14 @@
 using System.Collections.Generic;
 using System.Linq;
-using Newtonsoft.Json;
 using Core.Diagram;
 using System;
+using Unity.Plastic.Newtonsoft.Json;
 
 namespace Core.Requirements
 {
     public static class RequirementLoader
     {
-        public static IReadOnlyDictionary<string, List<Trail>> LoadFromJson(string jsonContent){
+        public static IReadOnlyDictionary<string, IReadOnlyList<Trail>> LoadFromJson(string jsonContent){
 
             if(string.IsNullOrWhiteSpace(jsonContent)){
                 throw new ArgumentException("O conteúdo JSON não pode ser nulo ou vazio.", nameof(jsonContent));
@@ -28,7 +28,7 @@ namespace Core.Requirements
                 throw new FormatException("O JSON desserializado retornou um resultado nulo.");
             }
 
-            var result = new Dictionary<string, List<Trail>>();
+            var result = new Dictionary<string, IReadOnlyList<Trail>>();
 
             foreach(var (theme, trailDtos) in rawData)
             {
@@ -81,8 +81,6 @@ namespace Core.Requirements
                 throw new FormatException($"Encontrado um requisito sem ID na trilha '{trailId}'.");
             }
         }
-        #region JSON DTOs (Privados)
-
         private class TrailDto
         {
             public string Id { get; set; }
@@ -101,8 +99,5 @@ namespace Core.Requirements
             public string Name { get; set; }
             public string Category { get; set;}
         }
-
-        #endregion
     }
-    
 }
