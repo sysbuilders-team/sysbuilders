@@ -1,0 +1,26 @@
+{
+    "name": "Sys.Network",
+    "rootNamespace": "",
+    "references": [
+        "Sys.Core",
+        "Sys.Managers",
+        "Sys.Ui",
+        "Mirror",
+        "Mirror.Authenticators",
+        "Mirror.CompilerSymbols",
+        "Mirror.Components",
+        "Mirror.Editor",
+        "Mirror.Examples",
+        "Mirror.Transports",
+        "Unity.Mirror.CodeGen"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
