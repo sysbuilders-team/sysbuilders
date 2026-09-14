@@ -107,3 +107,5 @@ InitTestScene*.unity*
 
 # JetBrains Rider Workspace
 .idea/
+
+.vscode

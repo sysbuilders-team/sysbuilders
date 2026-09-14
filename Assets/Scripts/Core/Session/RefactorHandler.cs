@@ -1,4 +1,4 @@
-﻿using Core.Diagram;
+using Core.Diagram;
 
 namespace Core.Session
 {
@@ -6,7 +6,13 @@ namespace Core.Session
     {
         public bool TryRefactor(ClassNode classNode, PlayerState playerState)
         {
-            // TODO: tratar edge case se a classe ja estiver destravada
+            if (classNode == null || playerState == null) return false;
+
+            if (!classNode.IsLocked)
+            {
+                return true;
+            }
+
             if (playerState.TryDeductPoints(playerState.RefactorCost))
             {
                 classNode.Unlock();
