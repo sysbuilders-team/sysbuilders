@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Core.Diagram;
 using System;
-using Newtonsoft.Json;
+using Unity.Plastic.Newtonsoft.Json;
 
 namespace Core.Requirements
 {
