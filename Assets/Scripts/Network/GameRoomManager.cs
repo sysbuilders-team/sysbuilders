@@ -1,13 +1,22 @@
 using Mirror;
+using UnityEngine;
 
 namespace Network
 {
-    /* Sala de espera, junta os 2 jogadores, decide tema, aciona
-    NetworkDiscovery (LAN) e dispara a troca pra GameScene */
     public class GameRoomManager : NetworkRoomManager
     {
-        // TODO: decidir tema antes da troca de cena
+        public string ChosenTheme   { get; private set; }
+        public string ChosenTrailId { get; private set; }
+        
+        public override void OnRoomServerPlayersReady()
+        {
+            // TODO: trocar por RequirementManager.Catalog.SelectTrail(theme, p1Id, p2Id) pós RequirementCatalog expor método que retorna Trail completa.
+            ChosenTheme   = PlayerPrefs.GetString("SelectedTheme", "Biblioteca");
+            ChosenTrailId = "PLACEHOLDER_TRAIL_ID";
 
-        // TODO: OnRoomServerPlayersReady()
+            Debug.Log($"[GameRoomManager] Tema: {ChosenTheme} | Trail: {ChosenTrailId}");
+
+            ServerChangeScene(GameplayScene);
+        }
     }
 }
