@@ -15,25 +15,44 @@ namespace Core.Requirements
             _random = random ?? new Random();
         }
 
-        public IReadOnlyList<Requirement> SelectTrailForMatch(string theme, string playerOneId, string playerTwoId)
+        public Trail SelectTrail(string theme)
         {   
             if (string.IsNullOrWhiteSpace(theme))
                 throw new ArgumentException("O tema não pode ser vazio.", nameof(theme));
 
-            if (string.IsNullOrWhiteSpace(playerOneId))
-                throw new ArgumentException("O ID do jogador 1 não pode ser vazio.", nameof(playerOneId));
-
-            if (string.IsNullOrWhiteSpace(playerTwoId))
-                throw new ArgumentException("O ID do jogador 2 não pode ser vazio.", nameof(playerTwoId));
-
-            if(!_trailByTheme.TryGetValue(theme, out var candidateTrails) || candidateTrails.Count == 0)
+            if (!_trailByTheme.TryGetValue(theme, out var candidateTrails) || candidateTrails.Count == 0)
             {
                 throw new InvalidOperationException($"Nenhuma trilha configurada para o tema '{theme}'.");
             }
 
-            var chosenTrail = candidateTrails[_random.Next(candidateTrails.Count)];
+            return candidateTrails[_random.Next(candidateTrails.Count)];
+        }
 
-            return chosenTrail.RequirementByTurn;
+        public Trail GetTrailById(string theme, string trailId)
+        {
+            if (string.IsNullOrWhiteSpace(theme))
+                throw new ArgumentException("O tema não pode ser vazio.", nameof(theme));
+
+            if (string.IsNullOrWhiteSpace(trailId))
+                throw new ArgumentException("O ID da trilha não pode ser vazio.", nameof(trailId));
+
+            if (!_trailByTheme.TryGetValue(theme, out var candidateTrails) || candidateTrails.Count == 0)
+            {
+                throw new InvalidOperationException($"Nenhuma trilha configurada para o tema '{theme}'.");
+            }
+
+            var trail = candidateTrails.FirstOrDefault(t => t.Id == trailId);
+            if (trail == null)
+            {
+                throw new KeyNotFoundException($"Trilha '{trailId}' não encontrada no tema '{theme}'.");
+            }
+
+            return trail;
+        }
+
+        public IReadOnlyList<Requirement> GetRequirementsForMatch(string theme, string trailId)
+        {
+            return GetTrailById(theme, trailId).RequirementByTurn;
         }
     }
 }
