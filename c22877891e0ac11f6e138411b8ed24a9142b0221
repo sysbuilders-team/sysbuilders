@@ -1,0 +1,1 @@
+Note: creation of placeholder classes for the future multiplayer network layer (GameRoomManager, GameRoomPlayer, MatchSyncBridge), serving as a structural foundation prior to full implementation.
