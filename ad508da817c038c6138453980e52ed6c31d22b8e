@@ -1,0 +1,1 @@
+Note: reorganization of TurnManager to improve separation of concerns, in preparation for integration with the requirements system.
