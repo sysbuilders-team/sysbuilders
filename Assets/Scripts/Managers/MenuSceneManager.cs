@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEngine.SceneManagement;
 
 namespace Managers{
-    public class MenuManager : MonoBehaviour
+    public class MenuSceneManager : MonoBehaviour
     {   
         [Header("Painéis")]
         [SerializeField] private GameObject _startPanel;
