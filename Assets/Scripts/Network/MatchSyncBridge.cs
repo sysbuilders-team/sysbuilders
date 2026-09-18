@@ -1,5 +1,6 @@
 using Mirror;
 using UnityEngine;
+using Mirror.Transports.Encryption;
 using Core.Evaluation;
 using Core.Session;
 using System.Collections.Generic;
@@ -56,7 +57,7 @@ namespace Network
             {
                 _readyCount = 0;
                 RpcAdvancePhase();
-            }
+            }   
         }
         
         private int _readyCount;

@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using Mirror;
 using Mirror.Discovery;
+using Mirror.Transports.Encryption;
 using UnityEngine;
 
 namespace Network
@@ -26,9 +27,7 @@ namespace Network
                 return new SysDiscoveryResponse
                 {
                     Uri      = transport.ServerUri(),
-                    HostName = NetworkManager.singleton != null
-                                   ? NetworkManager.singleton.name
-                                   : "Host"
+                    HostName = PlayerPrefs.GetString("PlayerName", "Host")
                 };
             }
             catch (NotImplementedException)
