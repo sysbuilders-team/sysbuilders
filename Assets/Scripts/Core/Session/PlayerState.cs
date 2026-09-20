@@ -16,6 +16,9 @@ namespace Core.Session
         public int RefactorCost { get; }
         private readonly List<EvaluationResult> _evaluationHistory = new List<EvaluationResult>();
         public IReadOnlyList<EvaluationResult> EvaluationHistory => _evaluationHistory;
+        
+        public bool AddRelation(Relation relation) => _classDiagram.AddRelation(relation);
+        public bool RemoveRelation(ClassNode origin, ClassNode destination) => _classDiagram.RemoveRelation(origin, destination);
 
         public PlayerState(string name)
         {

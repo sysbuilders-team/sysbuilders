@@ -7,13 +7,15 @@ using Core.Requirements;
 
 namespace Core.Session
 {
-    public class MatchSession : IRequirementContext, IScoreContext, IRefactorContext
+    public class MatchSession : IRequirementContext, IScoreContext, IRefactorContext, ITurnSummaryContext, IMatchEndContext, IDiagramActions
     {
         public PlayerState PlayerOne { get; }
         public PlayerState PlayerTwo { get; }
         
         public PlayerSlot PlayerSlot { get; }
         public PlayerState LocalPlayer => GetPlayerBySlot(PlayerSlot);
+        
+        public PlayerState OpponentPlayer => PlayerSlot == PlayerSlot.PlayerOne ? PlayerTwo : PlayerOne;
         public TurnManager TurnManager { get; }
         private readonly RefactorHandler _refactorHandler;
         private readonly IEvaluationService _evaluator;
@@ -46,6 +48,21 @@ namespace Core.Session
         public int RefactorPoints => LocalPlayer.RefactorPoints;
 
         public int RefactorCost => LocalPlayer.RefactorCost;
+
+        public int RoundPointsEarned => LocalPlayer.EvaluationHistory.LastOrDefault()?.RawScore ?? 0;
+        public int RoundPenaltyPoints => LocalPlayer.EvaluationHistory.LastOrDefault()?.PenaltyScore ?? 0;
+
+        public int RoundOpponentPointsEarned => OpponentPlayer.EvaluationHistory.LastOrDefault()?.RawScore ?? 0;
+
+        public int RoundOpponentPenaltyPoints => OpponentPlayer.EvaluationHistory.LastOrDefault()?.PenaltyScore ?? 0;
+
+        public IReadOnlyList<EvaluationResult> PlayerOneHistory => PlayerOne.EvaluationHistory;
+        public IReadOnlyList<EvaluationResult> PlayerTwoHistory => PlayerTwo.EvaluationHistory;
+
+        public bool IsDraw => PlayerOneScore == PlayerTwoScore;
+        public string WinnerName => IsDraw ? null : (PlayerOneScore > PlayerTwoScore) ? PlayerOneName : PlayerTwoName;
+        
+        public event Action OnDiagramChanged;
 
         public MatchSession(
             string playerOneId,
@@ -142,6 +159,66 @@ namespace Core.Session
                 return false;
             
             return true;
+        }
+        public bool TryCreateClass(string className, out ClassNode createdNode)
+        {
+            createdNode = null;
+            if (!CanModifyDiagram() || string.IsNullOrWhiteSpace(className)) return false;
+            createdNode = new ClassNode(className);
+            bool success = LocalPlayer.Diagram.Classes.All(c => c.Name != className);
+            if (success)
+            {
+                LocalPlayer.AddClass(createdNode);
+                OnDiagramChanged?.Invoke();
+                return true;
+            }
+            createdNode = null;
+            return false;
+        }
+        public bool RemoveClass(ClassNode node)
+        {
+            if (!CanModifyDiagram() || node == null || node.IsLocked) return false;
+            LocalPlayer.RemoveClass(node);
+            OnDiagramChanged?.Invoke();
+            return true;
+        }
+        public bool AddMethodToClass(ClassNode node, MethodData method)
+        {
+            if (!CanModifyDiagram() || node == null || method == null || node.IsLocked) return false;
+            node.AddMethod(method);
+            OnDiagramChanged?.Invoke();
+            return true;
+        }
+        public bool RemoveMethodFromClass(ClassNode node, MethodData method)
+        {
+            if (!CanModifyDiagram() || node == null || method == null || node.IsLocked) return false;
+            bool removed = node.RemoveMethod(method);
+            if (removed)
+            {
+                OnDiagramChanged?.Invoke();
+            }
+            return removed;
+        }
+        public bool AddRelation(ClassNode origin, ClassNode destination, RelationType type = RelationType.Association)
+        {
+            if (!CanModifyDiagram() || origin == null || destination == null || origin == destination) return false;
+            var relation = new Relation(origin, destination, type);
+            bool added = LocalPlayer.AddRelation(relation);
+            if (added)
+            {
+                OnDiagramChanged?.Invoke();
+            }
+            return added;
+        }
+        public bool RemoveRelation(ClassNode origin, ClassNode destination)
+        {
+            if (!CanModifyDiagram() || origin == null || destination == null) return false;
+            bool removed = LocalPlayer.RemoveRelation(origin, destination);
+            if (removed)
+            {
+                OnDiagramChanged?.Invoke();
+            }
+            return removed;
         }
 
         public void Dispose()

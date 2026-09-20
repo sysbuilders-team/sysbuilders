@@ -86,5 +86,20 @@ namespace Core.Diagram
                 else if (relation.Destination == node) yield return relation.Origin;
             }
         }
+        
+        public bool RemoveRelation(ClassNode origin, ClassNode destination)
+        {
+            if (origin == null || destination == null) return false;
+
+            var relation = _relations.Find(r => 
+                (r.Origin == origin && r.Destination == destination) ||
+                (r.Origin == destination && r.Destination == origin));
+
+            if (relation != null)
+            {
+                return _relations.Remove(relation);
+            }
+            return false;
+        }
     }
 }
