@@ -1,15 +1,17 @@
+using System;
+using System.Collections.Generic;
 using Mirror;
 using UnityEngine;
-using Mirror.Transports.Encryption;
 using Core.Evaluation;
 using Core.Session;
-using System.Collections.Generic;
 
 namespace Network
 {
     public class MatchSyncBridge : NetworkBehaviour
     {
-        [SerializeField] private GameplayManager _gameplayManager;
+        public event Action<string, string> OnMatchConfigReceived;
+        public event Action OnPhaseAdvanceRequested;
+        public event Action<int, EvaluationResult> OnRivalEvaluationReceived;
 
         [SyncVar(hook = nameof(OnThemeReceived))] private string _theme;
         [SyncVar] private string _trailId;
@@ -33,10 +35,11 @@ namespace Network
 
         private void OnThemeReceived(string oldTheme, string newTheme)
         {
-            if(!isClientOnly) return;
+            if (!isClientOnly) return;
             if (string.IsNullOrEmpty(newTheme)) return;
-            //TODO: _gameplayManager.Initialize(newTheme, _trailId) após GameplayManager expor esse método
-            Debug.Log($"[MatchSyncBridge] Client receives theme: {newTheme} | trail: {_trailId}");
+
+            Debug.Log($"[MatchSyncBridge] Cliente recebeu tema: {newTheme} | trail: {_trailId}");
+            OnMatchConfigReceived?.Invoke(newTheme, _trailId);
         }
 
         public void NotifyLocalPlayerReady(PlayerSlot slot)
@@ -49,7 +52,6 @@ namespace Network
         {
             var slot = (PlayerSlot)slotIndex;
             
-            //TODO: repassar para o TurnManager do servidor (caso exista sessao server-side), por enquanto conta aqui
             _readyCount++;
             Debug.Log($"[MatchSyncBridge] Server: slot {slot} pronto ({_readyCount}/2)");
             
@@ -65,8 +67,8 @@ namespace Network
         [ClientRpc]
         private void RpcAdvancePhase()
         {
-            // TODO: _gameplayManager.Session.TurnManager.ForceAdvancePhase() após GameplayManager expor a Session.
             Debug.Log("[MatchSyncBridge] RpcAdvancePhase recebido — avançar TurnManager local.");
+            OnPhaseAdvanceRequested?.Invoke();
         }
         
         [Server]
@@ -85,9 +87,8 @@ namespace Network
                 new List<SmellOccurrence>()  
             );
 
-            // TODO: _gameplayManager.Session.GetRivalState(localSlot).AddEvaluationResult(rivalResult) após GameplayManager expor a Session e o slot local.
             Debug.Log($"[MatchSyncBridge] Rival — raw:{rawScore} penalty:{penaltyScore} total:{rivalResult.TotalScore}");
+            OnRivalEvaluationReceived?.Invoke(targetSlot, rivalResult);
         }
     }
-
 }
