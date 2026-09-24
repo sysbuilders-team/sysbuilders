@@ -1,20 +1,20 @@
-using System;
 using System.Collections.Generic;
 using Mirror;
 using UnityEngine;
 using Core.Evaluation;
 using Core.Session;
+using Managers; 
 
 namespace Network
 {
     public class MatchSyncBridge : NetworkBehaviour
     {
-        public event Action<string, string> OnMatchConfigReceived;
-        public event Action OnPhaseAdvanceRequested;
-        public event Action<int, EvaluationResult> OnRivalEvaluationReceived;
+        [SerializeField] private GameplayManager _gameplayManager;
 
         [SyncVar(hook = nameof(OnThemeReceived))] private string _theme;
         [SyncVar] private string _trailId;
+
+        private readonly HashSet<PlayerSlot> _readySlots = new HashSet<PlayerSlot>();
 
         public override void OnStartServer()
         {
@@ -31,52 +31,68 @@ namespace Network
             _trailId = roomManager.ChosenTrailId;
 
             Debug.Log($"[MatchSyncBridge] Server: tema={_theme} trail={_trailId}");
+            
+            _gameplayManager.Initialize(_theme, _trailId);
         }
 
         private void OnThemeReceived(string oldTheme, string newTheme)
         {
-            if (!isClientOnly) return;
+            if (!isClientOnly) return; 
             if (string.IsNullOrEmpty(newTheme)) return;
 
             Debug.Log($"[MatchSyncBridge] Cliente recebeu tema: {newTheme} | trail: {_trailId}");
-            OnMatchConfigReceived?.Invoke(newTheme, _trailId);
+            _gameplayManager.Initialize(newTheme, _trailId);
         }
 
-        public void NotifyLocalPlayerReady(PlayerSlot slot)
-        {
-            CmdSetReady((int)slot);
-        }
-        
+        public void NotifyLocalPlayerReady(PlayerSlot slot) => CmdSetReady((int)slot);
+
         [Command(requiresAuthority = false)]
         private void CmdSetReady(int slotIndex)
         {
             var slot = (PlayerSlot)slotIndex;
             
-            _readyCount++;
-            Debug.Log($"[MatchSyncBridge] Server: slot {slot} pronto ({_readyCount}/2)");
-            
-            if (_readyCount >= 2)
+            _readySlots.Add(slot);
+            Debug.Log($"[MatchSyncBridge] Server: slot {slot} pronto ({_readySlots.Count}/2)");
+
+            if (_readySlots.Count >= 2)
             {
-                _readyCount = 0;
+                _readySlots.Clear();
                 RpcAdvancePhase();
-            }   
+            }
         }
-        
-        private int _readyCount;
-        
+
         [ClientRpc]
         private void RpcAdvancePhase()
         {
             Debug.Log("[MatchSyncBridge] RpcAdvancePhase recebido — avançar TurnManager local.");
-            OnPhaseAdvanceRequested?.Invoke();
+            _gameplayManager.Session.TurnManager.ForceAdvancePhase();
         }
         
-        [Server]
-        public void SendEvaluationResult(int targetSlot, int rawScore, int penaltyScore)
+        private void OnEnable()
         {
-            RpcReceiveEvaluationResult(targetSlot, rawScore, penaltyScore);
+            if (_gameplayManager != null && _gameplayManager.Session != null)
+            {
+                _gameplayManager.Session.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
+            }
         }
-        
+
+        private void OnDisable()
+        {
+            if (_gameplayManager != null && _gameplayManager.Session != null)
+            {
+                _gameplayManager.Session.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
+            }
+        }
+
+        private void HandleLocalEvaluationCompleted(EvaluationResult resultOne, EvaluationResult resultTwo)
+        {
+            if (isServer)
+            {
+                RpcReceiveEvaluationResult((int)PlayerSlot.PlayerOne, resultOne.RawScore, resultOne.PenaltyScore);
+                RpcReceiveEvaluationResult((int)PlayerSlot.PlayerTwo, resultTwo.RawScore, resultTwo.PenaltyScore);
+            }
+        }
+
         [ClientRpc]
         private void RpcReceiveEvaluationResult(int targetSlot, int rawScore, int penaltyScore)
         {
@@ -84,11 +100,11 @@ namespace Network
                 rawScore,
                 penaltyScore,
                 new List<string>(),
-                new List<SmellOccurrence>()  
+                new List<SmellOccurrence>()
             );
 
-            Debug.Log($"[MatchSyncBridge] Rival — raw:{rawScore} penalty:{penaltyScore} total:{rivalResult.TotalScore}");
-            OnRivalEvaluationReceived?.Invoke(targetSlot, rivalResult);
+            Debug.Log($"[MatchSyncBridge] Slot {targetSlot} — raw:{rawScore} penalty:{penaltyScore} total:{rivalResult.TotalScore}");
+            _gameplayManager.Session.GetPlayerBySlot((PlayerSlot)targetSlot).AddEvaluationResult(rivalResult);
         }
     }
 }
