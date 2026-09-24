@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace Core.Diagram
 {
@@ -18,10 +18,19 @@ namespace Core.Diagram
 
         public void AddMethod(MethodData method)
         {
-            if (!IsLocked)
+            if (!IsLocked && method != null)
             {
                 _methods.Add(method);
             }
+        }
+
+        public bool RemoveMethod(MethodData method)
+        {
+            if (!IsLocked && method != null)
+            {
+                return _methods.Remove(method);
+            }
+            return false;
         }
 
         public void Lock()
