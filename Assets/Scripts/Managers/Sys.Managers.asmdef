@@ -3,7 +3,10 @@
     "rootNamespace": "",
     "references": [
         "Unity.TextMeshPro",
-        "Sys.Core"
+        "Sys.Core",
+        "Sys.Network",
+        "Mirror",
+        "Mirror.Components"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
