@@ -7,35 +7,80 @@ using Core.Requirements;
 
 namespace Core.Session
 {
-    public class MatchSession
+    public class MatchSession : IRequirementContext, IScoreContext, IRefactorContext, ITurnSummaryContext, IMatchEndContext, IDiagramActions
     {
         public PlayerState PlayerOne { get; }
         public PlayerState PlayerTwo { get; }
+        
+        public PlayerSlot PlayerSlot { get; }
+        public PlayerState LocalPlayer => GetPlayerBySlot(PlayerSlot);
+        
+        public PlayerState OpponentPlayer => PlayerSlot == PlayerSlot.PlayerOne ? PlayerTwo : PlayerOne;
         public TurnManager TurnManager { get; }
         private readonly RefactorHandler _refactorHandler;
         private readonly IEvaluationService _evaluator;
         private readonly IReadOnlyList<Requirement> _activeRequirements;
-        public event Action<EvaluationResult, EvaluationResult> OnEvaluationCompleted;
 
-        public MatchSession(string playerOneId, string playerTwoId, string theme, IRequirementProvider requirementProvider)
-            : this(playerOneId, playerTwoId, theme, requirementProvider, new EvaluationEngine())
+        public event Action<EvaluationResult, EvaluationResult> OnEvaluationCompleted;
+        public event Action<Requirement> OnRequirementChanged;
+        public event Action OnScoreUpdated;
+
+        public event Action<int> OnRefactorPointsChanged;
+
+        public Requirement CurrentRequirement
         {
+            get
+            {
+                var index = TurnManager.CurrentTurn - 1;
+                if (index >= 0 && index < _activeRequirements.Count)
+                    return _activeRequirements[index];
+                return null;
+            }
         }
+
+        public IReadOnlyList<Requirement> RequirementsHistory => GetRequirementsUpToCurrentTurn();
+
+        public string PlayerOneName => PlayerOne.Name;
+        public string PlayerTwoName => PlayerTwo.Name;
+        public int PlayerOneScore => PlayerOne.EvaluationHistory.Sum(e => e.TotalScore);
+        public int PlayerTwoScore => PlayerTwo.EvaluationHistory.Sum(e => e.TotalScore);
+
+        public int RefactorPoints => LocalPlayer.RefactorPoints;
+
+        public int RefactorCost => LocalPlayer.RefactorCost;
+
+        public int RoundPointsEarned => LocalPlayer.EvaluationHistory.LastOrDefault()?.RawScore ?? 0;
+        public int RoundPenaltyPoints => LocalPlayer.EvaluationHistory.LastOrDefault()?.PenaltyScore ?? 0;
+
+        public int RoundOpponentPointsEarned => OpponentPlayer.EvaluationHistory.LastOrDefault()?.RawScore ?? 0;
+
+        public int RoundOpponentPenaltyPoints => OpponentPlayer.EvaluationHistory.LastOrDefault()?.PenaltyScore ?? 0;
+
+        public IReadOnlyList<EvaluationResult> PlayerOneHistory => PlayerOne.EvaluationHistory;
+        public IReadOnlyList<EvaluationResult> PlayerTwoHistory => PlayerTwo.EvaluationHistory;
+
+        public bool IsDraw => PlayerOneScore == PlayerTwoScore;
+        public string WinnerName => IsDraw ? null : (PlayerOneScore > PlayerTwoScore) ? PlayerOneName : PlayerTwoName;
+        
+        public event Action OnDiagramChanged;
 
         public MatchSession(
             string playerOneId,
             string playerTwoId,
-            string theme,
-            IRequirementProvider requirementProvider,
-            IEvaluationService evaluator)
+            IReadOnlyList<Requirement> activeRequirements,
+            PlayerSlot localSlot,
+            IEvaluationService evaluator = null)
         {
+            if (activeRequirements == null || activeRequirements.Count == 0)
+                throw new ArgumentException("A lista de requisitos não pode ser nula ou vazia.", nameof(activeRequirements));
+
             PlayerOne = new PlayerState(playerOneId);
             PlayerTwo = new PlayerState(playerTwoId);
             TurnManager = new TurnManager();
             _refactorHandler = new RefactorHandler();
-            _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
-
-            _activeRequirements = requirementProvider.SelectTrailForMatch(theme, playerOneId, playerTwoId);
+            _evaluator = evaluator ?? new EvaluationEngine();
+            _activeRequirements = activeRequirements;
+            PlayerSlot = localSlot;
             TurnManager.OnPhaseChange += HandlePhaseChange;
         }
 
@@ -49,10 +94,12 @@ namespace Core.Session
                     EvaluateBothPlayer();
                     break;
                 case TurnPhase.Show:
-                    // TODO: UI reage trocando de tela e lendo o estado atualizado dos jogadores
+                    OnRequirementChanged?.Invoke(CurrentRequirement);
                     break;
             }
         }
+        
+        
 
         private void EvaluateBothPlayer()
         {
@@ -63,6 +110,7 @@ namespace Core.Session
             var resultTwo = _evaluator.Evaluate(PlayerTwo.Diagram, requirementsSoFar);
             PlayerTwo.AddEvaluationResult(resultTwo);
 
+            OnScoreUpdated?.Invoke();
             OnEvaluationCompleted?.Invoke(resultOne, resultTwo);
         }
 
@@ -70,13 +118,17 @@ namespace Core.Session
         {
             return _activeRequirements.Take(TurnManager.CurrentTurn).ToList();
         }
-
-        public bool TryRefactorClass(PlayerSlot slot, ClassNode classNode)
+        
+        public bool TryRefactorClass(ClassNode classNode)
         {
             if (!CanModifyDiagram()) return false;
 
-            var player = GetPlayerBySlot(slot);
-            return _refactorHandler.TryRefactor(classNode, player);
+            bool result = _refactorHandler.TryRefactor(classNode, LocalPlayer);
+            if (result)
+            {
+                OnRefactorPointsChanged?.Invoke(LocalPlayer.RefactorPoints);
+            }
+            return result;
         }
 
         private PlayerState GetPlayerBySlot(PlayerSlot slot)
@@ -99,6 +151,74 @@ namespace Core.Session
         private bool CanModifyDiagram()
         {
             return TurnManager.CurrentPhase == TurnPhase.Build;
+        }
+
+        public bool CanRefactor(ClassNode classNode)
+        {
+            if (!CanModifyDiagram() || !classNode.IsLocked || LocalPlayer.RefactorPoints < LocalPlayer.RefactorCost)
+                return false;
+            
+            return true;
+        }
+        public bool TryCreateClass(string className, out ClassNode createdNode)
+        {
+            createdNode = null;
+            if (!CanModifyDiagram() || string.IsNullOrWhiteSpace(className)) return false;
+            createdNode = new ClassNode(className);
+            bool success = LocalPlayer.Diagram.Classes.All(c => c.Name != className);
+            if (success)
+            {
+                LocalPlayer.AddClass(createdNode);
+                OnDiagramChanged?.Invoke();
+                return true;
+            }
+            createdNode = null;
+            return false;
+        }
+        public bool RemoveClass(ClassNode node)
+        {
+            if (!CanModifyDiagram() || node == null || node.IsLocked) return false;
+            LocalPlayer.RemoveClass(node);
+            OnDiagramChanged?.Invoke();
+            return true;
+        }
+        public bool AddMethodToClass(ClassNode node, MethodData method)
+        {
+            if (!CanModifyDiagram() || node == null || method == null || node.IsLocked) return false;
+            node.AddMethod(method);
+            OnDiagramChanged?.Invoke();
+            return true;
+        }
+        public bool RemoveMethodFromClass(ClassNode node, MethodData method)
+        {
+            if (!CanModifyDiagram() || node == null || method == null || node.IsLocked) return false;
+            bool removed = node.RemoveMethod(method);
+            if (removed)
+            {
+                OnDiagramChanged?.Invoke();
+            }
+            return removed;
+        }
+        public bool AddRelation(ClassNode origin, ClassNode destination, RelationType type = RelationType.Association)
+        {
+            if (!CanModifyDiagram() || origin == null || destination == null || origin == destination) return false;
+            var relation = new Relation(origin, destination, type);
+            bool added = LocalPlayer.AddRelation(relation);
+            if (added)
+            {
+                OnDiagramChanged?.Invoke();
+            }
+            return added;
+        }
+        public bool RemoveRelation(ClassNode origin, ClassNode destination)
+        {
+            if (!CanModifyDiagram() || origin == null || destination == null) return false;
+            bool removed = LocalPlayer.RemoveRelation(origin, destination);
+            if (removed)
+            {
+                OnDiagramChanged?.Invoke();
+            }
+            return removed;
         }
 
         public void Dispose()
