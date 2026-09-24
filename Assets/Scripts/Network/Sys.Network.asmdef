@@ -10,7 +10,8 @@
         "Mirror.Editor",
         "Mirror.Examples",
         "Mirror.Transports",
-        "Unity.Mirror.CodeGen"
+        "Unity.Mirror.CodeGen",
+        "Sys.Managers"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
