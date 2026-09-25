@@ -1,0 +1,276 @@
+using System;
+using System.Collections.Generic;
+using Core.Diagram;
+using Core.Requirements;
+using Core.Session;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace UI
+{
+    public class ToolboxController : MonoBehaviour
+    {
+        [Header("Criar Classe")]
+        [SerializeField] private Button _createClassButton;
+        [SerializeField] private TMP_Text _createClassButtonText;
+        [SerializeField] private int _maxClassesPerTurn = 2; // TODO: ver isso conforme novas regras ou de acordo com os requirements designados
+
+        [Header("Lista de Métodos")]
+        [SerializeField] private Transform _methodsContainer;
+        [SerializeField] private GameObject _methodCardPrefab;
+
+        [Header("Associação")]
+        [SerializeField] private Button _associationButton;
+        [SerializeField] private TMP_Text _associationButtonText;
+
+        private IRequirementContext _requirementContext;
+        private IDiagramActions _diagramActions;
+        private ITurnContext _turnContext;
+
+        private int _classesCreatedThisTurn;
+        private int _lastTrackedTurn = -1;
+        private bool _isAssociationModeActive;
+        private readonly List<MethodCardUI> _activeCards = new List<MethodCardUI>();
+
+        public int ClassesCreatedThisTurn => _classesCreatedThisTurn;
+        public int MaxClassesPerTurn => _maxClassesPerTurn;
+        public bool IsAssociationModeActive => _isAssociationModeActive;
+        public IReadOnlyList<MethodCardUI> ActiveCards => _activeCards;
+
+        public event Action OnCreateClassClicked;
+        public event Action<bool> OnAssociationModeToggled;
+        public event Action<MethodData> OnMethodCardSelected;
+
+        private void Awake()
+        {
+            SetupButtons();
+        }
+
+        public void Initialize(IRequirementContext requirementContext, IDiagramActions diagramActions, ITurnContext turnContext)
+        {
+            UnsubscribeFromEvents();
+            SetupButtons();
+
+            _requirementContext = requirementContext ?? throw new ArgumentNullException(nameof(requirementContext));
+            _diagramActions = diagramActions ?? throw new ArgumentNullException(nameof(diagramActions));
+            _turnContext = turnContext ?? throw new ArgumentNullException(nameof(turnContext));
+
+            _requirementContext.OnRequirementChanged += HandleRequirementChanged;
+            _turnContext.OnPhaseChange += HandlePhaseChange;
+
+            _lastTrackedTurn = _turnContext.CurrentTurn;
+            _classesCreatedThisTurn = 0;
+            _isAssociationModeActive = false;
+
+            UpdateAllDisplays();
+        }
+
+        private void OnDestroy()
+        {
+            UnsubscribeFromEvents();
+
+            if (_createClassButton != null)
+            {
+                _createClassButton.onClick.RemoveListener(HandleCreateClassClicked);
+            }
+
+            if (_associationButton != null)
+            {
+                _associationButton.onClick.RemoveListener(HandleAssociationButtonClicked);
+            }
+
+            ClearMethodsList();
+        }
+
+        private void UnsubscribeFromEvents()
+        {
+            if (_requirementContext != null)
+            {
+                _requirementContext.OnRequirementChanged -= HandleRequirementChanged;
+            }
+
+            if (_turnContext != null)
+            {
+                _turnContext.OnPhaseChange -= HandlePhaseChange;
+            }
+        }
+
+        private void SetupButtons()
+        {
+            if (_createClassButton != null)
+            {
+                _createClassButton.onClick.RemoveListener(HandleCreateClassClicked);
+                _createClassButton.onClick.AddListener(HandleCreateClassClicked);
+
+                if (_createClassButtonText == null)
+                {
+                    _createClassButtonText = _createClassButton.GetComponentInChildren<TMP_Text>();
+                }
+            }
+
+            if (_associationButton != null)
+            {
+                _associationButton.onClick.RemoveListener(HandleAssociationButtonClicked);
+                _associationButton.onClick.AddListener(HandleAssociationButtonClicked);
+
+                if (_associationButtonText == null)
+                {
+                    _associationButtonText = _associationButton.GetComponentInChildren<TMP_Text>();
+                }
+            }
+        }
+
+        private void HandleRequirementChanged(Requirement newRequirement)
+        {
+            PopulateMethodsList(newRequirement);
+        }
+
+        private void HandlePhaseChange(TurnPhase newPhase)
+        {
+            if (_turnContext != null && _turnContext.CurrentTurn != _lastTrackedTurn)
+            {
+                _lastTrackedTurn = _turnContext.CurrentTurn;
+                _classesCreatedThisTurn = 0;
+            }
+
+            if (newPhase != TurnPhase.Build)
+            {
+                SetAssociationMode(false);
+            }
+
+            UpdateButtonsInteractable(newPhase);
+        }
+
+        private void HandleCreateClassClicked()
+        {
+            if (!CanCreateClass()) return;
+
+            OnCreateClassClicked?.Invoke();
+        }
+
+        public bool NotifyClassCreated()
+        {
+            if (!CanCreateClass()) return false;
+
+            _classesCreatedThisTurn++;
+            UpdateCreateClassButtonDisplay();
+            return true;
+        }
+
+        public bool CanCreateClass()
+        {
+            if (_turnContext == null) return false;
+            return _turnContext.CurrentPhase == TurnPhase.Build && _classesCreatedThisTurn < _maxClassesPerTurn;
+        }
+
+        private void HandleAssociationButtonClicked()
+        {
+            if (_turnContext == null || _turnContext.CurrentPhase != TurnPhase.Build) return;
+
+            SetAssociationMode(!_isAssociationModeActive);
+        }
+
+        public void SetAssociationMode(bool active)
+        {
+            _isAssociationModeActive = active;
+            UpdateAssociationButtonDisplay();
+            OnAssociationModeToggled?.Invoke(_isAssociationModeActive);
+        }
+
+        private void PopulateMethodsList(Requirement requirement)
+        {
+            ClearMethodsList();
+
+            if (requirement == null || requirement.RequirementMethods == null || _methodsContainer == null) return;
+
+            foreach (var method in requirement.RequirementMethods)
+            {
+                GameObject cardGo;
+                if (_methodCardPrefab != null)
+                {
+                    cardGo = Instantiate(_methodCardPrefab, _methodsContainer);
+                }
+                else
+                {
+                    cardGo = new GameObject($"MethodCard_{method.Name}", typeof(RectTransform));
+                    cardGo.transform.SetParent(_methodsContainer, false);
+                }
+
+                var cardUI = cardGo.GetComponent<MethodCardUI>() ?? cardGo.AddComponent<MethodCardUI>();
+                cardUI.Setup(method);
+                cardUI.OnCardClicked += HandleCardClicked;
+                _activeCards.Add(cardUI);
+            }
+        }
+
+        private void HandleCardClicked(MethodData method)
+        {
+            OnMethodCardSelected?.Invoke(method);
+        }
+
+        private void ClearMethodsList()
+        {
+            foreach (var card in _activeCards)
+            {
+                if (card != null)
+                {
+                    card.OnCardClicked -= HandleCardClicked;
+                    if (Application.isPlaying)
+                    {
+                        Destroy(card.gameObject);
+                    }
+                    else
+                    {
+                        DestroyImmediate(card.gameObject);
+                    }
+                }
+            }
+            _activeCards.Clear();
+        }
+
+        private void UpdateAllDisplays()
+        {
+            UpdateCreateClassButtonDisplay();
+            UpdateAssociationButtonDisplay();
+            UpdateButtonsInteractable(_turnContext != null ? _turnContext.CurrentPhase : TurnPhase.Build);
+            PopulateMethodsList(_requirementContext?.CurrentRequirement);
+        }
+
+        private void UpdateCreateClassButtonDisplay()
+        {
+            if (_createClassButtonText != null)
+            {
+                _createClassButtonText.text = $"Criar Classe ({_classesCreatedThisTurn}/{_maxClassesPerTurn})";
+            }
+
+            if (_createClassButton != null)
+            {
+                _createClassButton.interactable = CanCreateClass();
+            }
+        }
+
+        private void UpdateAssociationButtonDisplay()
+        {
+            if (_associationButtonText != null)
+            {
+                _associationButtonText.text = _isAssociationModeActive ? "Cancelar Associação" : "Criar Associação";
+            }
+        }
+
+        private void UpdateButtonsInteractable(TurnPhase phase)
+        {
+            bool isBuildPhase = phase == TurnPhase.Build;
+
+            if (_createClassButton != null)
+            {
+                _createClassButton.interactable = isBuildPhase && _classesCreatedThisTurn < _maxClassesPerTurn;
+            }
+
+            if (_associationButton != null)
+            {
+                _associationButton.interactable = isBuildPhase;
+            }
+        }
+    }
+}

@@ -1,0 +1,171 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Reflection;
+using Core.Diagram;
+using Core.Requirements;
+using Core.Session;
+using NUnit.Framework;
+using TMPro;
+using UI;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace Tests.EditMode
+{
+    public class ToolboxControllerTests
+    {
+        private class FakeRequirementContext : IRequirementContext
+        {
+            public Requirement CurrentRequirement { get; set; }
+            public IReadOnlyList<Requirement> RequirementsHistory => new List<Requirement>();
+            public event Action<Requirement> OnRequirementChanged;
+
+            public void TriggerRequirementChanged(Requirement req)
+            {
+                CurrentRequirement = req;
+                OnRequirementChanged?.Invoke(req);
+            }
+        }
+
+        private class FakeDiagramActions : IDiagramActions
+        {
+            public bool TryCreateClass(string className, out ClassNode createdNode)
+            {
+                createdNode = new ClassNode(className);
+                return true;
+            }
+            public bool RemoveClass(ClassNode node) => true;
+            public bool AddMethodToClass(ClassNode node, MethodData method) => true;
+            public bool RemoveMethodFromClass(ClassNode node, MethodData method) => true;
+            public bool AddRelation(ClassNode origin, ClassNode destination, RelationType type = RelationType.Association) => true;
+            public bool RemoveRelation(ClassNode origin, ClassNode destination) => true;
+            public event Action OnDiagramChanged;
+        }
+
+        private GameObject _go;
+        private ToolboxController _controller;
+        private Button _createClassBtn;
+        private TextMeshProUGUI _createClassBtnText;
+        private Transform _methodsContainer;
+        private Button _assocBtn;
+        private TextMeshProUGUI _assocBtnText;
+
+        private FakeRequirementContext _requirementContext;
+        private FakeDiagramActions _diagramActions;
+        private TurnManager _turnManager;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _go = new GameObject("ToolboxTest");
+            _controller = _go.AddComponent<ToolboxController>();
+
+            var createBtnGo = new GameObject("CreateClassBtn");
+            createBtnGo.transform.SetParent(_go.transform);
+            _createClassBtn = createBtnGo.AddComponent<Button>();
+
+            var createBtnTextGo = new GameObject("CreateClassBtnText");
+            createBtnTextGo.transform.SetParent(createBtnGo.transform);
+            _createClassBtnText = createBtnTextGo.AddComponent<TextMeshProUGUI>();
+
+            var containerGo = new GameObject("MethodsContainer", typeof(RectTransform));
+            containerGo.transform.SetParent(_go.transform);
+            _methodsContainer = containerGo.transform;
+
+            var assocBtnGo = new GameObject("AssocBtn");
+            assocBtnGo.transform.SetParent(_go.transform);
+            _assocBtn = assocBtnGo.AddComponent<Button>();
+
+            var assocBtnTextGo = new GameObject("AssocBtnText");
+            assocBtnTextGo.transform.SetParent(assocBtnGo.transform);
+            _assocBtnText = assocBtnTextGo.AddComponent<TextMeshProUGUI>();
+
+            SetPrivateField(_controller, "_createClassButton", _createClassBtn);
+            SetPrivateField(_controller, "_createClassButtonText", _createClassBtnText);
+            SetPrivateField(_controller, "_methodsContainer", _methodsContainer);
+            SetPrivateField(_controller, "_associationButton", _assocBtn);
+            SetPrivateField(_controller, "_associationButtonText", _assocBtnText);
+            SetPrivateField(_controller, "_maxClassesPerTurn", 2);
+
+            _requirementContext = new FakeRequirementContext();
+            _diagramActions = new FakeDiagramActions();
+            _turnManager = new TurnManager();
+
+            // Advance TurnManager to Build phase for testing
+            _turnManager.SetPlayerReady(PlayerSlot.PlayerOne);
+            _turnManager.SetPlayerReady(PlayerSlot.PlayerTwo);
+            Assert.AreEqual(TurnPhase.Build, _turnManager.CurrentPhase);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (_go != null)
+            {
+                UnityEngine.Object.DestroyImmediate(_go);
+            }
+        }
+
+        [Test]
+        public void Initialize_DisplaysClassCreationLimit()
+        {
+            _controller.Initialize(_requirementContext, _diagramActions, _turnManager);
+
+            StringAssert.Contains("0/2", _createClassBtnText.text);
+            Assert.IsTrue(_createClassBtn.interactable);
+        }
+
+        [Test]
+        public void NotifyClassCreated_IncrementsCountAndDisablesWhenMaxReached()
+        {
+            _controller.Initialize(_requirementContext, _diagramActions, _turnManager);
+
+            Assert.IsTrue(_controller.NotifyClassCreated());
+            StringAssert.Contains("1/2", _createClassBtnText.text);
+            Assert.IsTrue(_createClassBtn.interactable);
+
+            Assert.IsTrue(_controller.NotifyClassCreated());
+            StringAssert.Contains("2/2", _createClassBtnText.text);
+            Assert.IsFalse(_createClassBtn.interactable);
+            Assert.IsFalse(_controller.CanCreateClass());
+        }
+
+        [Test]
+        public void OnRequirementChanged_PopulatesMethodsCards()
+        {
+            _controller.Initialize(_requirementContext, _diagramActions, _turnManager);
+
+            var req = new Requirement("req_1", "Desc", new List<MethodData>
+            {
+                new MethodData("Cadastrar", "Livro"),
+                new MethodData("Emprestar", "Emprestimo")
+            });
+
+            _requirementContext.TriggerRequirementChanged(req);
+
+            Assert.AreEqual(2, _controller.ActiveCards.Count);
+            Assert.AreEqual("Cadastrar", _controller.ActiveCards[0].Method.Name);
+            Assert.AreEqual("Emprestar", _controller.ActiveCards[1].Method.Name);
+        }
+
+        [Test]
+        public void SetAssociationMode_TogglesStateAndText()
+        {
+            _controller.Initialize(_requirementContext, _diagramActions, _turnManager);
+
+            _controller.SetAssociationMode(true);
+            Assert.IsTrue(_controller.IsAssociationModeActive);
+            StringAssert.Contains("Cancelar Associação", _assocBtnText.text);
+
+            _controller.SetAssociationMode(false);
+            Assert.IsFalse(_controller.IsAssociationModeActive);
+            StringAssert.Contains("Criar Associação", _assocBtnText.text);
+        }
+
+        private static void SetPrivateField(object target, string fieldName, object value)
+        {
+            var field = target.GetType().GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Instance);
+            field?.SetValue(target, value);
+        }
+    }
+}
