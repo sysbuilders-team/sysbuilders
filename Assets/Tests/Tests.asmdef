@@ -2,7 +2,9 @@
     "name": "Tests1",
     "references": [
         "Sys.Core",
-        "Sys.Managers"
+        "Sys.Managers",
+        "Sys.UI",
+        "Unity.TextMeshPro"
     ],
     "includePlatforms": [
         "Editor"
