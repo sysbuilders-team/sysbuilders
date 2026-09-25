@@ -11,17 +11,17 @@ namespace Core.Session
     {
         public PlayerState PlayerOne { get; }
         public PlayerState PlayerTwo { get; }
+            
+        public PlayerSlot LocalSlot { get; }
+        public PlayerState LocalPlayer => GetPlayerBySlot(LocalSlot);
         
-        public PlayerSlot PlayerSlot { get; }
-        public PlayerState LocalPlayer => GetPlayerBySlot(PlayerSlot);
-        
-        public PlayerState OpponentPlayer => PlayerSlot == PlayerSlot.PlayerOne ? PlayerTwo : PlayerOne;
+        public PlayerState OpponentPlayer => LocalSlot == PlayerSlot.PlayerOne ? PlayerTwo : PlayerOne;
         public TurnManager TurnManager { get; }
         private readonly RefactorHandler _refactorHandler;
         private readonly IEvaluationService _evaluator;
         private readonly IReadOnlyList<Requirement> _activeRequirements;
 
-        public event Action<EvaluationResult, EvaluationResult> OnEvaluationCompleted;
+        public event Action<EvaluationResult> OnEvaluationCompleted;
         public event Action<Requirement> OnRequirementChanged;
         public event Action OnScoreUpdated;
 
@@ -80,7 +80,7 @@ namespace Core.Session
             _refactorHandler = new RefactorHandler();
             _evaluator = evaluator ?? new EvaluationEngine();
             _activeRequirements = activeRequirements;
-            PlayerSlot = localSlot;
+            LocalSlot = localSlot;
             TurnManager.OnPhaseChange += HandlePhaseChange;
         }
 
@@ -91,7 +91,7 @@ namespace Core.Session
                 case TurnPhase.Evaluate:
                     PlayerOne.LockAllClasses();
                     PlayerTwo.LockAllClasses();
-                    EvaluateBothPlayer();
+                    EvaluateLocalPlayer();
                     break;
                 case TurnPhase.Show:
                     OnRequirementChanged?.Invoke(CurrentRequirement);
@@ -99,19 +99,14 @@ namespace Core.Session
             }
         }
         
-        
-
-        private void EvaluateBothPlayer()
+        private void EvaluateLocalPlayer()
         {
             var requirementsSoFar = GetRequirementsUpToCurrentTurn();
-            var resultOne = _evaluator.Evaluate(PlayerOne.Diagram, requirementsSoFar);
-            PlayerOne.AddEvaluationResult(resultOne);
-
-            var resultTwo = _evaluator.Evaluate(PlayerTwo.Diagram, requirementsSoFar);
-            PlayerTwo.AddEvaluationResult(resultTwo);
+            var localResult = _evaluator.Evaluate(LocalPlayer.Diagram, requirementsSoFar);
+            LocalPlayer.AddEvaluationResult(localResult);
 
             OnScoreUpdated?.Invoke();
-            OnEvaluationCompleted?.Invoke(resultOne, resultTwo);
+            OnEvaluationCompleted?.Invoke(localResult);
         }
 
         private IReadOnlyList<Requirement> GetRequirementsUpToCurrentTurn()
@@ -131,7 +126,7 @@ namespace Core.Session
             return result;
         }
 
-        private PlayerState GetPlayerBySlot(PlayerSlot slot)
+        public PlayerState GetPlayerBySlot(PlayerSlot slot)
         {
             return slot == PlayerSlot.PlayerOne ? PlayerOne : PlayerTwo;
         }
