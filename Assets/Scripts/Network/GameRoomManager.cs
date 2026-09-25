@@ -1,0 +1,50 @@
+using Mirror;
+using Mirror.Transports.Encryption;
+using UnityEngine;
+
+namespace Network
+{
+    public class GameRoomManager : NetworkRoomManager
+    {
+        public string ChosenTheme   { get; private set; }
+        public string ChosenTrailId { get; private set; }
+
+        public override void Start()
+        {
+            base.Start();
+            SetupEncryption();
+        }
+
+        private void SetupEncryption()
+        {
+            var activeTransport = Transport.active;
+            if (activeTransport is EncryptionTransport encryptionTransport)
+            {
+                encryptionTransport.ClientValidateServerPubKey = EncryptionTransport.ValidationMode.Callback;
+                encryptionTransport.OnClientValidateServerPubKey = pubKeyInfo =>
+                {
+                    Debug.Log($"[GameRoomManager] Chave pública do servidor aceita (Fingerprint: {pubKeyInfo.Fingerprint})");
+                    return true;
+                };
+
+                Debug.Log("[GameRoomManager] Criptografia AES256-GCM ativada via EncryptionTransport.");
+            }
+            else
+            {
+                Debug.LogWarning("[GameRoomManager] O transporte ativo não é EncryptionTransport. A conexão trafegará sem criptografia.");
+            }
+        }
+
+        public override void OnRoomServerPlayersReady()
+        {
+            // TODO: trocar por RequirementManager.Catalog.SelectTrail(theme) após RequirementCatalog expor método que retorna Trail completa.
+            ChosenTheme   = PlayerPrefs.GetString("SelectedTheme", "Biblioteca");
+            ChosenTrailId = "PLACEHOLDER_TRAIL_ID";
+
+            Debug.Log($"[GameRoomManager] Tema: {ChosenTheme} | Trail: {ChosenTrailId}");
+
+            ServerChangeScene(GameplayScene);
+        }
+    }
+}
+

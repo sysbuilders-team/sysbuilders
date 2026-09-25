@@ -2,6 +2,7 @@
   "name": "Sys.Managers",
   "rootNamespace": "",
   "references": [
+    "Unity.TextMeshPro",
     "Sys.Core",
     "Sys.UI"
   ],

@@ -1,4 +1,4 @@
-using Core.Diagram;
+﻿using Core.Diagram;
 using Core.Evaluation;
 using System.Collections.Generic;
 
