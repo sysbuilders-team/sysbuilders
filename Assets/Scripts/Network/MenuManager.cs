@@ -1,11 +1,10 @@
 using System.Net;
 using System.Net.Sockets;
 using Mirror;
-using Network;
 using TMPro;
 using UnityEngine;
 
-namespace Managers
+namespace Network
 {
     public class MenuManager : MonoBehaviour
     {
@@ -113,7 +112,7 @@ namespace Managers
             }
             catch
             {
-                // Fallback silencioso
+                
             }
             return "127.0.0.1";
         }
