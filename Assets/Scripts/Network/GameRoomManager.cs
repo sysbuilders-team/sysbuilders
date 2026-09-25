@@ -37,11 +37,8 @@ namespace Network
 
         public override void OnRoomServerPlayersReady()
         {
-            // TODO: trocar por RequirementManager.Catalog.SelectTrail(theme) após RequirementCatalog expor método que retorna Trail completa.
-            ChosenTheme   = PlayerPrefs.GetString("SelectedTheme", "Biblioteca");
-            ChosenTrailId = "PLACEHOLDER_TRAIL_ID";
-
-            Debug.Log($"[GameRoomManager] Tema: {ChosenTheme} | Trail: {ChosenTrailId}");
+            ChosenTheme = PlayerPrefs.GetString("SelectedTheme", "Biblioteca");
+            Debug.Log($"[GameRoomManager] Tema da sala: {ChosenTheme}");
 
             ServerChangeScene(GameplayScene);
         }

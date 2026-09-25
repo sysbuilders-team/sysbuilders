@@ -3,16 +3,17 @@ using Mirror;
 using UnityEngine;
 using Core.Evaluation;
 using Core.Session;
-using Managers; 
+using Managers;
 
 namespace Network
 {
     public class MatchSyncBridge : NetworkBehaviour
     {
-        [SerializeField] private GameManager _gameManager;
+        [SerializeField] private GameManager gameManager;
+        [SerializeField] private RequirementManager requirementManager;
 
-        [SyncVar(hook = nameof(OnThemeReceived))] private string _theme;
-        [SyncVar] private string _trailId;
+        [SyncVar] private string _theme;
+        [SyncVar(hook = nameof(OnTrailSynced))] private string _trailId;
 
         private readonly HashSet<PlayerSlot> _readySlots = new HashSet<PlayerSlot>();
 
@@ -21,27 +22,35 @@ namespace Network
             base.OnStartServer();
 
             var roomManager = NetworkManager.singleton as GameRoomManager;
-            if (roomManager == null)
+            _theme = roomManager != null && !string.IsNullOrEmpty(roomManager.ChosenTheme)
+                ? roomManager.ChosenTheme
+                : PlayerPrefs.GetString("SelectedTheme", "Biblioteca");
+
+            if (requirementManager == null)
             {
-                Debug.LogError("[MatchSyncBridge] NetworkManager não é GameRoomManager.");
+                requirementManager = GetComponent<RequirementManager>() ?? FindFirstObjectByType<RequirementManager>();
+            }
+
+            if (requirementManager == null)
+            {
+                Debug.LogError("[MatchSyncBridge] RequirementManager não encontrado para sortear a trilha.");
                 return;
             }
 
-            _theme   = roomManager.ChosenTheme;
-            _trailId = roomManager.ChosenTrailId;
+            _trailId = requirementManager.GetRandomTrailId(_theme);
 
-            Debug.Log($"[MatchSyncBridge] Server: tema={_theme} trail={_trailId}");
+            Debug.Log($"[MatchSyncBridge] Server: tema={_theme} | trail={_trailId}");
             
-            _gameManager.Initialize(_theme, _trailId);
+            gameManager.StartMatch(_theme, _trailId, PlayerSlot.PlayerOne);
         }
 
-        private void OnThemeReceived(string oldTheme, string newTheme)
+        private void OnTrailSynced(string oldTrailId, string newTrailId)
         {
             if (!isClientOnly) return; 
-            if (string.IsNullOrEmpty(newTheme)) return;
+            if (string.IsNullOrEmpty(newTrailId)) return;
 
-            Debug.Log($"[MatchSyncBridge] Cliente recebeu tema: {newTheme} | trail: {_trailId}");
-            _gameManager.Initialize(newTheme, _trailId);
+            Debug.Log($"[MatchSyncBridge] Cliente sincronizou trilha: {newTrailId} (Tema: {_theme})");
+            gameManager.StartMatch(_theme, newTrailId, PlayerSlot.PlayerTwo);
         }
 
         public void NotifyLocalPlayerReady(PlayerSlot slot) => CmdSetReady((int)slot);
@@ -65,37 +74,43 @@ namespace Network
         private void RpcAdvancePhase()
         {
             Debug.Log("[MatchSyncBridge] RpcAdvancePhase recebido — avançar TurnManager local.");
-            _gameManager.Session.TurnManager.ForceAdvancePhase();
+            gameManager.Session.TurnManager.ForceAdvancePhase();
         }
         
         private void OnEnable()
         {
-            if (_gameManager != null && _gameManager.Session != null)
+            if (gameManager != null && gameManager.Session != null)
             {
-                _gameManager.Session.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
+                gameManager.Session.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
             }
         }
 
         private void OnDisable()
         {
-            if (_gameManager != null && _gameManager.Session != null)
+            if (gameManager != null && gameManager.Session != null)
             {
-                _gameManager.Session.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
+                gameManager.Session.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
             }
         }
 
-        private void HandleLocalEvaluationCompleted(EvaluationResult resultOne, EvaluationResult resultTwo)
+        private void HandleLocalEvaluationCompleted(EvaluationResult localResult)
         {
-            if (isServer)
-            {
-                RpcReceiveEvaluationResult((int)PlayerSlot.PlayerOne, resultOne.RawScore, resultOne.PenaltyScore);
-                RpcReceiveEvaluationResult((int)PlayerSlot.PlayerTwo, resultTwo.RawScore, resultTwo.PenaltyScore);
-            }
+            if (gameManager == null || gameManager.Session == null) return;
+            CmdSendEvaluationResult((int)gameManager.Session.LocalSlot, localResult.RawScore, localResult.PenaltyScore);
+        }
+
+        [Command(requiresAuthority = false)]
+        private void CmdSendEvaluationResult(int slotIndex, int rawScore, int penaltyScore)
+        {
+            RpcReceiveEvaluationResult(slotIndex, rawScore, penaltyScore);
         }
 
         [ClientRpc]
         private void RpcReceiveEvaluationResult(int targetSlot, int rawScore, int penaltyScore)
         {
+            if (gameManager == null || gameManager.Session == null) return;
+            if ((int)gameManager.Session.LocalSlot == targetSlot) return;
+
             var rivalResult = new EvaluationResult(
                 rawScore,
                 penaltyScore,
@@ -103,8 +118,8 @@ namespace Network
                 new List<SmellOccurrence>()
             );
 
-            Debug.Log($"[MatchSyncBridge] Slot {targetSlot} — raw:{rawScore} penalty:{penaltyScore} total:{rivalResult.TotalScore}");
-            _gameManager.Session.GetPlayerBySlot((PlayerSlot)targetSlot).AddEvaluationResult(rivalResult);
+            Debug.Log($"[MatchSyncBridge] Slot rival {targetSlot} — raw:{rawScore} penalty:{penaltyScore} total:{rivalResult.TotalScore}");
+            gameManager.Session.GetPlayerBySlot((PlayerSlot)targetSlot).AddEvaluationResult(rivalResult);
         }
     }
 }
