@@ -3,6 +3,7 @@
 namespace Core.Session
 {
     // Interface a ser implementada pela camada Network, referente ao timer de turno
+    // TODO: Nao sei se ficaria nessa camada, poderia ficar na camada de rede talvez ou em ui direto e uma classe timer implementaria
     public interface ITurnTimerContext
     {
         int RemainingSeconds { get; }

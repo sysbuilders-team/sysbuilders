@@ -2,7 +2,8 @@
   "name": "Sys.Managers",
   "rootNamespace": "",
   "references": [
-    "Sys.Core"
+    "Sys.Core",
+    "Sys.UI"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
