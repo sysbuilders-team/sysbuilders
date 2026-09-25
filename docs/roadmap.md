@@ -9,18 +9,19 @@
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ (Consome apenas Interfaces restritas)
 ┌───────────────────────────────────▼────────────────────────────────────┐
-│                    Managers (Unity MonoBehaviour)                      │
-│   • GameManager (Orquestrador local da GameScene, injeta interfaces)   │
-│   • RequirementManager (TextAsset JSON -> Loader -> Catalog)           │
-│   • MenuManager (Lobby LAN simples, sem conhecimento de tema/regras)   │
+│                    Managers & Adaptadores (Unity)                      │
+│   • GameManager (Composition Root local da GameScene, zero rede)       │
+│   • RequirementManager (MonoBehaviour de Catálogo: JSON -> Catalog)   │
+│   • MatchSyncBridge (NetworkBehaviour / Adaptador de Rede Mirror)      │
+│   • MenuManager (Lobby LAN simples na MenuScene, sem regras/temas)     │
 └───────────────────┬────────────────────────────────┬───────────────────┘
                     │                                │
 ┌───────────────────▼────────────────────────┐ ┌─────▼───────────────────┐
 │        Core (C# Puro, Zero Unity)          │ │  Network (Mirror LAN)   │
 │ • Core.Diagram (Classes, nós, relações)    │ │ • NetworkDiscovery      │
 │ • Core.Requirements (Loader, Catalog)      │ │ • NetworkRoomManager    │
-│ • Core.Evaluation (Engine, Smells, Regras) │ │ • MatchSyncBridge       │
-│ • Core.Session (MatchSession, TurnManager) │ │   (Troca só primitivos) │
+│ • Core.Evaluation (Engine, Smells, Regras) │ │ • Transmissão estrita   │
+│ • Core.Session (MatchSession, TurnManager) │ │   de tipos primitivos   │
 └────────────────────────────────────────────┘ └─────────────────────────┘
 ```
 
@@ -34,25 +35,32 @@
   * `Requirement`: Representa um requisito funcional com ID, descrição e lista de `MethodData`.
   * `Trail`: Sequência de 5 requisitos de um tema.
   * `RequirementLoader`: Utilitário estático para parsing e validação de JSON (`LoadFromJson`).
-  * `RequirementCatalog`: Repositório em memória com todas as trilhas agrupadas por tema. Responsável por sortear ou buscar trilhas (`PickRandomTrail`, `GetTrailById`) sem persistência de histórico na Fase 1.
+  * `RequirementCatalog`: Repositório em memória com todas as trilhas agrupadas por tema. Responsável por sortear ou buscar trilhas (`SelectRandomTrail`, `GetTrailById`).
 * **Core.Evaluation**: `IEvaluationService`, `EvaluationEngine`, `EvaluationResult`, `CodeSmellDetector`, `SmellPenaltyCalculator`, `RequirementChecker`. Depende apenas de `Core.Diagram` e `Core.Requirements`.
 * **Core.Session**:
+  * `PlayerSlot`: Enum puro (`PlayerOne`, `PlayerTwo`) identificando o slot do jogador.
   * `PlayerState`: Diagrama e histórico de pontuação/refatoração do jogador.
   * `RefactorHandler`: Regras e deduções de pontos ao destravar classes bloqueadas.
   * `TurnManager`: Ciclo de 5 turnos e máquina de estados de fases (`Show` -> `Build` -> `Evaluate` -> `Completed`), rastreando prontidão de ambos os jogadores (`PlayerReadinessTracker`).
-  * `MatchSession`: Dono da partida local. Orquestra jogadores, turnos, avaliação automática na transição de fase e expõe interfaces de contexto para a UI (`IRequirementContext`, `ITurnContext`, `IScoreContext`, etc.).
+  * `MatchSession`: Dono da partida local. Orquestra jogadores, turnos, avaliação automática na transição de fase e expõe interfaces de contexto para a UI (`IRequirementContext`, `ITurnContext`, `IScoreContext`, etc.). Recebe `PlayerSlot localSlot` no construtor para mapear `LocalPlayer` e `OpponentPlayer`.
 
 ---
 
-### Managers (Unity-facing — Orquestração Local na GameScene)
+### Managers e Adaptadores (Unity-facing — Orquestração Local na GameScene)
 * **`RequirementManager`**:
-  * MonoBehaviour que referencia o arquivo JSON (`[SerializeField] TextAsset _requirementsJson`).
+  * MonoBehaviour presente na hierarquia da `GameScene.unity`.
+  * Referencia o arquivo JSON (`[SerializeField] TextAsset _requirementsJson`).
   * No `Awake()`, usa `RequirementLoader.LoadFromJson()` e instancia o `RequirementCatalog`.
-  * Expõe métodos de consulta e sorteio para o `GameManager`.
-* **`GameManager`**:
-  * MonoBehaviour local existente na hierarquia da `GameScene.unity`. Não sabe de rede.
-  * Cria e possui a instância da `MatchSession` local.
-  * Distribui interfaces segregadas (ISP) para cada um dos controladores de UI da cena.
+  * Expõe métodos públicos: `GetTrailById(theme, trailId)` e `GetRandomTrailId(theme)`.
+  * É consultado pelo `GameManager` (para obter os requisitos da partida) e pelo `MatchSyncBridge` (no Host, para sortear o ID da trilha).
+* **`GameManager` (ou `GameplayManager`)**:
+  * MonoBehaviour local existente na hierarquia da `GameScene.unity`. **Totalmente agnóstico de rede (Zero código do Mirror)**.
+  * Atua estritamente como **Composition Root**:
+    1. Recebe a chamada de início: `StartMatch(string theme, string trailId, PlayerSlot localSlot)`.
+    2. Obtém a lista de requisitos via `RequirementManager.GetTrailById(theme, trailId)`.
+    3. Cria e possui a instância da `MatchSession` local informando o `localSlot` da máquina (`PlayerSlot.PlayerOne` ou `PlayerSlot.PlayerTwo`).
+    4. Distribui interfaces segregadas (ISP) para cada um dos controladores de UI da cena.
+    5. Dispara eventos locais (ex: `OnLocalPlayerReady`) para quem quiser escutar (sem conhecer ouvintes).
 * **`MenuManager` (Lobby / MenuScene)**:
   * Gerencia a navegação inicial, escolha de nomes e descoberta/criação de salas LAN.
   * **Não possui `GameManager` nem `MatchSession`**. Não carrega temas nem requisitos. Mantém a `MenuScene` leve e focada apenas na conexão dos dois jogadores.
@@ -65,12 +73,14 @@
   * O Host clica em "Criar Sala" (`StartHost()` + `AdvertiseServer()`).
   * O Cliente clica em "Buscar Partidas" (`StartDiscovery()`), escuta pacotes broadcast na rede local e conecta diretamente via IP local.
 * **`NetworkRoomManager`**: Gerencia a sala inicial e executa `ServerChangeScene("GameScene")` quando ambos os jogadores confirmam prontidão no lobby.
-* **`MatchSyncBridge` (`NetworkBehaviour`)**:
-  * Componente de rede presente na `GameScene`.
-  * Faz a ponte entre a rede e a `MatchSession` local:
-    1. **Sorteio da Trilha**: O Host sorteia tema e `trailId` via `RequirementCatalog` e sincroniza essa informação com o cliente na largada da partida.
-    2. **Prontidão de Fases**: Quando um jogador finaliza o turno (ou clica para avançar na modal), envia `[Command] CmdSetReady(slot)`. Quando ambos estiverem prontos no servidor, este dispara `[ClientRpc] RpcAdvancePhase()`.
-    3. **Sincronização de Placar**: Ao avaliar o turno, envia os valores numéricos (`pointsEarned`, `penaltyPoints`) para serem injetados no estado do oponente na máquina remota.
+* **`MatchSyncBridge` (`NetworkBehaviour` — O Adaptador de Rede)**:
+  * Componente de rede presente na `GameScene` que conecta o Mirror ao jogo local (padrão Ports & Adapters).
+  * Possui referências no Inspector para `GameplayManager` e `RequirementManager`.
+  * **Sorteio e Sincronização da Trilha**:
+    1. **No Host (`OnStartServer`)**: Consulta `RequirementManager.GetRandomTrailId(theme)`, atribui aos `[SyncVar]` (`_theme`, `_trailId`) e inicializa a partida local chamando `GameManager.StartMatch(theme, trailId, PlayerSlot.PlayerOne)`.
+    2. **No Client (`[SyncVar(hook = nameof(OnTrailSynced))]`)**: Ao sincronizar o `trailId` da rede, chama `GameManager.StartMatch(theme, trailId, PlayerSlot.PlayerTwo)`.
+  * **Prontidão de Fases**: Quando um jogador finaliza o turno (ou avança na modal), escuta o evento local e envia `[Command] CmdSetReady(slot)`. Quando ambos estiverem prontos no servidor, este dispara `[ClientRpc] RpcAdvancePhase()`, que avisa o `TurnManager` local.
+  * **Sincronização de Placar**: Ao avaliar o turno, envia os valores numéricos (`pointsEarned`, `penaltyPoints`) para serem injetados no estado do oponente na máquina remota via RPC.
 
 ---
 
@@ -156,7 +166,53 @@ public interface IMatchEndContext
 
 ---
 
-## 5. Sincronização de Modais e Fluxo entre Turnos
+## 5. Fluxos de Sincronização e Ciclo de Vida
+
+### 5.1. Inicialização da Partida e Sincronização de Requisitos (Largada)
+
+O ciclo de largada da partida segue o padrão de Inversão de Dependência (Clean Architecture / Ports & Adapters), garantindo que a `GameManager` seja cega para a rede e inicie de forma simétrica:
+
+```
+[ Host (Jogador 1) ]                                  [ Client (Jogador 2) ]
+  1. OnStartServer():                                   
+     _theme = PlayerPrefs("SelectedTheme")
+     _trailId = requirementManager.GetRandomTrailId(_theme)
+  2. Atribui SyncVars (_theme, _trailId) ─────────────► 1. Hook OnTrailSynced disparado
+  3. Inicia partida local:                                2. Inicia partida local:
+     gameManager.StartMatch(theme, trailId,                 gameManager.StartMatch(theme, trailId,
+                            PlayerSlot.PlayerOne)                                  PlayerSlot.PlayerTwo)
+              │                                                      │
+              ▼                                                      ▼
+  [ RequirementManager ]                                 [ RequirementManager ]
+     GetTrailById(theme, trailId)                           GetTrailById(theme, trailId)
+              │                                                      │
+              ▼                                                      ▼
+  [ new MatchSession(..., PlayerSlot.PlayerOne) ]        [ new MatchSession(..., PlayerSlot.PlayerTwo) ]
+              │                                                      │
+              ▼                                                      ▼
+  [ Injeta nas Controllers de UI ]                       [ Injeta nas Controllers de UI ]
+```
+
+1. **Carregamento da Cena**: O `NetworkRoomManager` executa `ServerChangeScene("GameScene")`.
+2. **`RequirementManager.Awake()`**: Carrega o JSON localmente em memória e monta o `RequirementCatalog`.
+3. **No Host (`MatchSyncBridge.OnStartServer`)**:
+   - Obtém o tema selecionado.
+   - Sorteia a trilha chamando `RequirementManager.GetRandomTrailId(theme)`.
+   - Define os valores de rede `_theme` e `_trailId` (`SyncVar`).
+   - Chama `GameManager.StartMatch(theme, trailId, PlayerSlot.PlayerOne)`.
+4. **No Client (`MatchSyncBridge.OnTrailSynced`)**:
+   - O hook do Mirror é disparado assim que `_trailId` chega pela rede.
+   - Chama `GameManager.StartMatch(_theme, newTrailId, PlayerSlot.PlayerTwo)`.
+5. **No `GameManager` (Ambos os lados)**:
+   - Busca os requisitos da trilha no catálogo local: `_requirementManager.GetTrailById(theme, trailId)`.
+   - Instancia a `MatchSession` passando o `localSlot` apropriado.
+   - Chama `.Initialize(...)` em todas as controllers de UI, entregando apenas as interfaces que cada uma consome (ISP).
+6. **Modo Offline / Teste Rápido no Editor**:
+   - Qualquer desenvolvedor pode testar a UI, diagramação e regras sem abrir duas instâncias ou ligar o Mirror: basta chamar `gameManager.StartMatch("Biblioteca", "trail_01", PlayerSlot.PlayerOne)` direto no `Start()` de um script de teste.
+
+---
+
+### 5.2. Sincronização de Modais e Fluxo entre Turnos
 
 Para garantir que um jogador não avance para o turno seguinte antes do oponente terminar de ler seu feedback avaliativo:
 

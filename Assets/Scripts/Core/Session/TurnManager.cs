@@ -62,10 +62,10 @@ namespace Core.Session
         public SetPlayerReadyResult SetPlayerReady(PlayerSlot player);
     }
 
-    public class TurnManager : ITurnPlayerActions
+    public class TurnManager : ITurnPlayerActions, ITurnContext
     {
-        private const int MaxTurns = 5;
-
+        public int MaxTurns { get; }
+        
         public int CurrentTurn { get; private set; }
         public TurnPhase CurrentPhase { get; private set; }
         private readonly PlayerReadinessTracker _playerReadinessTracker;
@@ -75,6 +75,7 @@ namespace Core.Session
 
         public TurnManager()
         {
+            MaxTurns = 5; // TODO: Hardcoded as 5 because game will not have mutability of max number of turns, review
             CurrentTurn = 1;
             CurrentPhase = TurnPhase.Show;
             _playerReadinessTracker = new PlayerReadinessTracker(2);

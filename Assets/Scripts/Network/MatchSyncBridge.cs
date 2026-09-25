@@ -9,7 +9,7 @@ namespace Network
 {
     public class MatchSyncBridge : NetworkBehaviour
     {
-        [SerializeField] private GameplayManager _gameplayManager;
+        [SerializeField] private GameManager _gameManager;
 
         [SyncVar(hook = nameof(OnThemeReceived))] private string _theme;
         [SyncVar] private string _trailId;
@@ -32,7 +32,7 @@ namespace Network
 
             Debug.Log($"[MatchSyncBridge] Server: tema={_theme} trail={_trailId}");
             
-            _gameplayManager.Initialize(_theme, _trailId);
+            _gameManager.Initialize(_theme, _trailId);
         }
 
         private void OnThemeReceived(string oldTheme, string newTheme)
@@ -41,7 +41,7 @@ namespace Network
             if (string.IsNullOrEmpty(newTheme)) return;
 
             Debug.Log($"[MatchSyncBridge] Cliente recebeu tema: {newTheme} | trail: {_trailId}");
-            _gameplayManager.Initialize(newTheme, _trailId);
+            _gameManager.Initialize(newTheme, _trailId);
         }
 
         public void NotifyLocalPlayerReady(PlayerSlot slot) => CmdSetReady((int)slot);
@@ -65,22 +65,22 @@ namespace Network
         private void RpcAdvancePhase()
         {
             Debug.Log("[MatchSyncBridge] RpcAdvancePhase recebido — avançar TurnManager local.");
-            _gameplayManager.Session.TurnManager.ForceAdvancePhase();
+            _gameManager.Session.TurnManager.ForceAdvancePhase();
         }
         
         private void OnEnable()
         {
-            if (_gameplayManager != null && _gameplayManager.Session != null)
+            if (_gameManager != null && _gameManager.Session != null)
             {
-                _gameplayManager.Session.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
+                _gameManager.Session.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
             }
         }
 
         private void OnDisable()
         {
-            if (_gameplayManager != null && _gameplayManager.Session != null)
+            if (_gameManager != null && _gameManager.Session != null)
             {
-                _gameplayManager.Session.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
+                _gameManager.Session.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
             }
         }
 
@@ -104,7 +104,7 @@ namespace Network
             );
 
             Debug.Log($"[MatchSyncBridge] Slot {targetSlot} — raw:{rawScore} penalty:{penaltyScore} total:{rivalResult.TotalScore}");
-            _gameplayManager.Session.GetPlayerBySlot((PlayerSlot)targetSlot).AddEvaluationResult(rivalResult);
+            _gameManager.Session.GetPlayerBySlot((PlayerSlot)targetSlot).AddEvaluationResult(rivalResult);
         }
     }
 }
