@@ -42,17 +42,20 @@ namespace Core.Session
 
         public string PlayerOneName => PlayerOne.Name;
         public string PlayerTwoName => PlayerTwo.Name;
-        public int PlayerOneScore => PlayerOne.EvaluationHistory.Sum(e => e.TotalScore);
-        public int PlayerTwoScore => PlayerTwo.EvaluationHistory.Sum(e => e.TotalScore);
+        // Regra B: o RawScore de cada avaliação já é acumulado (re-verifica todos os requisitos
+        // revelados) e a penalidade é recalculada por turno.
+        // Placar = RawScore da última avaliação - soma das penalidades de cada turno.
+        public int PlayerOneScore => CalculateScore(PlayerOne);
+        public int PlayerTwoScore => CalculateScore(PlayerTwo);
 
         public int RefactorPoints => LocalPlayer.RefactorPoints;
 
         public int RefactorCost => LocalPlayer.RefactorCost;
 
-        public int RoundPointsEarned => LocalPlayer.EvaluationHistory.LastOrDefault()?.RawScore ?? 0;
+        public int RoundPointsEarned => RoundRawDelta(LocalPlayer);
         public int RoundPenaltyPoints => LocalPlayer.EvaluationHistory.LastOrDefault()?.PenaltyScore ?? 0;
 
-        public int RoundOpponentPointsEarned => OpponentPlayer.EvaluationHistory.LastOrDefault()?.RawScore ?? 0;
+        public int RoundOpponentPointsEarned => RoundRawDelta(OpponentPlayer);
 
         public int RoundOpponentPenaltyPoints => OpponentPlayer.EvaluationHistory.LastOrDefault()?.PenaltyScore ?? 0;
 
@@ -107,6 +110,32 @@ namespace Core.Session
 
             OnScoreUpdated?.Invoke();
             OnEvaluationCompleted?.Invoke(localResult);
+        }
+
+        // Chamado pela camada de rede com o resultado que o rival calculou na máquina dele.
+        public void ReceiveOpponentResult(EvaluationResult result)
+        {
+            if (result == null) return;
+
+            OpponentPlayer.AddEvaluationResult(result);
+            OnScoreUpdated?.Invoke();
+        }
+
+        private static int RoundRawDelta(PlayerState player)
+        {
+            var history = player.EvaluationHistory;
+            if (history.Count == 0) return 0;
+
+            int previousRaw = history.Count > 1 ? history[history.Count - 2].RawScore : 0;
+            return history[history.Count - 1].RawScore - previousRaw;
+        }
+
+        private static int CalculateScore(PlayerState player)
+        {
+            var history = player.EvaluationHistory;
+            if (history.Count == 0) return 0;
+
+            return history[history.Count - 1].RawScore - history.Sum(e => e.PenaltyScore);
         }
 
         private IReadOnlyList<Requirement> GetRequirementsUpToCurrentTurn()
