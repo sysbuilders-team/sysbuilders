@@ -151,6 +151,11 @@ namespace Managers
         private void HandleLocalReady()
         {
             OnLocalPlayerReady?.Invoke();
+
+            if (!RequireOpponentResult && Session != null)
+            {
+                Session.TurnManager.ForceAdvancePhase();
+            }
         }
 
         private void HandleCreateClassRequested()
@@ -227,13 +232,12 @@ namespace Managers
 
             Session.ReceiveOpponentResult(result);
             _opponentEvaluated = true;
-            TryScheduleAdvance();
         }
 
         private void TryScheduleAdvance()
         {
             if (_advanceScheduled || !_localEvaluated) return;
-            if (RequireOpponentResult && !_opponentEvaluated) return;
+            if (RequireOpponentResult) return; // Em partidas em rede, a autoridade de avanço de fase é do servidor via MatchSyncBridge
 
             _advanceScheduled = true;
             StartCoroutine(AdvanceAfterEvaluation());

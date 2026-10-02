@@ -19,11 +19,14 @@ namespace Network
         [SyncVar(hook = nameof(OnTrailSynced))] private string _trailId;
 
         private readonly HashSet<PlayerSlot> _readySlots = new HashSet<PlayerSlot>();
+        private readonly HashSet<PlayerSlot> _evaluatedSlots = new HashSet<PlayerSlot>();
         private MatchSession _subscribedSession;
 
         public override void OnStartServer()
         {
             base.OnStartServer();
+            _readySlots.Clear();
+            _evaluatedSlots.Clear();
 
             var roomManager = NetworkManager.singleton as GameRoomManager;
             _theme = roomManager != null && !string.IsNullOrEmpty(roomManager.ChosenTheme)
@@ -73,10 +76,23 @@ namespace Network
 
         public void NotifyLocalPlayerReady(PlayerSlot slot) => CmdSetReady((int)slot);
 
+        private bool IsSenderAuthorizedForSlot(NetworkConnectionToClient sender, PlayerSlot slot)
+        {
+            bool isHost = sender == null || sender == NetworkServer.localConnection;
+            if (slot == PlayerSlot.PlayerOne) return isHost;
+            if (slot == PlayerSlot.PlayerTwo) return !isHost;
+            return false;
+        }
+
         [Command(requiresAuthority = false)]
-        private void CmdSetReady(int slotIndex)
+        private void CmdSetReady(int slotIndex, NetworkConnectionToClient sender = null)
         {
             var slot = (PlayerSlot)slotIndex;
+            if (!IsSenderAuthorizedForSlot(sender, slot))
+            {
+                Debug.LogWarning($"[MatchSyncBridge] CmdSetReady rejeitado: conexão não autorizada para o slot {slot}.");
+                return;
+            }
             
             _readySlots.Add(slot);
             Debug.Log($"[MatchSyncBridge] Server: slot {slot} pronto ({_readySlots.Count}/2)");
@@ -146,10 +162,20 @@ namespace Network
                 smellTypes, smellSeverities, smellClasses);
         }
 
+        private const int MaxSmellsPerResult = 50;
+
         // Só primitivos pela rede: os smells viajam como arrays (tipo, severidade, classes juntas por separador).
         private static void EncodeSmells(IReadOnlyList<SmellOccurrence> smells,
             out int[] types, out int[] severities, out string[] classes)
         {
+            if (smells == null)
+            {
+                types = Array.Empty<int>();
+                severities = Array.Empty<int>();
+                classes = Array.Empty<string>();
+                return;
+            }
+
             types = new int[smells.Count];
             severities = new int[smells.Count];
             classes = new string[smells.Count];
@@ -158,7 +184,10 @@ namespace Network
             {
                 types[i] = (int)smells[i].Type;
                 severities[i] = smells[i].Severity;
-                classes[i] = string.Join(ClassSeparator.ToString(), smells[i].AffectedClassNames);
+                var affected = smells[i].AffectedClassNames;
+                classes[i] = affected != null && affected.Count > 0
+                    ? string.Join(ClassSeparator.ToString(), affected)
+                    : string.Empty;
             }
         }
 
@@ -167,12 +196,15 @@ namespace Network
             var smells = new List<SmellOccurrence>();
             if (types == null || severities == null || classes == null) return smells;
 
-            int count = Math.Min(types.Length, Math.Min(severities.Length, classes.Length));
+            int count = Math.Min(Math.Min(types.Length, Math.Min(severities.Length, classes.Length)), MaxSmellsPerResult);
             for (int i = 0; i < count; i++)
             {
                 try
                 {
-                    var names = classes[i].Split(ClassSeparator);
+                    var names = string.IsNullOrEmpty(classes[i])
+                        ? Array.Empty<string>()
+                        : classes[i].Split(ClassSeparator);
+
                     smells.Add(new SmellOccurrence((CodeSmellType)types[i], names, Math.Max(1, severities[i])));
                 }
                 catch (ArgumentException)
@@ -186,9 +218,26 @@ namespace Network
 
         [Command(requiresAuthority = false)]
         private void CmdSendEvaluationResult(int slotIndex, int rawScore, int penaltyScore,
-            int[] smellTypes, int[] smellSeverities, string[] smellClasses)
+            int[] smellTypes, int[] smellSeverities, string[] smellClasses,
+            NetworkConnectionToClient sender = null)
         {
+            var slot = (PlayerSlot)slotIndex;
+            if (!IsSenderAuthorizedForSlot(sender, slot))
+            {
+                Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejeitado: conexão não autorizada para o slot {slot}.");
+                return;
+            }
+
             RpcReceiveEvaluationResult(slotIndex, rawScore, penaltyScore, smellTypes, smellSeverities, smellClasses);
+
+            _evaluatedSlots.Add(slot);
+            Debug.Log($"[MatchSyncBridge] Server: avaliação do slot {slot} recebida ({_evaluatedSlots.Count}/2)");
+
+            if (_evaluatedSlots.Count >= 2)
+            {
+                _evaluatedSlots.Clear();
+                RpcAdvancePhase();
+            }
         }
 
         [ClientRpc]
