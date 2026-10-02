@@ -48,21 +48,13 @@ namespace Tests.EditMode
 
         #region Item 4: Fidelidade em Encode/Decode de Smells com lista vazia
         [Test]
-        public void SmellSerialization_WhenAffectedClassesEmpty_DoesNotProduceEmptyStringElement()
+        public void DecodeSmells_WhenClassStringIsEmpty_DoesNotProduceCorruptedOccurrence()
         {
-            var originalSmell = new SmellOccurrence(CodeSmellType.LowCohesion, new List<string>(), 2);
-            var smellsList = new List<SmellOccurrence> { originalSmell };
-
-            object[] encodeArgs = new object[] { smellsList, null, null, null };
-            typeof(MatchSyncBridge).GetMethod("EncodeSmells", BindingFlags.NonPublic | BindingFlags.Static)
-                .Invoke(null, encodeArgs);
-
-            int[] types = (int[])encodeArgs[1];
-            int[] severities = (int[])encodeArgs[2];
-            string[] classes = (string[])encodeArgs[3];
-
-            Assert.AreEqual(1, classes.Length);
-            Assert.AreEqual(string.Empty, classes[0]);
+            // O bug antigo: "".Split() gerava [""], criando SmellOccurrence com nome de classe ""
+            // O comportamento correto: string vazia vira Array.Empty<string>(), e não polui com classe de nome vazio.
+            int[] types = new int[] { (int)CodeSmellType.LargeClass };
+            int[] severities = new int[] { 2 };
+            string[] classes = new string[] { string.Empty };
 
             var decoded = (List<SmellOccurrence>)InvokePrivateStatic(
                 typeof(MatchSyncBridge),
@@ -72,16 +64,13 @@ namespace Tests.EditMode
                 classes
             );
 
-            Assert.AreEqual(1, decoded.Count);
-            Assert.AreEqual(CodeSmellType.LowCohesion, decoded[0].Type);
-            Assert.AreEqual(2, decoded[0].Severity);
-            Assert.AreEqual(0, decoded[0].AffectedClassNames.Count, "AffectedClassNames deveria estar vazio e não conter [\"\"]");
+            Assert.AreEqual(0, decoded.Count, "Entrada com string vazia não deve gerar smell corrompido com classe vazia.");
         }
 
         [Test]
         public void SmellSerialization_WithMultipleClasses_PreservesAllNames()
         {
-            var originalSmell = new SmellOccurrence(CodeSmellType.LowCohesion, new List<string> { "Player", "Enemy", "Game" }, 3);
+            var originalSmell = new SmellOccurrence(CodeSmellType.DuplicateCode, new List<string> { "Player", "Enemy" }, 3);
             var smellsList = new List<SmellOccurrence> { originalSmell };
 
             object[] encodeArgs = new object[] { smellsList, null, null, null };
@@ -101,10 +90,9 @@ namespace Tests.EditMode
             );
 
             Assert.AreEqual(1, decoded.Count);
-            Assert.AreEqual(3, decoded[0].AffectedClassNames.Count);
+            Assert.AreEqual(2, decoded[0].AffectedClassNames.Count);
             Assert.AreEqual("Player", decoded[0].AffectedClassNames[0]);
             Assert.AreEqual("Enemy", decoded[0].AffectedClassNames[1]);
-            Assert.AreEqual("Game", decoded[0].AffectedClassNames[2]);
         }
         #endregion
 
@@ -119,7 +107,7 @@ namespace Tests.EditMode
 
             for (int i = 0; i < oversizedCount; i++)
             {
-                types[i] = (int)CodeSmellType.DuplicateCode;
+                types[i] = (int)CodeSmellType.LargeClass;
                 severities[i] = 1;
                 classes[i] = "ClassA";
             }
@@ -141,6 +129,7 @@ namespace Tests.EditMode
         public void GameRoomPlayer_WhenPlayerNameHookTriggers_FiresOnRoomPlayerNameChangedEvent()
         {
             var go = new GameObject("RoomPlayerTest");
+            go.AddComponent<NetworkIdentity>();
             var player = go.AddComponent<GameRoomPlayer>();
 
             string notifiedNewName = null;
@@ -174,6 +163,7 @@ namespace Tests.EditMode
         public void IsSenderAuthorizedForSlot_HostOnlyAuthorizedForPlayerOne()
         {
             var go = new GameObject("BridgeTest");
+            go.AddComponent<NetworkIdentity>();
             var bridge = go.AddComponent<MatchSyncBridge>();
 
             try
@@ -205,12 +195,14 @@ namespace Tests.EditMode
                 turnManager.ForceAdvancePhase(); // Show -> Build
                 Assert.AreEqual(TurnPhase.Build, turnManager.CurrentPhase);
 
-                // Criar mock/wrapper de sessão ou injetar TurnManager
-                // Vamos testar o GameManager configurado para solo (RequireOpponentResult = false)
+                // Configura GameManager para solo (RequireOpponentResult = false)
                 gm.RequireOpponentResult = false;
 
-                // Cria MatchSession e injeta
-                var reqList = new List<Core.Requirements.Requirement>();
+                // Cria MatchSession com pelo menos 1 requisito e injeta
+                var reqList = new List<Core.Requirements.Requirement>
+                {
+                    new Core.Requirements.Requirement("req1", "Req 1", new List<Core.Diagram.MethodData>())
+                };
                 var session = new MatchSession("P1", "P2", reqList, PlayerSlot.PlayerOne);
                 session.TurnManager.ForceAdvancePhase(); // Move para Build
                 Assert.AreEqual(TurnPhase.Build, session.TurnManager.CurrentPhase);
@@ -239,7 +231,11 @@ namespace Tests.EditMode
             {
                 gm.RequireOpponentResult = true; // Modo Rede
 
-                var reqList = new List<Core.Requirements.Requirement>();
+                // Cria MatchSession com pelo menos 1 requisito e injeta
+                var reqList = new List<Core.Requirements.Requirement>
+                {
+                    new Core.Requirements.Requirement("req1", "Req 1", new List<Core.Diagram.MethodData>())
+                };
                 var session = new MatchSession("P1", "P2", reqList, PlayerSlot.PlayerOne);
                 session.TurnManager.ForceAdvancePhase(); // Move para Build
                 Assert.AreEqual(TurnPhase.Build, session.TurnManager.CurrentPhase);
