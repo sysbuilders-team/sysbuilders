@@ -26,8 +26,13 @@ namespace Managers
 
             if (_requirementJson == null)
             {
-                // faltou arrastar a referencia no inspector 
-                Debug.LogError("[RequirementManager] Arquivo JSON de requisitos não configurado no Inspector.", this);
+                _requirementJson = Resources.Load<TextAsset>("requirements")
+                    ?? Resources.Load<TextAsset>("requirements_biblioteca");
+            }
+
+            if (_requirementJson == null)
+            {
+                Debug.LogError("[RequirementManager] Arquivo JSON de requisitos não configurado no Inspector nem encontrado em Resources/requirements.", this);
                 return;
             }
 

@@ -31,6 +31,11 @@ namespace Managers
 
         public void StartMatch(string theme, string trailId, PlayerSlot localSlot)
         {
+            if (_requirementManager == null)
+            {
+                _requirementManager = GetComponent<RequirementManager>() ?? FindFirstObjectByType<RequirementManager>();
+            }
+
             var requirements = _requirementManager.GetTrailById(theme, trailId);
 
             Session = new MatchSession("Jogador 1", "Jogador 2", requirements, localSlot);
@@ -42,47 +47,72 @@ namespace Managers
         {
             var turnManager = Session.TurnManager;
 
-            _topMenu.Initialize(
-                turnContext: turnManager, 
-                requirementContext: Session
-            );
+            if (_topMenu != null)
+            {
+                _topMenu.Initialize(
+                    turnContext: turnManager, 
+                    requirementContext: Session
+                );
+            }
 
-            _rightBar.Initialize(
-                scoreContext: Session, 
-                refactorContext: Session, 
-                turnPlayerActions: turnManager, 
-                localSlot: localSlot, 
-                turnContext: turnManager
-            );
+            if (_rightBar != null)
+            {
+                _rightBar.Initialize(
+                    scoreContext: Session, 
+                    refactorContext: Session, 
+                    turnPlayerActions: turnManager, 
+                    localSlot: localSlot, 
+                    turnContext: turnManager
+                );
+            }
 
-            _toolBox.Initialize(
-                requirementContext: Session, 
-                diagramActions: Session, 
-                turnContext: turnManager
-            );
+            if (_toolBox != null)
+            {
+                _toolBox.Initialize(
+                    requirementContext: Session, 
+                    diagramActions: Session, 
+                    turnContext: turnManager
+                );
+            }
 
-            _diagram.Initialize(
-                diagram: Session.LocalPlayer.Diagram, 
-                diagramActions: Session
-            );
+            if (_diagram != null)
+            {
+                _diagram.Initialize(
+                    diagram: Session.LocalPlayer.Diagram, 
+                    diagramActions: Session
+                );
+            }
 
-            _evaluationModal.Initialize(
-                summaryContext: Session, 
-                turnPlayerActions: turnManager, 
-                turnContext: turnManager, 
-                localSlot: localSlot
-            );
+            if (_evaluationModal != null)
+            {
+                _evaluationModal.Initialize(
+                    summaryContext: Session, 
+                    turnPlayerActions: turnManager, 
+                    turnContext: turnManager, 
+                    localSlot: localSlot
+                );
+            }
 
-            _endGameModal.Initialize(
-                endContext: Session, 
-                navigationActions: this, 
-                turnContext: turnManager, 
-                localSlot: localSlot
-            );
+            if (_endGameModal != null)
+            {
+                _endGameModal.Initialize(
+                    endContext: Session, 
+                    navigationActions: this, 
+                    turnContext: turnManager, 
+                    localSlot: localSlot
+                );
+            }
         }
         public void ReturnToMainMenu()
         {
-            SceneManager.LoadScene("MenuScene");
+            if (Application.CanStreamedLevelBeLoaded("Menu"))
+            {
+                SceneManager.LoadScene("Menu");
+            }
+            else
+            {
+                SceneManager.LoadScene("MenuScene");
+            }
         }
 
         public void RestartMatch()

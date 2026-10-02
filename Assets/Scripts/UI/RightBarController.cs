@@ -131,6 +131,11 @@ namespace UI
 
         private void HandleRefactorClicked()
         {
+            if (_refactorContext != null)
+            {
+                _refactorContext.TryRefactorSelectedClass();
+            }
+
             OnRefactorButtonClicked?.Invoke();
         }
 

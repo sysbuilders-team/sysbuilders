@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Core.Diagram;
@@ -38,8 +38,10 @@ namespace UI
             _diagramActions = diagramActions ?? throw new ArgumentNullException(nameof(diagramActions));
 
             _diagramActions.OnDiagramChanged += HandleDiagramChanged;
+            _diagramActions.OnClassSelected += HandleClassSelected;
+            _diagramActions.OnAssociationModeChanged += HandleAssociationModeChanged;
 
-            _isAssociationMode = false;
+            _isAssociationMode = _diagramActions.IsAssociationMode;
             _selectedNodeUI = null;
 
             RenderDiagram();
@@ -56,6 +58,8 @@ namespace UI
             if (_diagramActions != null)
             {
                 _diagramActions.OnDiagramChanged -= HandleDiagramChanged;
+                _diagramActions.OnClassSelected -= HandleClassSelected;
+                _diagramActions.OnAssociationModeChanged -= HandleAssociationModeChanged;
             }
         }
 
@@ -64,9 +68,41 @@ namespace UI
             RenderDiagram();
         }
 
+        private void HandleClassSelected(ClassNode selectedNode)
+        {
+            if (_selectedNodeUI != null)
+            {
+                _selectedNodeUI.SetSelected(false);
+                _selectedNodeUI = null;
+            }
+
+            if (selectedNode != null && _activeNodeUIs.TryGetValue(selectedNode.Name, out var nodeUI))
+            {
+                _selectedNodeUI = nodeUI;
+                _selectedNodeUI.SetSelected(true);
+            }
+
+            OnNodeSelected?.Invoke(selectedNode);
+        }
+
+        private void HandleAssociationModeChanged(bool active)
+        {
+            _isAssociationMode = active;
+            if (!active && _selectedNodeUI != null)
+            {
+                _selectedNodeUI.SetSelected(false);
+                _selectedNodeUI = null;
+            }
+        }
+
         public void SetAssociationMode(bool active)
         {
             _isAssociationMode = active;
+            if (_diagramActions != null && _diagramActions.IsAssociationMode != active)
+            {
+                _diagramActions.SetAssociationMode(active);
+            }
+
             if (!active && _selectedNodeUI != null)
             {
                 _selectedNodeUI.SetSelected(false);
@@ -96,12 +132,10 @@ namespace UI
         public void RenderDiagram()
         {
             if (_diagram == null || _diagramContent == null) return;
-
-            // 1. Sync Class Nodes
+            
             var currentClasses = _diagram.Classes;
             var currentClassNames = new HashSet<string>(currentClasses.Select(c => c.Name));
-
-            // Remove destroyed nodes
+            
             var toRemove = _activeNodeUIs.Keys.Where(name => !currentClassNames.Contains(name)).ToList();
             foreach (var name in toRemove)
             {
@@ -110,8 +144,7 @@ namespace UI
                 DestroyNodeGameObject(nodeUI.gameObject);
                 _activeNodeUIs.Remove(name);
             }
-
-            // Add or update nodes
+            
             foreach (var classNode in currentClasses)
             {
                 if (!_activeNodeUIs.TryGetValue(classNode.Name, out var nodeUI))
@@ -120,9 +153,14 @@ namespace UI
                     _activeNodeUIs[classNode.Name] = nodeUI;
                 }
                 nodeUI.Bind(classNode);
+                bool isSelected = _diagramActions != null && _diagramActions.SelectedClass == classNode;
+                nodeUI.SetSelected(isSelected);
+                if (isSelected)
+                {
+                    _selectedNodeUI = nodeUI;
+                }
             }
-
-            // 2. Sync Association Lines
+            
             RenderRelations();
         }
 
@@ -229,14 +267,14 @@ namespace UI
             }
             else
             {
-                if (_selectedNodeUI != null)
+                if (_selectedNodeUI == clickedNodeUI)
                 {
-                    _selectedNodeUI.SetSelected(false);
+                    _diagramActions.ClearSelection();
                 }
-
-                _selectedNodeUI = clickedNodeUI;
-                _selectedNodeUI.SetSelected(true);
-                OnNodeSelected?.Invoke(clickedNodeUI.Node);
+                else
+                {
+                    _diagramActions.SelectClass(clickedNodeUI.Node);
+                }
             }
         }
 

@@ -14,6 +14,7 @@ namespace UI
         [Header("Criar Classe")]
         [SerializeField] private Button _createClassButton;
         [SerializeField] private TMP_Text _createClassButtonText;
+        [SerializeField] private TMP_InputField _classNameInputField;
         [SerializeField] private int _maxClassesPerTurn = 2; // TODO: ver isso conforme novas regras ou de acordo com os requirements designados
 
         [Header("Lista de Métodos")]
@@ -58,10 +59,11 @@ namespace UI
 
             _requirementContext.OnRequirementChanged += HandleRequirementChanged;
             _turnContext.OnPhaseChange += HandlePhaseChange;
+            _diagramActions.OnAssociationModeChanged += HandleAssociationModeChanged;
 
             _lastTrackedTurn = _turnContext.CurrentTurn;
             _classesCreatedThisTurn = 0;
-            _isAssociationModeActive = false;
+            _isAssociationModeActive = _diagramActions.IsAssociationMode;
 
             UpdateAllDisplays();
         }
@@ -93,6 +95,11 @@ namespace UI
             if (_turnContext != null)
             {
                 _turnContext.OnPhaseChange -= HandlePhaseChange;
+            }
+
+            if (_diagramActions != null)
+            {
+                _diagramActions.OnAssociationModeChanged -= HandleAssociationModeChanged;
             }
         }
 
@@ -142,9 +149,29 @@ namespace UI
             UpdateButtonsInteractable(newPhase);
         }
 
+        private void HandleAssociationModeChanged(bool active)
+        {
+            _isAssociationModeActive = active;
+            UpdateAssociationButtonDisplay();
+            OnAssociationModeToggled?.Invoke(_isAssociationModeActive);
+        }
+
         private void HandleCreateClassClicked()
         {
             if (!CanCreateClass()) return;
+
+            if (_diagramActions != null)
+            {
+                string className = (_classNameInputField != null && !string.IsNullOrWhiteSpace(_classNameInputField.text))
+                    ? _classNameInputField.text.Trim()
+                    : $"Classe_{_classesCreatedThisTurn + 1}";
+
+                if (_diagramActions.TryCreateClass(className, out _))
+                {
+                    NotifyClassCreated();
+                    if (_classNameInputField != null) _classNameInputField.text = string.Empty;
+                }
+            }
 
             OnCreateClassClicked?.Invoke();
         }
@@ -174,6 +201,11 @@ namespace UI
         public void SetAssociationMode(bool active)
         {
             _isAssociationModeActive = active;
+            if (_diagramActions != null && _diagramActions.IsAssociationMode != active)
+            {
+                _diagramActions.SetAssociationMode(active);
+            }
+
             UpdateAssociationButtonDisplay();
             OnAssociationModeToggled?.Invoke(_isAssociationModeActive);
         }
@@ -206,6 +238,11 @@ namespace UI
 
         private void HandleCardClicked(MethodData method)
         {
+            if (_diagramActions != null && _diagramActions.SelectedClass != null)
+            {
+                _diagramActions.AddMethodToClass(_diagramActions.SelectedClass, method);
+            }
+
             OnMethodCardSelected?.Invoke(method);
         }
 

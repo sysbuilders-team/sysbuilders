@@ -12,8 +12,7 @@
         "Mirror.Transports",
         "Unity.Mirror.CodeGen",
         "Sys.Managers",
-        "Unity.TextMeshPro",
-        "Sys.Managers"
+        "Unity.TextMeshPro"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

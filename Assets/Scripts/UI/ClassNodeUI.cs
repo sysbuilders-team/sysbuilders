@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Core.Diagram;
 using TMPro;
 using UnityEngine;

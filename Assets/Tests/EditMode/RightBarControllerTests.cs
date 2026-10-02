@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Reflection;
 using Core.Diagram;
 using Core.Session;
@@ -29,6 +29,13 @@ namespace Tests.EditMode
             public int RefactorCost { get; set; } = 1;
             public bool CanRefactor(ClassNode classNode) => RefactorPoints >= RefactorCost;
             public bool TryRefactorClass(ClassNode classNode) => true;
+            public bool CanRefactorSelected() => RefactorPoints >= RefactorCost;
+            public int TryRefactorSelectedClassCalls { get; private set; }
+            public bool TryRefactorSelectedClass()
+            {
+                TryRefactorSelectedClassCalls++;
+                return true;
+            }
             public event Action<int> OnRefactorPointsChanged;
 
             public void TriggerRefactorChanged(int points)
@@ -131,6 +138,18 @@ namespace Tests.EditMode
 
             StringAssert.Contains("0", _refactorPointsText.text);
             Assert.IsFalse(_refactorButton.interactable);
+        }
+
+        [Test]
+        public void RefactorClicked_CallsTryRefactorSelectedClass()
+        {
+            _controller.Initialize(_scoreContext, _refactorContext, _turnManager, PlayerSlot.PlayerOne, _turnManager);
+            var awakeMethod = typeof(RightBarController).GetMethod("Awake", BindingFlags.NonPublic | BindingFlags.Instance);
+            awakeMethod?.Invoke(_controller, null);
+
+            _refactorButton.onClick.Invoke();
+
+            Assert.AreEqual(1, _refactorContext.TryRefactorSelectedClassCalls);
         }
 
         [Test]

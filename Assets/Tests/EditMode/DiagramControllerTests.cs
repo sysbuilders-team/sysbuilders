@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Core.Diagram;
@@ -54,6 +54,27 @@ namespace Tests.EditMode
                 OnDiagramChanged?.Invoke();
                 return true;
             }
+
+            public ClassNode SelectedClass { get; private set; }
+            public void SelectClass(ClassNode node)
+            {
+                SelectedClass = node;
+                OnClassSelected?.Invoke(node);
+            }
+            public void ClearSelection()
+            {
+                SelectedClass = null;
+                OnClassSelected?.Invoke(null);
+            }
+            public event Action<ClassNode> OnClassSelected;
+
+            public bool IsAssociationMode { get; private set; }
+            public void SetAssociationMode(bool active)
+            {
+                IsAssociationMode = active;
+                OnAssociationModeChanged?.Invoke(active);
+            }
+            public event Action<bool> OnAssociationModeChanged;
 
             public void TriggerDiagramChanged() => OnDiagramChanged?.Invoke();
         }
@@ -138,6 +159,35 @@ namespace Tests.EditMode
             Assert.AreEqual(nodeA, _actions.CreatedRelations[0].Origin);
             Assert.AreEqual(nodeB, _actions.CreatedRelations[0].Destination);
             Assert.IsFalse(_controller.IsAssociationMode);
+        }
+
+        [Test]
+        public void PointerClick_InNormalMode_SelectsClassOnDiagramActions()
+        {
+            var nodeA = new ClassNode("Usuario");
+            _diagram.AddClass(nodeA);
+
+            _controller.Initialize(_diagram, _actions);
+            var uiA = _controller.ActiveNodes["Usuario"];
+
+            uiA.OnPointerClick(null);
+
+            Assert.AreEqual(nodeA, _actions.SelectedClass);
+            Assert.AreEqual(uiA, _controller.SelectedNode);
+        }
+
+        [Test]
+        public void DiagramActions_OnClassSelected_UpdatesDiagramControllerSelectedNode()
+        {
+            var nodeA = new ClassNode("Usuario");
+            _diagram.AddClass(nodeA);
+
+            _controller.Initialize(_diagram, _actions);
+            var uiA = _controller.ActiveNodes["Usuario"];
+
+            _actions.SelectClass(nodeA);
+
+            Assert.AreEqual(uiA, _controller.SelectedNode);
         }
 
         private static void SetPrivateField(object target, string fieldName, object value)
