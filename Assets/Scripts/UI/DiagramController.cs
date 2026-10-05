@@ -1,7 +1,9 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Core.Diagram;
+using TMPro;
 using UnityEngine;
 
 namespace UI
@@ -12,6 +14,11 @@ namespace UI
         [SerializeField] private RectTransform _diagramContent;
         [SerializeField] private GameObject _classNodePrefab;
         [SerializeField] private GameObject _associationLinePrefab;
+
+        [Header("Feedback Toast (Optional)")]
+        [SerializeField] private TMP_Text _feedbackText;
+        [SerializeField] private GameObject _feedbackContainer;
+        private Coroutine _feedbackCoroutine;
 
         private IReadOnlyClassDiagram _diagram;
         private IDiagramActions _diagramActions;
@@ -29,6 +36,7 @@ namespace UI
 
         public event Action<ClassNode> OnNodeSelected;
         public event Action<Relation> OnAssociationCreated;
+        public event Action<string> OnFeedbackMessage;
 
         public void Initialize(IReadOnlyClassDiagram diagram, IDiagramActions diagramActions)
         {
@@ -40,6 +48,7 @@ namespace UI
             _diagramActions.OnDiagramChanged += HandleDiagramChanged;
             _diagramActions.OnClassSelected += HandleClassSelected;
             _diagramActions.OnAssociationModeChanged += HandleAssociationModeChanged;
+            _diagramActions.OnActionFailed += HandleActionFailed;
 
             _isAssociationMode = _diagramActions.IsAssociationMode;
             _selectedNodeUI = null;
@@ -60,6 +69,7 @@ namespace UI
                 _diagramActions.OnDiagramChanged -= HandleDiagramChanged;
                 _diagramActions.OnClassSelected -= HandleClassSelected;
                 _diagramActions.OnAssociationModeChanged -= HandleAssociationModeChanged;
+                _diagramActions.OnActionFailed -= HandleActionFailed;
             }
         }
 
@@ -178,6 +188,9 @@ namespace UI
             }
 
             var nodeUI = nodeGo.GetComponent<ClassNodeUI>() ?? nodeGo.AddComponent<ClassNodeUI>();
+            nodeUI.RectTransform.anchorMin = new Vector2(0f, 1f);
+            nodeUI.RectTransform.anchorMax = new Vector2(0f, 1f);
+            nodeUI.RectTransform.pivot = new Vector2(0.5f, 0.5f);
             nodeUI.RectTransform.anchoredPosition = _nextSpawnPosition;
             _nextSpawnPosition += new Vector2(160f, -40f);
 
@@ -310,6 +323,34 @@ namespace UI
             {
                 DestroyImmediate(go);
             }
+        }
+
+        private void HandleActionFailed(string message)
+        {
+            Debug.LogWarning($"[DiagramController] {message}");
+            OnFeedbackMessage?.Invoke(message);
+
+            if (_feedbackText != null)
+            {
+                if (_feedbackCoroutine != null)
+                {
+                    StopCoroutine(_feedbackCoroutine);
+                }
+                _feedbackCoroutine = StartCoroutine(ShowFeedbackRoutine(message));
+            }
+        }
+
+        private IEnumerator ShowFeedbackRoutine(string message)
+        {
+            _feedbackText.text = message;
+            if (_feedbackContainer != null) _feedbackContainer.SetActive(true);
+            else _feedbackText.gameObject.SetActive(true);
+
+            yield return new WaitForSeconds(2.5f);
+
+            if (_feedbackContainer != null) _feedbackContainer.SetActive(false);
+            else _feedbackText.gameObject.SetActive(false);
+            _feedbackCoroutine = null;
         }
     }
 }

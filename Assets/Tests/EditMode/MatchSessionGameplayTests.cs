@@ -102,5 +102,81 @@ namespace Tests.EditMode
             bool addedAfterUnlock = session.AddMethodToClass(session.SelectedClass, novoMetodo);
             Assert.IsTrue(addedAfterUnlock);
         }
+
+        [Test]
+        public void ClassDiagram_DuplicateAssociation_IsPreventedBidirectionally()
+        {
+            var diagram = new ClassDiagram();
+            var nodeA = new ClassNode("Aluno");
+            var nodeB = new ClassNode("Curso");
+            diagram.AddClass(nodeA);
+            diagram.AddClass(nodeB);
+
+            // Primeira adição deve suceder
+            bool firstAdded = diagram.AddRelation(new Relation(nodeA, nodeB, RelationType.Association));
+            Assert.IsTrue(firstAdded);
+            Assert.AreEqual(1, diagram.Relations.Count);
+
+            // Segunda tentativa na mesma direção (A -> B) deve ser rejeitada
+            bool duplicateSameDirection = diagram.AddRelation(new Relation(nodeA, nodeB, RelationType.Association));
+            Assert.IsFalse(duplicateSameDirection, "Não deve permitir associação duplicada na mesma direção.");
+            Assert.AreEqual(1, diagram.Relations.Count);
+
+            // Terceira tentativa na direção oposta (B -> A) deve ser rejeitada
+            bool duplicateOppositeDirection = diagram.AddRelation(new Relation(nodeB, nodeA, RelationType.Association));
+            Assert.IsFalse(duplicateOppositeDirection, "Não deve permitir associação duplicada na direção contrária.");
+            Assert.AreEqual(1, diagram.Relations.Count);
+
+            // Remover relação e testar que agora pode adicionar de novo
+            bool removed = diagram.RemoveRelation(nodeA, nodeB);
+            Assert.IsTrue(removed);
+            Assert.AreEqual(0, diagram.Relations.Count);
+
+            bool readded = diagram.AddRelation(new Relation(nodeB, nodeA, RelationType.Association));
+            Assert.IsTrue(readded);
+            Assert.AreEqual(1, diagram.Relations.Count);
+        }
+
+        [Test]
+        public void MatchSession_DuplicateAssociation_TriggersOnActionFailed()
+        {
+            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne);
+            // Avança para Build
+            session.SetPlayerReady(PlayerSlot.PlayerOne);
+            session.SetPlayerReady(PlayerSlot.PlayerTwo);
+
+            session.TryCreateClass("ClasseA", out var nodeA);
+            session.TryCreateClass("ClasseB", out var nodeB);
+
+            string failureMessage = null;
+            session.OnActionFailed += msg => failureMessage = msg;
+
+            bool firstAdded = session.AddRelation(nodeA, nodeB);
+            Assert.IsTrue(firstAdded);
+            Assert.IsNull(failureMessage);
+
+            bool secondAdded = session.AddRelation(nodeA, nodeB);
+            Assert.IsFalse(secondAdded);
+            Assert.IsNotNull(failureMessage);
+            Assert.IsTrue(failureMessage.Contains("associação"), $"Mensagem de erro esperada, recebido: {failureMessage}");
+        }
+
+        [Test]
+        public void MatchSession_SelfAssociation_TriggersOnActionFailed()
+        {
+            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne);
+            session.SetPlayerReady(PlayerSlot.PlayerOne);
+            session.SetPlayerReady(PlayerSlot.PlayerTwo);
+
+            session.TryCreateClass("ClasseA", out var nodeA);
+
+            string failureMessage = null;
+            session.OnActionFailed += msg => failureMessage = msg;
+
+            bool selfAssoc = session.AddRelation(nodeA, nodeA);
+            Assert.IsFalse(selfAssoc);
+            Assert.IsNotNull(failureMessage);
+            Assert.IsTrue(failureMessage.Contains("si mesma"), $"Mensagem de erro esperada, recebido: {failureMessage}");
+        }
     }
 }

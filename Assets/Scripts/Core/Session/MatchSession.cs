@@ -63,6 +63,7 @@ namespace Core.Session
         public string WinnerName => IsDraw ? null : (PlayerOneScore > PlayerTwoScore) ? PlayerOneName : PlayerTwoName;
         
         public event Action OnDiagramChanged;
+        public event Action<string> OnActionFailed;
         public ClassNode SelectedClass { get; private set; }
         public bool IsAssociationMode { get; private set; }
         public event Action<ClassNode> OnClassSelected;
@@ -200,7 +201,18 @@ namespace Core.Session
         public bool TryCreateClass(string className, out ClassNode createdNode)
         {
             createdNode = null;
-            if (!CanModifyDiagram() || string.IsNullOrWhiteSpace(className)) return false;
+            if (!CanModifyDiagram())
+            {
+                OnActionFailed?.Invoke("Só é possível criar classes na fase de construção.");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(className))
+            {
+                OnActionFailed?.Invoke("O nome da classe não pode estar em branco.");
+                return false;
+            }
+
             createdNode = new ClassNode(className);
             bool success = LocalPlayer.Diagram.Classes.All(c => c.Name != className);
             if (success)
@@ -210,7 +222,9 @@ namespace Core.Session
                 OnDiagramChanged?.Invoke();
                 return true;
             }
+
             createdNode = null;
+            OnActionFailed?.Invoke($"Já existe uma classe chamada '{className}'.");
             return false;
         }
 
@@ -228,7 +242,20 @@ namespace Core.Session
 
         public bool AddMethodToClass(ClassNode node, MethodData method)
         {
-            if (!CanModifyDiagram() || node == null || method == null || node.IsLocked) return false;
+            if (!CanModifyDiagram())
+            {
+                OnActionFailed?.Invoke("Só é possível adicionar métodos na fase de construção.");
+                return false;
+            }
+
+            if (node == null || method == null) return false;
+
+            if (node.IsLocked)
+            {
+                OnActionFailed?.Invoke($"A classe '{node.Name}' está congelada. Refatore-a para alterar métodos.");
+                return false;
+            }
+
             node.AddMethod(method);
             OnDiagramChanged?.Invoke();
             return true;
@@ -247,7 +274,20 @@ namespace Core.Session
 
         public bool AddRelation(ClassNode origin, ClassNode destination, RelationType type = RelationType.Association)
         {
-            if (!CanModifyDiagram() || origin == null || destination == null || origin == destination) return false;
+            if (!CanModifyDiagram())
+            {
+                OnActionFailed?.Invoke("Só é possível criar associações na fase de construção.");
+                return false;
+            }
+
+            if (origin == null || destination == null) return false;
+
+            if (origin == destination)
+            {
+                OnActionFailed?.Invoke("Não é possível associar uma classe a si mesma.");
+                return false;
+            }
+
             var relation = new Relation(origin, destination, type);
             bool added = LocalPlayer.AddRelation(relation);
             if (added)
@@ -257,6 +297,10 @@ namespace Core.Session
                     SetAssociationMode(false);
                 }
                 OnDiagramChanged?.Invoke();
+            }
+            else
+            {
+                OnActionFailed?.Invoke("As classes selecionadas já possuem uma associação.");
             }
             return added;
         }

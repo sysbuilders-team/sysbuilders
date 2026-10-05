@@ -23,5 +23,6 @@ namespace Core.Diagram
         event Action<bool> OnAssociationModeChanged;
 
         event Action OnDiagramChanged;
+        event Action<string> OnActionFailed;
     }
 }

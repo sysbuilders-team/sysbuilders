@@ -61,6 +61,7 @@ namespace Tests.EditMode
             public event Action<bool> OnAssociationModeChanged;
 
             public event Action OnDiagramChanged;
+            public event Action<string> OnActionFailed;
         }
 
         private GameObject _go;

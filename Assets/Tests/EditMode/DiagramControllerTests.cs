@@ -75,8 +75,10 @@ namespace Tests.EditMode
                 OnAssociationModeChanged?.Invoke(active);
             }
             public event Action<bool> OnAssociationModeChanged;
+            public event Action<string> OnActionFailed;
 
             public void TriggerDiagramChanged() => OnDiagramChanged?.Invoke();
+            public void TriggerActionFailed(string msg) => OnActionFailed?.Invoke(msg);
         }
 
         private GameObject _go;
@@ -188,6 +190,18 @@ namespace Tests.EditMode
             _actions.SelectClass(nodeA);
 
             Assert.AreEqual(uiA, _controller.SelectedNode);
+        }
+
+        [Test]
+        public void DiagramActions_OnActionFailed_FiresOnFeedbackMessage()
+        {
+            _controller.Initialize(_diagram, _actions);
+            string receivedMessage = null;
+            _controller.OnFeedbackMessage += msg => receivedMessage = msg;
+
+            _actions.TriggerActionFailed("Erro de teste");
+
+            Assert.AreEqual("Erro de teste", receivedMessage);
         }
 
         private static void SetPrivateField(object target, string fieldName, object value)
