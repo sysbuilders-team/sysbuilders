@@ -38,17 +38,42 @@ namespace Network
                 requirementManager = GetComponent<RequirementManager>() ?? FindFirstObjectByType<RequirementManager>();
             }
 
-            if (requirementManager == null)
+            try
             {
-                Debug.LogError("[MatchSyncBridge] RequirementManager não encontrado para sortear a trilha.");
-                return;
+                if (requirementManager == null)
+                {
+                    throw new InvalidOperationException("RequirementManager não encontrado para sortear a trilha.");
+                }
+
+                _trailId = requirementManager.GetRandomTrailId(_theme);
+
+                if (string.IsNullOrEmpty(_trailId))
+                {
+                    throw new InvalidOperationException($"Nenhuma trilha encontrada para o tema '{_theme}'.");
+                }
+
+                Debug.Log($"[MatchSyncBridge] Server: tema={_theme} | trail={_trailId}");
+
+                StartLocalMatch(_theme, _trailId, PlayerSlot.PlayerOne);
             }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[MatchSyncBridge] Erro crítico ao iniciar partida no servidor: {ex.Message}");
+                if (NetworkServer.active)
+                {
+                    RpcNotifyMatchStartFailed(ex.Message);
+                }
+            }
+        }
 
-            _trailId = requirementManager.GetRandomTrailId(_theme);
-
-            Debug.Log($"[MatchSyncBridge] Server: tema={_theme} | trail={_trailId}");
-            
-            StartLocalMatch(_theme, _trailId, PlayerSlot.PlayerOne);
+        [ClientRpc]
+        private void RpcNotifyMatchStartFailed(string reason)
+        {
+            Debug.LogError($"[MatchSyncBridge] Partida abortada pelo servidor: {reason}");
+            if (gameManager != null)
+            {
+                gameManager.ReturnToMainMenu();
+            }
         }
 
         private void OnTrailSynced(string oldTrailId, string newTrailId)
