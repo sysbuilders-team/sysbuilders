@@ -21,6 +21,7 @@ namespace Network
         private readonly HashSet<PlayerSlot> _readySlots = new HashSet<PlayerSlot>();
         private readonly HashSet<PlayerSlot> _evaluatedSlots = new HashSet<PlayerSlot>();
         private MatchSession _subscribedSession;
+        private bool _matchAborted;
 
         public override void OnStartServer()
         {
@@ -59,17 +60,49 @@ namespace Network
             catch (Exception ex)
             {
                 Debug.LogError($"[MatchSyncBridge] Erro crítico ao iniciar partida no servidor: {ex.Message}");
+
+                // Avisa os clientes (melhor esforco) e devolve o proprio servidor ao menu:
+                // nao depender do ClientRpc voltar para a ponta local.
                 if (NetworkServer.active)
                 {
-                    RpcNotifyMatchStartFailed(ex.Message);
+                    try
+                    {
+                        RpcNotifyMatchStartFailed(ex.Message);
+                    }
+                    catch (Exception notifyEx)
+                    {
+                        Debug.LogError($"[MatchSyncBridge] Nao foi possivel notificar os clientes da falha: {notifyEx.Message}");
+                    }
                 }
+
+                AbortLocalMatch(ex.Message);
             }
         }
 
         [ClientRpc]
         private void RpcNotifyMatchStartFailed(string reason)
         {
-            Debug.LogError($"[MatchSyncBridge] Partida abortada pelo servidor: {reason}");
+            AbortLocalMatch(reason);
+        }
+
+        // Um cliente que nao conseguiu montar a partida avisa o servidor: sem isso o Host seguiria
+        // jogando sozinho, porque so o caminho de erro do servidor dispara RpcNotifyMatchStartFailed.
+        [Command(requiresAuthority = false)]
+        private void CmdNotifyMatchStartFailed(string reason)
+        {
+            Debug.LogError($"[MatchSyncBridge] Cliente reportou falha ao iniciar a partida: {reason}");
+            RpcNotifyMatchStartFailed(reason);
+        }
+
+        // Caminho unico de aborto (Host, Client e relay do servidor): loga e devolve a maquina
+        // local para o menu. Idempotente, porque no host o RPC chega tambem na ponta que reportou.
+        private void AbortLocalMatch(string reason)
+        {
+            if (_matchAborted) return;
+            _matchAborted = true;
+
+            Debug.LogError($"[MatchSyncBridge] Partida abortada: {reason}");
+
             if (gameManager != null)
             {
                 gameManager.ReturnToMainMenu();
@@ -82,13 +115,49 @@ namespace Network
             if (string.IsNullOrEmpty(newTrailId)) return;
 
             Debug.Log($"[MatchSyncBridge] Cliente sincronizou trilha: {newTrailId} (Tema: {_theme})");
-            StartLocalMatch(_theme, newTrailId, PlayerSlot.PlayerTwo);
+
+            // A montagem da partida local pode falhar nesta ponta (ex.: JSON local desatualizado com
+            // uma trilha de tamanho diferente sob o mesmo Id). Sem tratamento, a excecao sobe dentro
+            // do hook de SyncVar e o cliente fica travado, sem UI e sem o aviso que o Host recebe.
+            try
+            {
+                StartLocalMatch(_theme, newTrailId, PlayerSlot.PlayerTwo);
+            }
+            catch (Exception ex)
+            {
+                RecoverFromMatchStartFailure(ex.Message);
+            }
+        }
+
+        // Nunca deixa a ponta local travada: tenta avisar o servidor e, independentemente do
+        // resultado do aviso, devolve esta maquina para o menu. Nenhuma excecao escapa daqui,
+        // porque este caminho roda dentro do hook de SyncVar do Mirror.
+        private void RecoverFromMatchStartFailure(string reason)
+        {
+            try
+            {
+                CmdNotifyMatchStartFailed(reason);
+            }
+            catch (Exception notifyEx)
+            {
+                Debug.LogError($"[MatchSyncBridge] Nao foi possivel avisar o servidor da falha: {notifyEx.Message}");
+            }
+
+            try
+            {
+                AbortLocalMatch(reason);
+            }
+            catch (Exception abortEx)
+            {
+                Debug.LogError($"[MatchSyncBridge] Falha ao devolver o cliente para o menu: {abortEx.Message}");
+            }
         }
 
         private void StartLocalMatch(string theme, string trailId, PlayerSlot slot)
         {
             gameManager.RequireOpponentResult = true;
             gameManager.StartMatch(theme, trailId, slot);
+            _matchAborted = false;
 
             // A Session só existe depois do StartMatch (no OnEnable ela ainda era nula,
             // então a assinatura antiga nunca acontecia e o placar não era enviado).
@@ -183,7 +252,8 @@ namespace Network
         {
             if (gameManager == null || gameManager.Session == null) return;
             EncodeSmells(localResult.DetectedSmells, out int[] smellTypes, out int[] smellSeverities, out string[] smellClasses);
-            CmdSendEvaluationResult((int)gameManager.Session.LocalSlot, localResult.RawScore, localResult.PenaltyScore,
+            CmdSendEvaluationResult(gameManager.Session.TurnManager.CurrentTurn, (int)gameManager.Session.LocalSlot,
+                localResult.RawScore, localResult.PenaltyScore,
                 smellTypes, smellSeverities, smellClasses);
         }
 
@@ -242,7 +312,7 @@ namespace Network
         }
 
         [Command(requiresAuthority = false)]
-        private void CmdSendEvaluationResult(int slotIndex, int rawScore, int penaltyScore,
+        private void CmdSendEvaluationResult(int turnNumber, int slotIndex, int rawScore, int penaltyScore,
             int[] smellTypes, int[] smellSeverities, string[] smellClasses,
             NetworkConnectionToClient sender = null)
         {
@@ -253,10 +323,10 @@ namespace Network
                 return;
             }
 
-            RpcReceiveEvaluationResult(slotIndex, rawScore, penaltyScore, smellTypes, smellSeverities, smellClasses);
+            RpcReceiveEvaluationResult(turnNumber, slotIndex, rawScore, penaltyScore, smellTypes, smellSeverities, smellClasses);
 
             _evaluatedSlots.Add(slot);
-            Debug.Log($"[MatchSyncBridge] Server: avaliação do slot {slot} recebida ({_evaluatedSlots.Count}/2)");
+            Debug.Log($"[MatchSyncBridge] Server: avaliação do slot {slot} do turno {turnNumber} recebida ({_evaluatedSlots.Count}/2)");
 
             if (_evaluatedSlots.Count >= 2)
             {
@@ -266,7 +336,7 @@ namespace Network
         }
 
         [ClientRpc]
-        private void RpcReceiveEvaluationResult(int targetSlot, int rawScore, int penaltyScore,
+        private void RpcReceiveEvaluationResult(int turnNumber, int targetSlot, int rawScore, int penaltyScore,
             int[] smellTypes, int[] smellSeverities, string[] smellClasses)
         {
             if (gameManager == null || gameManager.Session == null) return;
@@ -279,8 +349,8 @@ namespace Network
                 DecodeSmells(smellTypes, smellSeverities, smellClasses)
             );
 
-            Debug.Log($"[MatchSyncBridge] Slot rival {targetSlot} — raw:{rawScore} penalty:{penaltyScore} total:{rivalResult.TotalScore}");
-            gameManager.ReceiveOpponentEvaluation(rivalResult);
+            Debug.Log($"[MatchSyncBridge] Slot rival {targetSlot} (turno {turnNumber}) — raw:{rawScore} penalty:{penaltyScore} total:{rivalResult.TotalScore}");
+            gameManager.ReceiveOpponentEvaluation(turnNumber, rivalResult);
         }
     }
 }
