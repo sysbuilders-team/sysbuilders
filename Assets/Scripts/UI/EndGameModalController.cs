@@ -144,8 +144,10 @@ namespace UI
         {
             if (_endContext == null) return;
 
-            int p1Total = _endContext.PlayerOneHistory.Sum(r => r.TotalScore);
-            int p2Total = _endContext.PlayerTwoHistory.Sum(r => r.TotalScore);
+            // Placar oficial vindo do contexto (mesma regra do IScoreContext). Somar TotalScore do
+            // historico somaria o RawScore acumulado varias vezes e divergiria do placar do jogo.
+            int p1Total = _endContext.PlayerOneScore;
+            int p2Total = _endContext.PlayerTwoScore;
 
             bool isPlayerOne = _localSlot == PlayerSlot.PlayerOne;
             int myTotal = isPlayerOne ? p1Total : p2Total;
@@ -153,14 +155,16 @@ namespace UI
 
             if (_matchResultText != null)
             {
-                if (_endContext.IsDraw)
+                bool isDraw = _endContext.IsDraw || p1Total == p2Total;
+
+                if (isDraw)
                 {
                     _matchResultText.text = "EMPATE!";
                     _matchResultText.color = Color.yellow;
                 }
                 else
                 {
-                    bool won = isPlayerOne ? p1Total > p2Total : p2Total > p1Total;
+                    bool won = myTotal > oppTotal;
                     _matchResultText.text = won ? "VITÓRIA!" : "DERROTA!";
                     _matchResultText.color = won ? Color.green : Color.red;
                 }
@@ -176,12 +180,12 @@ namespace UI
 
             if (_playerSmellsReportText != null)
             {
-                _playerSmellsReportText.text = FormatSmellReport("Seus Code Smells", myHistory);
+                _playerSmellsReportText.text = FormatSmellReport("Seus Code Smells (estado final do diagrama)", myHistory);
             }
 
             if (_opponentSmellsReportText != null)
             {
-                _opponentSmellsReportText.text = FormatSmellReport("Code Smells do Adversário", oppHistory);
+                _opponentSmellsReportText.text = FormatSmellReport("Code Smells do Adversário (estado final do diagrama)", oppHistory);
             }
         }
 
@@ -192,9 +196,13 @@ namespace UI
                 return $"<b>{header}:</b>\nNenhum turno avaliado.";
             }
 
-            var allSmells = history.SelectMany(h => h.DetectedSmells).ToList();
+            // O detector roda sobre o diagrama INTEIRO a cada turno, entao concatenar o historico
+            // contaria o mesmo smell persistente uma vez por turno ("Ocorrencias: 5" para um unico
+            // problema nunca corrigido). O que interessa ao jogador e o estado final do diagrama:
+            // a ultima avaliacao. Um smell corrigido ao longo da partida deixa de ser reportado.
+            var finalSmells = history[history.Count - 1]?.DetectedSmells;
 
-            if (allSmells.Count == 0)
+            if (finalSmells == null || finalSmells.Count == 0)
             {
                 return $"<b>{header}:</b>\nNenhum Code Smell detectado! Arquitetura Limpa.";
             }
@@ -202,16 +210,19 @@ namespace UI
             var sb = new StringBuilder();
             sb.AppendLine($"<b>{header}:</b>");
 
-            var groupedByType = allSmells.GroupBy(s => s.Type);
-            foreach (var group in groupedByType)
+            foreach (var group in finalSmells.GroupBy(s => s.Type).OrderBy(g => g.Key))
             {
-                string smellName = TranslateSmell(group.Key);
-                int count = group.Count();
-                sb.AppendLine($"• {smellName} (Ocorrências: {count})");
+                // Agrupa pelo conjunto de classes afetadas para nao repetir a mesma linha no texto.
+                var occurrenceLines = group
+                    .GroupBy(occ => string.Join(", ", occ.AffectedClassNames))
+                    .Select(occGroup => occGroup.Key)
+                    .OrderBy(classes => classes, StringComparer.Ordinal)
+                    .ToList();
 
-                foreach (var occ in group)
+                sb.AppendLine($"• {TranslateSmell(group.Key)} (Ocorrências: {occurrenceLines.Count})");
+
+                foreach (var classes in occurrenceLines)
                 {
-                    string classes = string.Join(", ", occ.AffectedClassNames);
                     sb.AppendLine($"   - Classes: {classes}");
                 }
             }
