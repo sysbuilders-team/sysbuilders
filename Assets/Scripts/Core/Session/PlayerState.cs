@@ -1,4 +1,4 @@
-﻿using Core.Diagram;
+using Core.Diagram;
 using Core.Evaluation;
 using System.Collections.Generic;
 
@@ -28,16 +28,16 @@ namespace Core.Session
             RefactorCost = 1;
         }
 
-        public void AddClass(ClassNode classNode)
+        public bool AddClass(ClassNode classNode)
         {
-            if (classNode == null) return;
-            _classDiagram.AddClass(classNode);
+            if (classNode == null) return false;
+            return _classDiagram.AddClass(classNode);
         }
 
-        public void RemoveClass(ClassNode classNode)
+        public bool RemoveClass(ClassNode classNode)
         {
-            if (classNode == null) return;
-            _classDiagram.RemoveClass(classNode);
+            if (classNode == null) return false;
+            return _classDiagram.RemoveClass(classNode);
         }
 
         public void AddRefactorPoints(int points)
