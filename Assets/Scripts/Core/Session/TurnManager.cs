@@ -73,12 +73,12 @@ namespace Core.Session
         // some requirementmanager will subscribe to this, maybe also pass turn number, see this
         public event Action<TurnPhase> OnPhaseChange;
 
-        public TurnManager()
+        public TurnManager(int requiredPlayers = 2)
         {
             MaxTurns = 5; // TODO: Hardcoded as 5 because game will not have mutability of max number of turns, review
             CurrentTurn = 1;
             CurrentPhase = TurnPhase.Show;
-            _playerReadinessTracker = new PlayerReadinessTracker(2);
+            _playerReadinessTracker = new PlayerReadinessTracker(Math.Max(1, requiredPlayers));
         }
         
 

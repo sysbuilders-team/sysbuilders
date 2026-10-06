@@ -72,14 +72,15 @@ namespace Core.Session
             string playerTwoId,
             IReadOnlyList<Requirement> activeRequirements,
             PlayerSlot localSlot,
-            IEvaluationService evaluator = null)
+            IEvaluationService evaluator = null,
+            bool isNetworkMatch = false)
         {
             if (activeRequirements == null || activeRequirements.Count == 0)
                 throw new ArgumentException("A lista de requisitos não pode ser nula ou vazia.", nameof(activeRequirements));
 
             PlayerOne = new PlayerState(playerOneId);
             PlayerTwo = new PlayerState(playerTwoId);
-            TurnManager = new TurnManager();
+            TurnManager = new TurnManager(isNetworkMatch ? 2 : 1);
             _refactorHandler = new RefactorHandler();
             _evaluator = evaluator ?? new EvaluationEngine();
             _activeRequirements = activeRequirements;

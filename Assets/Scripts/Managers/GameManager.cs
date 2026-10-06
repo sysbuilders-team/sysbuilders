@@ -51,7 +51,7 @@ namespace Managers
             }
 
             var requirements = _requirementManager.GetTrailById(theme, trailId);
-            Session = new MatchSession("Jogador 1", "Jogador 2", requirements, localSlot);
+            Session = new MatchSession("Jogador 1", "Jogador 2", requirements, localSlot, isNetworkMatch: RequireOpponentResult);
             
             Session.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
             Session.TurnManager.OnPhaseChange += HandlePhaseChange;
@@ -151,11 +151,6 @@ namespace Managers
         private void HandleLocalReady()
         {
             OnLocalPlayerReady?.Invoke();
-
-            if (!RequireOpponentResult && Session != null)
-            {
-                Session.TurnManager.ForceAdvancePhase();
-            }
         }
 
         private void HandleCreateClassRequested()

@@ -182,71 +182,59 @@ namespace Tests.EditMode
         }
         #endregion
 
-        #region Item 1 & 2: Transição Solo vs Rede no GameManager
+        #region Item 1 & 2: Transição Solo vs Rede no TurnManager / MatchSession
         [Test]
-        public void HandleLocalReady_InSoloMode_AdvancesTurnManagerPhaseDirectly()
+        public void MatchSession_InSoloMode_SetPlayerReadyAdvancesPhaseAutomatically()
         {
-            var go = new GameObject("GameManagerSoloTest");
-            var gm = go.AddComponent<GameManager>();
-
-            try
+            var reqList = new List<Core.Requirements.Requirement>
             {
-                var turnManager = new TurnManager();
-                turnManager.ForceAdvancePhase(); // Show -> Build
-                Assert.AreEqual(TurnPhase.Build, turnManager.CurrentPhase);
+                new Core.Requirements.Requirement("req1", "Req 1", new List<Core.Diagram.MethodData>())
+            };
+            var session = new MatchSession("P1", "P2", reqList, PlayerSlot.PlayerOne, isNetworkMatch: false);
+            session.TurnManager.ForceAdvancePhase(); // Show -> Build
+            Assert.AreEqual(TurnPhase.Build, session.TurnManager.CurrentPhase);
 
-                // Configura GameManager para solo (RequireOpponentResult = false)
-                gm.RequireOpponentResult = false;
+            // Em modo solo (1 player necessário), SetPlayerReady atinge o quórum e avança direto
+            var result = session.SetPlayerReady(PlayerSlot.PlayerOne);
 
-                // Cria MatchSession com pelo menos 1 requisito e injeta
-                var reqList = new List<Core.Requirements.Requirement>
-                {
-                    new Core.Requirements.Requirement("req1", "Req 1", new List<Core.Diagram.MethodData>())
-                };
-                var session = new MatchSession("P1", "P2", reqList, PlayerSlot.PlayerOne);
-                session.TurnManager.ForceAdvancePhase(); // Move para Build
-                Assert.AreEqual(TurnPhase.Build, session.TurnManager.CurrentPhase);
-
-                SetPrivateField(gm, "<Session>k__BackingField", session);
-
-                // Invoca HandleLocalReady
-                InvokePrivate(gm, "HandleLocalReady");
-
-                Assert.AreEqual(TurnPhase.Evaluate, session.TurnManager.CurrentPhase, 
-                    "Em modo solo, HandleLocalReady deve avançar a fase imediatamente sem esperar rede.");
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(go);
-            }
+            Assert.AreEqual(SetPlayerReadyResult.Success, result);
+            Assert.AreEqual(TurnPhase.Evaluate, session.TurnManager.CurrentPhase, 
+                "Em modo solo, SetPlayerReady no TurnManager deve atingir o quórum de 1 e avançar direto na raiz.");
         }
 
         [Test]
-        public void HandleLocalReady_InNetworkMode_DoesNotAdvanceLocally()
+        public void MatchSession_InNetworkMode_SetPlayerReadyDoesNotAdvanceLocally()
         {
-            var go = new GameObject("GameManagerNetworkTest");
-            var gm = go.AddComponent<GameManager>();
+            var reqList = new List<Core.Requirements.Requirement>
+            {
+                new Core.Requirements.Requirement("req1", "Req 1", new List<Core.Diagram.MethodData>())
+            };
+            var session = new MatchSession("P1", "P2", reqList, PlayerSlot.PlayerOne, isNetworkMatch: true);
+            session.TurnManager.ForceAdvancePhase(); // Show -> Build
+            Assert.AreEqual(TurnPhase.Build, session.TurnManager.CurrentPhase);
+
+            // Em modo rede (2 players necessários), SetPlayerReady registra a prontidão (1/2), mas não avança até RpcAdvancePhase
+            var result = session.SetPlayerReady(PlayerSlot.PlayerOne);
+
+            Assert.AreEqual(SetPlayerReadyResult.Success, result);
+            Assert.AreEqual(TurnPhase.Build, session.TurnManager.CurrentPhase,
+                "Em modo rede, SetPlayerReady registra a prontidão (1/2), aguardando o RpcAdvancePhase do servidor.");
+        }
+        #endregion
+
+        #region Item 9: Failfast quando sorteio de trilha falhar no servidor
+        [Test]
+        public void OnStartServer_WhenRequirementManagerMissing_GracefullyAbortsWithoutException()
+        {
+            var go = new GameObject("BridgeFailTest");
+            go.AddComponent<NetworkIdentity>();
+            var bridge = go.AddComponent<MatchSyncBridge>();
 
             try
             {
-                gm.RequireOpponentResult = true; // Modo Rede
-
-                // Cria MatchSession com pelo menos 1 requisito e injeta
-                var reqList = new List<Core.Requirements.Requirement>
-                {
-                    new Core.Requirements.Requirement("req1", "Req 1", new List<Core.Diagram.MethodData>())
-                };
-                var session = new MatchSession("P1", "P2", reqList, PlayerSlot.PlayerOne);
-                session.TurnManager.ForceAdvancePhase(); // Move para Build
-                Assert.AreEqual(TurnPhase.Build, session.TurnManager.CurrentPhase);
-
-                SetPrivateField(gm, "<Session>k__BackingField", session);
-
-                // Invoca HandleLocalReady
-                InvokePrivate(gm, "HandleLocalReady");
-
-                Assert.AreEqual(TurnPhase.Build, session.TurnManager.CurrentPhase,
-                    "Em modo rede, HandleLocalReady NÃO deve avançar a fase localmente (aguarda RpcAdvancePhase do servidor).");
+                // OnStartServer com requirementManager nulo deve capturar o erro e não lançar exceção não tratada
+                LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex(".*Erro crítico ao iniciar partida no servidor.*"));
+                Assert.DoesNotThrow(() => bridge.OnStartServer());
             }
             finally
             {
