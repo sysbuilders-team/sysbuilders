@@ -135,12 +135,26 @@ namespace Tests.EditMode
             int scoreUpdatedCount = 0;
             session.OnScoreUpdated += () => scoreUpdatedCount++;
 
-            session.ReceiveOpponentResult(Result(100, 20));
+            session.ReceiveOpponentResult(1, Result(100, 20));
 
             Assert.AreEqual(1, session.PlayerTwoHistory.Count);
             Assert.AreEqual(1, scoreUpdatedCount);
             Assert.AreEqual(100, session.RoundOpponentPointsEarned);
             Assert.AreEqual(20, session.RoundOpponentPenaltyPoints);
+        }
+
+        [Test]
+        public void ReceiveOpponentResult_RepeatedOrOutOfOrderTurn_IsIgnored()
+        {
+            var session = NewSession();
+
+            Assert.IsTrue(session.ReceiveOpponentResult(1, Result(100, 20)));
+            Assert.IsFalse(session.ReceiveOpponentResult(1, Result(100, 20)), "turno repetido deve ser ignorado");
+            Assert.IsFalse(session.ReceiveOpponentResult(3, Result(300, 0)), "turno fora de ordem deve ser ignorado");
+            Assert.IsFalse(session.ReceiveOpponentResult(0, Result(300, 0)), "turno invalido deve ser ignorado");
+
+            Assert.AreEqual(1, session.PlayerTwoHistory.Count);
+            Assert.AreEqual(80, session.PlayerTwoScore);   // 100 - 20, sem inflar a soma de penalidades
         }
     }
 }

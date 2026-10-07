@@ -78,6 +78,13 @@ namespace Core.Session
             if (activeRequirements == null || activeRequirements.Count == 0)
                 throw new ArgumentException("A lista de requisitos não pode ser nula ou vazia.", nameof(activeRequirements));
 
+            // A duracao da partida e o tamanho da trilha (TurnManager.MaxTurns usa Trail.TurnCount):
+            // um numero diferente de requisitos deixaria turnos sem requisito ou requisitos ignorados.
+            if (activeRequirements.Count != Trail.TurnCount)
+                throw new ArgumentException(
+                    $"A partida exige {Trail.TurnCount} requisitos (um por turno); recebidos {activeRequirements.Count}.",
+                    nameof(activeRequirements));
+
             PlayerOne = new PlayerState(playerOneId);
             PlayerTwo = new PlayerState(playerTwoId);
             TurnManager = new TurnManager(isNetworkMatch ? 2 : 1);
@@ -114,12 +121,16 @@ namespace Core.Session
         }
 
         // Chamado pela camada de rede com o resultado que o rival calculou na máquina dele.
-        public void ReceiveOpponentResult(EvaluationResult result)
+        // O histórico do rival precisa de exatamente uma entrada por turno, em ordem: um RPC
+        // duplicado ou atrasado inflaria a soma das penalidades e corromperia o placar.
+        public bool ReceiveOpponentResult(int turnNumber, EvaluationResult result)
         {
-            if (result == null) return;
+            if (result == null || turnNumber <= 0) return false;
+            if (turnNumber != OpponentPlayer.EvaluationHistory.Count + 1) return false;
 
             OpponentPlayer.AddEvaluationResult(result);
             OnScoreUpdated?.Invoke();
+            return true;
         }
 
         private static int RoundRawDelta(PlayerState player)
@@ -161,11 +172,11 @@ namespace Core.Session
             return slot == PlayerSlot.PlayerOne ? PlayerOne : PlayerTwo;
         }
 
-        public void AddClassToPlayer(PlayerSlot slot, ClassNode classNode)
+        public bool AddClassToPlayer(PlayerSlot slot, ClassNode classNode)
         {
-            if (!CanModifyDiagram()) return;
+            if (!CanModifyDiagram() || classNode == null) return false;
 
-            GetPlayerBySlot(slot).AddClass(classNode);
+            return GetPlayerBySlot(slot).AddClass(classNode);
         }
 
         public SetPlayerReadyResult SetPlayerReady(PlayerSlot slot)
@@ -189,21 +200,22 @@ namespace Core.Session
         {
             createdNode = null;
             if (!CanModifyDiagram() || string.IsNullOrWhiteSpace(className)) return false;
-            createdNode = new ClassNode(className);
-            bool success = LocalPlayer.Diagram.Classes.All(c => c.Name != className);
-            if (success)
-            {
-                LocalPlayer.AddClass(createdNode);
-                OnDiagramChanged?.Invoke();
-                return true;
-            }
-            createdNode = null;
-            return false;
+
+            var newClass = new ClassNode(className);
+
+            // Quem decide se o nome ja existe e o proprio diagrama (indice por nome, O(1)):
+            // reportar sucesso sem verificar deixaria a UI contar uma classe que nao entrou.
+            if (!LocalPlayer.AddClass(newClass)) return false;
+
+            createdNode = newClass;
+            OnDiagramChanged?.Invoke();
+            return true;
         }
         public bool RemoveClass(ClassNode node)
         {
             if (!CanModifyDiagram() || node == null || node.IsLocked) return false;
-            LocalPlayer.RemoveClass(node);
+            if (!LocalPlayer.RemoveClass(node)) return false;
+
             OnDiagramChanged?.Invoke();
             return true;
         }

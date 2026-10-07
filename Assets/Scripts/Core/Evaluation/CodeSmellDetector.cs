@@ -81,7 +81,9 @@ namespace Core.Evaluation
             {
                 if (entry.Value.Count > 1)
                 {
-                    yield return new SmellOccurrence(CodeSmellType.DuplicateCode, entry.Value.ToList());
+                    // Severidade escala com o numero de classes que compartilham a mesma logica,
+                    // igual a LargeClass e LowCohesion (2 classes => 1, 3 classes => 2).
+                    yield return new SmellOccurrence(CodeSmellType.DuplicateCode, entry.Value.ToList(), entry.Value.Count - 1);
                 }
             }
         }
@@ -97,8 +99,10 @@ namespace Core.Evaluation
                     continue;
                 }
 
-                var pairKey = NormalizePair(relation.Origin, relation.Destination);
-                if (!seenPairs.Add(pairKey))
+                // Chave canonica por identidade de referencia: registrar os dois sentidos do par evita
+                // depender de ordenacao por hash (que colide e reportava o mesmo par duas vezes).
+                var pairKey = (relation.Origin, relation.Destination);
+                if (!seenPairs.Add(pairKey) || !seenPairs.Add((relation.Destination, relation.Origin)))
                 {
                     continue;
                 }
@@ -122,14 +126,6 @@ namespace Core.Evaluation
                         new List<string> { relation.Origin.Name, relation.Destination.Name });
                 }
             }
-        }
-
-        private static (ClassNode, ClassNode) NormalizePair(ClassNode a, ClassNode b)
-        {
-            return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(a)
-                   <= System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(b)
-                ? (a, b)
-                : (b, a);
         }
     }
 }

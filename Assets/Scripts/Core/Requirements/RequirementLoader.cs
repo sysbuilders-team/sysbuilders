@@ -38,24 +38,47 @@ namespace Core.Requirements
                 }
 
                 var trails = new List<Trail>();
+                var trailIds = new HashSet<string>(StringComparer.Ordinal);
 
                 foreach(var dto in trailDtos)
                 {
                     ValidateTrailDto(dto, theme);
-                    
+
+                    if (!trailIds.Add(dto.Id))
+                    {
+                        throw new FormatException($"A trilha '{dto.Id}' aparece mais de uma vez no tema '{theme}'.");
+                    }
+
                     var requirements = dto.RequirementsByTurn.Select(r =>
                     {
                         ValidateRequirementDto(r, dto.Id);
 
-                        var methods = r.RequiredMethods?
-                          .Select(m => new MethodData(m.Name, m.Category))
-                          .ToList() ?? new List<MethodData>();
+                        var methods = r.RequiredMethods
+                            .Select(m => new MethodData(m.Name, m.Category))
+                            .ToList();
 
                           return new Requirement(r.Id, r.Description ?? string.Empty, methods);
                     }).ToList();
 
-                    var trail = new Trail(dto.Id, theme, requirements);
-                    trails.Add(trail);
+                    // A duracao da partida e o tamanho da trilha (TurnManager.MaxTurns usa Trail.TurnCount):
+                    // um numero diferente de requisitos deixaria turnos sem requisito ou requisitos ignorados.
+                    if (requirements.Count != Trail.TurnCount)
+                    {
+                        throw new FormatException(
+                            $"A trilha '{dto.Id}' no tema '{theme}' tem {requirements.Count} requisitos; o esperado e {Trail.TurnCount}.");
+                    }
+
+                    var requirementIds = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (var requirement in requirements)
+                    {
+                        if (!requirementIds.Add(requirement.Id))
+                        {
+                            throw new FormatException(
+                                $"O requisito '{requirement.Id}' aparece mais de uma vez na trilha '{dto.Id}'.");
+                        }
+                    }
+
+                    trails.Add(new Trail(dto.Id, theme, requirements));
                 }
                 result[theme] = trails;
             }
@@ -64,6 +87,10 @@ namespace Core.Requirements
         
         private static void ValidateTrailDto(TrailDto dto, string theme)
         {
+            if (dto == null)
+            {
+                throw new FormatException($"Encontrada uma trilha nula no tema '{theme}'.");
+            }
             if (string.IsNullOrEmpty(dto.Id))
             {
                 throw new FormatException($"Encontrada uma trilha sem ID no tema '{theme}'.");
@@ -76,9 +103,25 @@ namespace Core.Requirements
 
         private static void ValidateRequirementDto(RequirementDto dto, string trailId)
         {
+            if (dto == null)
+            {
+                throw new FormatException($"Encontrado um requisito nulo na trilha '{trailId}'.");
+            }
             if (string.IsNullOrEmpty(dto.Id))
             {
                 throw new FormatException($"Encontrado um requisito sem ID na trilha '{trailId}'.");
+            }
+            // Requisito sem metodos exigidos nao e cumprivel: falhar na carga evita a pontuacao
+            // automatica de 100 por turno sem o jogador construir nada.
+            if (dto.RequiredMethods == null || dto.RequiredMethods.Count == 0)
+            {
+                throw new FormatException(
+                    $"O requisito '{dto.Id}' da trilha '{trailId}' nao define nenhum metodo exigido em 'RequiredMethods'.");
+            }
+            if (dto.RequiredMethods.Any(m => m == null))
+            {
+                throw new FormatException(
+                    $"O requisito '{dto.Id}' da trilha '{trailId}' contem um metodo nulo em 'RequiredMethods'.");
             }
         }
         private class TrailDto

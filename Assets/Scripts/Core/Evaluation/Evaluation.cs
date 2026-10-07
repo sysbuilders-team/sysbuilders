@@ -34,7 +34,8 @@ namespace Core.Evaluation
             }
 
             Type = type;
-            AffectedClassNames = affectedClassNames;
+            // Copia defensiva: a colecao exposta como IReadOnlyList nao pode continuar mutavel por quem a passou.
+            AffectedClassNames = new List<string>(affectedClassNames);
             Severity = severity;
         }
     }
@@ -57,8 +58,14 @@ namespace Core.Evaluation
             RawScore = rawScore;
             PenaltyScore = penaltyScore;
             TotalScore = Math.Max(0, rawScore - penaltyScore);
-            FulfilledRequirementIds = fulfilledRequirementIds ?? new List<string>();
-            DetectedSmells = detectedSmells ?? new List<SmellOccurrence>();
+            // Copias defensivas: o resultado fica no historico do jogador (e cruza a rede), entao nao pode
+            // compartilhar as colecoes que o produtor ainda pode mutar.
+            FulfilledRequirementIds = fulfilledRequirementIds == null
+                ? (IReadOnlyList<string>)Array.Empty<string>()
+                : new List<string>(fulfilledRequirementIds);
+            DetectedSmells = detectedSmells == null
+                ? (IReadOnlyList<SmellOccurrence>)Array.Empty<SmellOccurrence>()
+                : new List<SmellOccurrence>(detectedSmells);
         }
     }
 }

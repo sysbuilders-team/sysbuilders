@@ -221,11 +221,16 @@ namespace Managers
             TryScheduleAdvance();
         }
         
-        public void ReceiveOpponentEvaluation(EvaluationResult result)
+        public void ReceiveOpponentEvaluation(int turnNumber, EvaluationResult result)
         {
             if (Session == null) return;
 
-            Session.ReceiveOpponentResult(result);
+            if (!Session.ReceiveOpponentResult(turnNumber, result))
+            {
+                Debug.LogWarning($"[GameManager] Resultado do oponente ignorado (turno {turnNumber} fora de ordem ou duplicado).");
+                return;
+            }
+
             _opponentEvaluated = true;
         }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Core.Requirements;
 
 namespace Core.Session
 {
@@ -73,9 +74,16 @@ namespace Core.Session
         // some requirementmanager will subscribe to this, maybe also pass turn number, see this
         public event Action<TurnPhase> OnPhaseChange;
 
-        public TurnManager(int requiredPlayers = 2)
+        // requiredPlayers: 2 numa partida de rede, 1 numa partida solo/local (o unico jogador avanca sozinho).
+        // maxTurns: por padrao o tamanho de uma trilha, para nao existir uma segunda fonte de verdade para "5 turnos".
+        public TurnManager(int requiredPlayers = 2, int maxTurns = Trail.TurnCount)
         {
-            MaxTurns = 5; // TODO: Hardcoded as 5 because game will not have mutability of max number of turns, review
+            if (maxTurns < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxTurns), maxTurns, "A partida precisa de pelo menos um turno.");
+            }
+
+            MaxTurns = maxTurns;
             CurrentTurn = 1;
             CurrentPhase = TurnPhase.Show;
             _playerReadinessTracker = new PlayerReadinessTracker(Math.Max(1, requiredPlayers));
