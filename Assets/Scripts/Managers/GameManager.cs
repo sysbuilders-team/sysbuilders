@@ -23,6 +23,9 @@ namespace Managers
         [SerializeField] private EvaluationEndTurnController _evaluationModal;
         [SerializeField] private EndGameModalController _endGameModal;
 
+        [Header("Navegação")]
+        [SerializeField] private string _menuSceneName = "Menu";
+
 #if UNITY_EDITOR
         [Header("Editor Quick Test (Offline)")]
         [Tooltip("Quando ativado, inicia uma partida local automaticamente ao dar Play na GameScene se nenhuma partida online foi iniciada.")]
