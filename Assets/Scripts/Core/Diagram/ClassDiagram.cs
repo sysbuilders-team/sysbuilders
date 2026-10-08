@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Core.Diagram
@@ -5,6 +6,8 @@ namespace Core.Diagram
     public class ClassDiagram : IReadOnlyClassDiagram
     {
         private readonly List<ClassNode> _classes = new List<ClassNode>();
+        // Indice por nome: AddClass e FindClassByName deixam de varrer a lista (O(V) -> O(1)).
+        private readonly Dictionary<string, ClassNode> _classesByName = new Dictionary<string, ClassNode>(StringComparer.Ordinal);
         private readonly List<Relation> _relations = new List<Relation>();
 
         public IReadOnlyList<ClassNode> Classes => _classes;
@@ -13,8 +16,9 @@ namespace Core.Diagram
         public bool AddClass(ClassNode classNode)
         {
             if (classNode == null || string.IsNullOrWhiteSpace(classNode.Name)) return false;
-            if (_classes.Exists(x => x.Name == classNode.Name)) return false;
-            
+            if (_classesByName.ContainsKey(classNode.Name)) return false;
+
+            _classesByName.Add(classNode.Name, classNode);
             _classes.Add(classNode);
             return true;
         }
@@ -40,6 +44,7 @@ namespace Core.Diagram
             bool removed = _classes.Remove(classNode);
             if (removed)
             {
+                if (classNode.Name != null) _classesByName.Remove(classNode.Name);
                 _relations.RemoveAll(x => x.Origin == classNode || x.Destination == classNode);
             }
             
@@ -48,33 +53,59 @@ namespace Core.Diagram
 
         public ClassNode FindClassByName(string name)
         {
-            return _classes.Find(c => c.Name == name);
+            if (name == null) return null;
+            return _classesByName.TryGetValue(name, out var classNode) ? classNode : null;
         }
 
         public IReadOnlyList<IReadOnlyList<ClassNode>> GetConnectedComponents()
         {
-            var visited = new HashSet<ClassNode>();
-            var components = new List<IReadOnlyList<ClassNode>>();
-
+            // A adjacencia e montada numa unica passada pelas relacoes: o BFS fica O(V+E).
+            // Antes, cada no desenfileirado varria a lista completa de relacoes (O(V*E)).
+            var adjacency = new Dictionary<ClassNode, List<ClassNode>>(_classes.Count);
             foreach (var classNode in _classes)
             {
-                if (visited.Contains(classNode)) continue;
+                adjacency[classNode] = new List<ClassNode>();
+            }
+
+            foreach (var relation in _relations)
+            {
+                if (relation.Origin == null || relation.Destination == null || relation.Origin == relation.Destination)
+                {
+                    continue;
+                }
+
+                // Relacoes apontando para nos que nao pertencem ao diagrama sao ignoradas,
+                // como no comportamento anterior.
+                if (adjacency.TryGetValue(relation.Origin, out var originNeighbors) &&
+                    adjacency.TryGetValue(relation.Destination, out var destinationNeighbors))
+                {
+                    originNeighbors.Add(relation.Destination);
+                    destinationNeighbors.Add(relation.Origin);
+                }
+            }
+
+            var visited = new HashSet<ClassNode>();
+            var components = new List<IReadOnlyList<ClassNode>>();
+            var queue = new Queue<ClassNode>();
+
+            foreach (var start in _classes)
+            {
+                if (!visited.Add(start)) continue;
 
                 var component = new List<ClassNode>();
-                var queue = new Queue<ClassNode>();
-                queue.Enqueue(classNode);
-                visited.Add(classNode);
+                queue.Enqueue(start);
 
                 while (queue.Count > 0)
                 {
                     var current = queue.Dequeue();
                     component.Add(current);
 
-                    foreach (var neighbor in GetNeighbors(current))
+                    foreach (var neighbor in adjacency[current])
                     {
-                        if (visited.Contains(neighbor)) continue;
-                        visited.Add(neighbor);
-                        queue.Enqueue(neighbor);
+                        if (visited.Add(neighbor))
+                        {
+                            queue.Enqueue(neighbor);
+                        }
                     }
                 }
 
@@ -84,15 +115,6 @@ namespace Core.Diagram
             return components;
         }
 
-        private IEnumerable<ClassNode> GetNeighbors(ClassNode node)
-        {
-            foreach (var relation in _relations)
-            {
-                if (relation.Origin == node) yield return relation.Destination;
-                else if (relation.Destination == node) yield return relation.Origin;
-            }
-        }
-        
         public bool RemoveRelation(ClassNode origin, ClassNode destination)
         {
             if (origin == null || destination == null) return false;

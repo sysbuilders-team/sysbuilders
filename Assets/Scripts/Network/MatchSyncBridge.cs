@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Mirror;
 using UnityEngine;
@@ -9,6 +10,8 @@ namespace Network
 {
     public class MatchSyncBridge : NetworkBehaviour
     {
+        private const char ClassSeparator = '\u001f';
+
         [SerializeField] private GameManager gameManager;
         [SerializeField] private RequirementManager requirementManager;
 
@@ -16,10 +19,15 @@ namespace Network
         [SyncVar(hook = nameof(OnTrailSynced))] private string _trailId;
 
         private readonly HashSet<PlayerSlot> _readySlots = new HashSet<PlayerSlot>();
+        private readonly HashSet<PlayerSlot> _evaluatedSlots = new HashSet<PlayerSlot>();
+        private MatchSession _subscribedSession;
+        private bool _matchAborted;
 
         public override void OnStartServer()
         {
             base.OnStartServer();
+            _readySlots.Clear();
+            _evaluatedSlots.Clear();
 
             var roomManager = NetworkManager.singleton as GameRoomManager;
             _theme = roomManager != null && !string.IsNullOrEmpty(roomManager.ChosenTheme)
@@ -31,17 +39,74 @@ namespace Network
                 requirementManager = GetComponent<RequirementManager>() ?? FindFirstObjectByType<RequirementManager>();
             }
 
-            if (requirementManager == null)
+            try
             {
-                Debug.LogError("[MatchSyncBridge] RequirementManager não encontrado para sortear a trilha.");
-                return;
+                if (requirementManager == null)
+                {
+                    throw new InvalidOperationException("RequirementManager não encontrado para sortear a trilha.");
+                }
+
+                _trailId = requirementManager.GetRandomTrailId(_theme);
+
+                if (string.IsNullOrEmpty(_trailId))
+                {
+                    throw new InvalidOperationException($"Nenhuma trilha encontrada para o tema '{_theme}'.");
+                }
+
+                Debug.Log($"[MatchSyncBridge] Server: tema={_theme} | trail={_trailId}");
+
+                StartLocalMatch(_theme, _trailId, PlayerSlot.PlayerOne);
             }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[MatchSyncBridge] Erro crítico ao iniciar partida no servidor: {ex.Message}");
 
-            _trailId = requirementManager.GetRandomTrailId(_theme);
+                // Avisa os clientes (melhor esforco) e devolve o proprio servidor ao menu:
+                // nao depender do ClientRpc voltar para a ponta local.
+                if (NetworkServer.active)
+                {
+                    try
+                    {
+                        RpcNotifyMatchStartFailed(ex.Message);
+                    }
+                    catch (Exception notifyEx)
+                    {
+                        Debug.LogError($"[MatchSyncBridge] Nao foi possivel notificar os clientes da falha: {notifyEx.Message}");
+                    }
+                }
 
-            Debug.Log($"[MatchSyncBridge] Server: tema={_theme} | trail={_trailId}");
-            
-            gameManager.StartMatch(_theme, _trailId, PlayerSlot.PlayerOne);
+                AbortLocalMatch(ex.Message);
+            }
+        }
+
+        [ClientRpc]
+        private void RpcNotifyMatchStartFailed(string reason)
+        {
+            AbortLocalMatch(reason);
+        }
+
+        // Um cliente que nao conseguiu montar a partida avisa o servidor: sem isso o Host seguiria
+        // jogando sozinho, porque so o caminho de erro do servidor dispara RpcNotifyMatchStartFailed.
+        [Command(requiresAuthority = false)]
+        private void CmdNotifyMatchStartFailed(string reason)
+        {
+            Debug.LogError($"[MatchSyncBridge] Cliente reportou falha ao iniciar a partida: {reason}");
+            RpcNotifyMatchStartFailed(reason);
+        }
+
+        // Caminho unico de aborto (Host, Client e relay do servidor): loga e devolve a maquina
+        // local para o menu. Idempotente, porque no host o RPC chega tambem na ponta que reportou.
+        private void AbortLocalMatch(string reason)
+        {
+            if (_matchAborted) return;
+            _matchAborted = true;
+
+            Debug.LogError($"[MatchSyncBridge] Partida abortada: {reason}");
+
+            if (gameManager != null)
+            {
+                gameManager.ReturnToMainMenu();
+            }
         }
 
         private void OnTrailSynced(string oldTrailId, string newTrailId)
@@ -50,15 +115,78 @@ namespace Network
             if (string.IsNullOrEmpty(newTrailId)) return;
 
             Debug.Log($"[MatchSyncBridge] Cliente sincronizou trilha: {newTrailId} (Tema: {_theme})");
-            gameManager.StartMatch(_theme, newTrailId, PlayerSlot.PlayerTwo);
+
+            // A montagem da partida local pode falhar nesta ponta (ex.: JSON local desatualizado com
+            // uma trilha de tamanho diferente sob o mesmo Id). Sem tratamento, a excecao sobe dentro
+            // do hook de SyncVar e o cliente fica travado, sem UI e sem o aviso que o Host recebe.
+            try
+            {
+                StartLocalMatch(_theme, newTrailId, PlayerSlot.PlayerTwo);
+            }
+            catch (Exception ex)
+            {
+                RecoverFromMatchStartFailure(ex.Message);
+            }
+        }
+
+        // Nunca deixa a ponta local travada: tenta avisar o servidor e, independentemente do
+        // resultado do aviso, devolve esta maquina para o menu. Nenhuma excecao escapa daqui,
+        // porque este caminho roda dentro do hook de SyncVar do Mirror.
+        private void RecoverFromMatchStartFailure(string reason)
+        {
+            try
+            {
+                CmdNotifyMatchStartFailed(reason);
+            }
+            catch (Exception notifyEx)
+            {
+                Debug.LogError($"[MatchSyncBridge] Nao foi possivel avisar o servidor da falha: {notifyEx.Message}");
+            }
+
+            try
+            {
+                AbortLocalMatch(reason);
+            }
+            catch (Exception abortEx)
+            {
+                Debug.LogError($"[MatchSyncBridge] Falha ao devolver o cliente para o menu: {abortEx.Message}");
+            }
+        }
+
+        private void StartLocalMatch(string theme, string trailId, PlayerSlot slot)
+        {
+            gameManager.RequireOpponentResult = true;
+            gameManager.StartMatch(theme, trailId, slot);
+            _matchAborted = false;
+
+            // A Session só existe depois do StartMatch (no OnEnable ela ainda era nula,
+            // então a assinatura antiga nunca acontecia e o placar não era enviado).
+            if (gameManager.Session != null && _subscribedSession != gameManager.Session)
+            {
+                _subscribedSession = gameManager.Session;
+                _subscribedSession.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
+            }
         }
 
         public void NotifyLocalPlayerReady(PlayerSlot slot) => CmdSetReady((int)slot);
 
+        private bool IsSenderAuthorizedForSlot(NetworkConnectionToClient sender, PlayerSlot slot)
+        {
+            bool isHost = sender == null || sender == NetworkServer.localConnection;
+            if (slot == PlayerSlot.PlayerOne) return isHost;
+            if (slot == PlayerSlot.PlayerTwo) return !isHost;
+            return false;
+        }
+
         [Command(requiresAuthority = false)]
-        private void CmdSetReady(int slotIndex)
+        private void CmdSetReady(int slotIndex, NetworkConnectionToClient sender = null)
         {
             var slot = (PlayerSlot)slotIndex;
+            if (!IsSenderAuthorizedForSlot(sender, slot))
+            {
+                Debug.LogWarning($"[MatchSyncBridge] CmdSetReady rejeitado: conexão não autorizada para o slot {slot}.");
+                return;
+            }
             
             _readySlots.Add(slot);
             Debug.Log($"[MatchSyncBridge] Server: slot {slot} pronto ({_readySlots.Count}/2)");
@@ -79,34 +207,137 @@ namespace Network
         
         private void OnEnable()
         {
-            if (gameManager != null && gameManager.Session != null)
-            {
-                gameManager.Session.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
-            }
+            if (gameManager == null) return;
+
+            gameManager.OnLocalPlayerReady += HandleLocalPlayerReady;
+            gameManager.OnReturnToMenuRequested += HandleReturnToMenu;
         }
 
         private void OnDisable()
         {
-            if (gameManager != null && gameManager.Session != null)
+            if (gameManager == null) return;
+
+            gameManager.OnLocalPlayerReady -= HandleLocalPlayerReady;
+            gameManager.OnReturnToMenuRequested -= HandleReturnToMenu;
+        }
+
+        private void OnDestroy()
+        {
+            if (_subscribedSession != null)
             {
-                gameManager.Session.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
+                _subscribedSession.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
+                _subscribedSession = null;
+            }
+        }
+
+        private void HandleLocalPlayerReady()
+        {
+            if (gameManager == null || gameManager.Session == null) return;
+            NotifyLocalPlayerReady(gameManager.Session.LocalSlot);
+        }
+
+        private void HandleReturnToMenu()
+        {
+            if (NetworkServer.active)
+            {
+                NetworkManager.singleton.StopHost();
+            }
+            else if (NetworkClient.isConnected)
+            {
+                NetworkManager.singleton.StopClient();
             }
         }
 
         private void HandleLocalEvaluationCompleted(EvaluationResult localResult)
         {
             if (gameManager == null || gameManager.Session == null) return;
-            CmdSendEvaluationResult((int)gameManager.Session.LocalSlot, localResult.RawScore, localResult.PenaltyScore);
+            EncodeSmells(localResult.DetectedSmells, out int[] smellTypes, out int[] smellSeverities, out string[] smellClasses);
+            CmdSendEvaluationResult(gameManager.Session.TurnManager.CurrentTurn, (int)gameManager.Session.LocalSlot,
+                localResult.RawScore, localResult.PenaltyScore,
+                smellTypes, smellSeverities, smellClasses);
+        }
+
+        private const int MaxSmellsPerResult = 50;
+
+        // Só primitivos pela rede: os smells viajam como arrays (tipo, severidade, classes juntas por separador).
+        private static void EncodeSmells(IReadOnlyList<SmellOccurrence> smells,
+            out int[] types, out int[] severities, out string[] classes)
+        {
+            if (smells == null)
+            {
+                types = Array.Empty<int>();
+                severities = Array.Empty<int>();
+                classes = Array.Empty<string>();
+                return;
+            }
+
+            types = new int[smells.Count];
+            severities = new int[smells.Count];
+            classes = new string[smells.Count];
+
+            for (int i = 0; i < smells.Count; i++)
+            {
+                types[i] = (int)smells[i].Type;
+                severities[i] = smells[i].Severity;
+                var affected = smells[i].AffectedClassNames;
+                classes[i] = affected != null && affected.Count > 0
+                    ? string.Join(ClassSeparator.ToString(), affected)
+                    : string.Empty;
+            }
+        }
+
+        private static List<SmellOccurrence> DecodeSmells(int[] types, int[] severities, string[] classes)
+        {
+            var smells = new List<SmellOccurrence>();
+            if (types == null || severities == null || classes == null) return smells;
+
+            int count = Math.Min(Math.Min(types.Length, Math.Min(severities.Length, classes.Length)), MaxSmellsPerResult);
+            for (int i = 0; i < count; i++)
+            {
+                try
+                {
+                    var names = string.IsNullOrEmpty(classes[i])
+                        ? Array.Empty<string>()
+                        : classes[i].Split(ClassSeparator);
+
+                    smells.Add(new SmellOccurrence((CodeSmellType)types[i], names, Math.Max(1, severities[i])));
+                }
+                catch (ArgumentException)
+                {
+                    // dado inválido vindo da rede: ignora esta ocorrência
+                }
+            }
+
+            return smells;
         }
 
         [Command(requiresAuthority = false)]
-        private void CmdSendEvaluationResult(int slotIndex, int rawScore, int penaltyScore)
+        private void CmdSendEvaluationResult(int turnNumber, int slotIndex, int rawScore, int penaltyScore,
+            int[] smellTypes, int[] smellSeverities, string[] smellClasses,
+            NetworkConnectionToClient sender = null)
         {
-            RpcReceiveEvaluationResult(slotIndex, rawScore, penaltyScore);
+            var slot = (PlayerSlot)slotIndex;
+            if (!IsSenderAuthorizedForSlot(sender, slot))
+            {
+                Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejeitado: conexão não autorizada para o slot {slot}.");
+                return;
+            }
+
+            RpcReceiveEvaluationResult(turnNumber, slotIndex, rawScore, penaltyScore, smellTypes, smellSeverities, smellClasses);
+
+            _evaluatedSlots.Add(slot);
+            Debug.Log($"[MatchSyncBridge] Server: avaliação do slot {slot} do turno {turnNumber} recebida ({_evaluatedSlots.Count}/2)");
+
+            if (_evaluatedSlots.Count >= 2)
+            {
+                _evaluatedSlots.Clear();
+                RpcAdvancePhase();
+            }
         }
 
         [ClientRpc]
-        private void RpcReceiveEvaluationResult(int targetSlot, int rawScore, int penaltyScore)
+        private void RpcReceiveEvaluationResult(int turnNumber, int targetSlot, int rawScore, int penaltyScore,
+            int[] smellTypes, int[] smellSeverities, string[] smellClasses)
         {
             if (gameManager == null || gameManager.Session == null) return;
             if ((int)gameManager.Session.LocalSlot == targetSlot) return;
@@ -115,11 +346,11 @@ namespace Network
                 rawScore,
                 penaltyScore,
                 new List<string>(),
-                new List<SmellOccurrence>()
+                DecodeSmells(smellTypes, smellSeverities, smellClasses)
             );
 
-            Debug.Log($"[MatchSyncBridge] Slot rival {targetSlot} — raw:{rawScore} penalty:{penaltyScore} total:{rivalResult.TotalScore}");
-            gameManager.Session.GetPlayerBySlot((PlayerSlot)targetSlot).AddEvaluationResult(rivalResult);
+            Debug.Log($"[MatchSyncBridge] Slot rival {targetSlot} (turno {turnNumber}) — raw:{rawScore} penalty:{penaltyScore} total:{rivalResult.TotalScore}");
+            gameManager.ReceiveOpponentEvaluation(turnNumber, rivalResult);
         }
     }
 }

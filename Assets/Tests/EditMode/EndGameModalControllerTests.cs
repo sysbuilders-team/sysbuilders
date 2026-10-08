@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+using System;
+using System.Collections.Generic;
 using System.Reflection;
 using Core.Evaluation;
 using Core.Session;
@@ -19,6 +20,10 @@ namespace Tests.EditMode
 
             public IReadOnlyList<EvaluationResult> PlayerOneHistory => P1History;
             public IReadOnlyList<EvaluationResult> PlayerTwoHistory => P2History;
+
+            // Placar oficial, exposto explicitamente como no MatchSession (nao e a soma do historico).
+            public int PlayerOneScore { get; set; }
+            public int PlayerTwoScore { get; set; }
 
             public string WinnerName { get; set; } = "Alice";
             public bool IsDraw { get; set; } = false;
@@ -115,6 +120,8 @@ namespace Tests.EditMode
         {
             _endContext.P1History.Add(new EvaluationResult(50, 0, new List<string>(), new List<SmellOccurrence>()));
             _endContext.P2History.Add(new EvaluationResult(20, 0, new List<string>(), new List<SmellOccurrence>()));
+            _endContext.PlayerOneScore = 50;
+            _endContext.PlayerTwoScore = 20;
 
             _controller.Initialize(_endContext, _navActions, _turnManager, PlayerSlot.PlayerOne);
             _controller.ShowModal();
@@ -129,6 +136,8 @@ namespace Tests.EditMode
         {
             _endContext.P1History.Add(new EvaluationResult(10, 0, new List<string>(), new List<SmellOccurrence>()));
             _endContext.P2History.Add(new EvaluationResult(50, 0, new List<string>(), new List<SmellOccurrence>()));
+            _endContext.PlayerOneScore = 10;
+            _endContext.PlayerTwoScore = 50;
 
             _controller.Initialize(_endContext, _navActions, _turnManager, PlayerSlot.PlayerOne);
             _controller.ShowModal();
@@ -150,12 +159,115 @@ namespace Tests.EditMode
         }
 
         [Test]
+        public void ShowModal_UsesOfficialScore_InsteadOfSummingHistory()
+        {
+            // Historico de RawScore acumulado (100 -> 200) com penalidade no ultimo turno:
+            // somar TotalScore daria 300 e 150, mas o placar oficial e 170 e 100.
+            _endContext.P1History.Add(new EvaluationResult(100, 0, new List<string>(), new List<SmellOccurrence>()));
+            _endContext.P1History.Add(new EvaluationResult(200, 30, new List<string>(), new List<SmellOccurrence>()));
+            _endContext.P2History.Add(new EvaluationResult(50, 0, new List<string>(), new List<SmellOccurrence>()));
+            _endContext.P2History.Add(new EvaluationResult(100, 0, new List<string>(), new List<SmellOccurrence>()));
+            _endContext.PlayerOneScore = 170;
+            _endContext.PlayerTwoScore = 100;
+
+            _controller.Initialize(_endContext, _navActions, _turnManager, PlayerSlot.PlayerOne);
+            _controller.ShowModal();
+
+            StringAssert.Contains("Sua Pontuação: 170 pts", _finalScoreboardText.text);
+            StringAssert.Contains("Adversário: 100 pts", _finalScoreboardText.text);
+            StringAssert.Contains("VITÓRIA!", _matchResultText.text);
+        }
+
+        [Test]
+        public void ShowModal_WhenScoresAreEqual_ShowsEmpate()
+        {
+            _endContext.PlayerOneScore = 100;
+            _endContext.PlayerTwoScore = 100;
+            _endContext.IsDraw = false;   // contexto inconsistente: o empate pelos numeros deve prevalecer
+
+            _controller.Initialize(_endContext, _navActions, _turnManager, PlayerSlot.PlayerOne);
+            _controller.ShowModal();
+
+            StringAssert.Contains("EMPATE!", _matchResultText.text);
+        }
+
+        [Test]
+        public void ShowModal_WhenLocalSlotIsPlayerTwo_ShowsVitoriaWithPlayerTwoScore()
+        {
+            _endContext.PlayerOneScore = 80;
+            _endContext.PlayerTwoScore = 120;
+
+            _controller.Initialize(_endContext, _navActions, _turnManager, PlayerSlot.PlayerTwo);
+            _controller.ShowModal();
+
+            StringAssert.Contains("VITÓRIA!", _matchResultText.text);
+            StringAssert.Contains("Sua Pontuação: 120 pts", _finalScoreboardText.text);
+            StringAssert.Contains("Adversário: 80 pts", _finalScoreboardText.text);
+        }
+
+        [Test]
         public void MainMenuButtonClicked_InvokesNavigationAction()
         {
             _controller.Initialize(_endContext, _navActions, _turnManager, PlayerSlot.PlayerOne);
             _mainMenuBtn.onClick.Invoke();
 
             Assert.IsTrue(_navActions.ReturnToMainMenuCalled);
+        }
+
+        [Test]
+        public void ShowModal_WhenSameSmellPersistsAcrossTurns_CountsItOnce()
+        {
+            // O detector roda sobre o diagrama inteiro a cada turno: o mesmo LargeClass nunca
+            // corrigido aparece no DetectedSmells de todos os turnos e nao pode virar "Ocorrencias: 3".
+            var persistentSmell = new SmellOccurrence(CodeSmellType.LargeClass, new List<string> { "GerenciadorTudo" });
+
+            for (int turn = 0; turn < 3; turn++)
+            {
+                _endContext.P1History.Add(new EvaluationResult((turn + 1) * 100, 30, new List<string>(), new List<SmellOccurrence> { persistentSmell }));
+            }
+            _endContext.P2History.Add(new EvaluationResult(50, 0, new List<string>(), new List<SmellOccurrence> { persistentSmell }));
+            _endContext.PlayerOneScore = 170;
+            _endContext.PlayerTwoScore = 50;
+
+            _controller.Initialize(_endContext, _navActions, _turnManager, PlayerSlot.PlayerOne);
+            _controller.ShowModal();
+
+            StringAssert.Contains("(Ocorrências: 1)", _playerSmellsText.text);
+            Assert.AreEqual(1, CountOccurrences(_playerSmellsText.text, "GerenciadorTudo"),
+                $"a classe nao deve se repetir no relatorio:\n{_playerSmellsText.text}");
+
+            StringAssert.Contains("(Ocorrências: 1)", _opponentSmellsText.text);
+            Assert.AreEqual(1, CountOccurrences(_opponentSmellsText.text, "GerenciadorTudo"),
+                $"a classe nao deve se repetir no relatorio do adversario:\n{_opponentSmellsText.text}");
+        }
+
+        [Test]
+        public void ShowModal_WhenSmellWasFixedInLastTurn_DoesNotReportIt()
+        {
+            var smell = new SmellOccurrence(CodeSmellType.LargeClass, new List<string> { "GerenciadorTudo" });
+            _endContext.P1History.Add(new EvaluationResult(100, 30, new List<string>(), new List<SmellOccurrence> { smell }));
+            _endContext.P1History.Add(new EvaluationResult(200, 0, new List<string>(), new List<SmellOccurrence>()));
+
+            _controller.Initialize(_endContext, _navActions, _turnManager, PlayerSlot.PlayerOne);
+            _controller.ShowModal();
+
+            StringAssert.Contains("Arquitetura Limpa", _playerSmellsText.text);
+            StringAssert.Contains("estado final", _playerSmellsText.text);
+        }
+
+        private static int CountOccurrences(string text, string value)
+        {
+            if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(value)) return 0;
+
+            int count = 0;
+            int index = text.IndexOf(value, StringComparison.Ordinal);
+            while (index >= 0)
+            {
+                count++;
+                index = text.IndexOf(value, index + value.Length, StringComparison.Ordinal);
+            }
+
+            return count;
         }
 
         private static void SetPrivateField(object target, string fieldName, object value)

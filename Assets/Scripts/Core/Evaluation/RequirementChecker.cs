@@ -14,14 +14,19 @@ namespace Core.Evaluation
                 return new List<string>();
             }
 
-            var fulfilledIds = new HashSet<string>();
+            // Uma entrada por requisito AVALIADO (posicao), nao por Id: o RawScore do EvaluationEngine
+            // e calculado por posicao, entao dois requisitos com o mesmo Id precisam contar duas vezes.
+            var fulfilledIds = new List<string>(activeRequirements.Count);
             var components = diagram.GetConnectedComponents();
 
             foreach (var requirement in activeRequirements)
             {
+                if (requirement == null) continue;
+
+                // Requisito sem metodos exigidos e dado invalido: nao pode ser cumprido por vacuidade.
+                // O RequirementLoader rejeita essa trilha na carga; aqui a guarda e defesa em profundidade.
                 if (requirement.RequirementMethods == null || requirement.RequirementMethods.Count == 0)
                 {
-                    fulfilledIds.Add(requirement.Id);
                     continue;
                 }
 
@@ -40,7 +45,7 @@ namespace Core.Evaluation
                 }
             }
 
-            return fulfilledIds.ToList();
+            return fulfilledIds;
         }
     }
 }

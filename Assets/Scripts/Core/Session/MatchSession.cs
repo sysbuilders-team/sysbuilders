@@ -42,17 +42,20 @@ namespace Core.Session
 
         public string PlayerOneName => PlayerOne.Name;
         public string PlayerTwoName => PlayerTwo.Name;
-        public int PlayerOneScore => PlayerOne.EvaluationHistory.Sum(e => e.TotalScore);
-        public int PlayerTwoScore => PlayerTwo.EvaluationHistory.Sum(e => e.TotalScore);
+        // Regra B: o RawScore de cada avaliação já é acumulado (re-verifica todos os requisitos
+        // revelados) e a penalidade é recalculada por turno.
+        // Placar = RawScore da última avaliação - soma das penalidades de cada turno.
+        public int PlayerOneScore => CalculateScore(PlayerOne);
+        public int PlayerTwoScore => CalculateScore(PlayerTwo);
 
         public int RefactorPoints => LocalPlayer.RefactorPoints;
 
         public int RefactorCost => LocalPlayer.RefactorCost;
 
-        public int RoundPointsEarned => LocalPlayer.EvaluationHistory.LastOrDefault()?.RawScore ?? 0;
+        public int RoundPointsEarned => RoundRawDelta(LocalPlayer);
         public int RoundPenaltyPoints => LocalPlayer.EvaluationHistory.LastOrDefault()?.PenaltyScore ?? 0;
 
-        public int RoundOpponentPointsEarned => OpponentPlayer.EvaluationHistory.LastOrDefault()?.RawScore ?? 0;
+        public int RoundOpponentPointsEarned => RoundRawDelta(OpponentPlayer);
 
         public int RoundOpponentPenaltyPoints => OpponentPlayer.EvaluationHistory.LastOrDefault()?.PenaltyScore ?? 0;
 
@@ -74,14 +77,22 @@ namespace Core.Session
             string playerTwoId,
             IReadOnlyList<Requirement> activeRequirements,
             PlayerSlot localSlot,
-            IEvaluationService evaluator = null)
+            IEvaluationService evaluator = null,
+            bool isNetworkMatch = false)
         {
             if (activeRequirements == null || activeRequirements.Count == 0)
                 throw new ArgumentException("A lista de requisitos não pode ser nula ou vazia.", nameof(activeRequirements));
 
+            // A duracao da partida e o tamanho da trilha (TurnManager.MaxTurns usa Trail.TurnCount):
+            // um numero diferente de requisitos deixaria turnos sem requisito ou requisitos ignorados.
+            if (activeRequirements.Count != Trail.TurnCount)
+                throw new ArgumentException(
+                    $"A partida exige {Trail.TurnCount} requisitos (um por turno); recebidos {activeRequirements.Count}.",
+                    nameof(activeRequirements));
+
             PlayerOne = new PlayerState(playerOneId);
             PlayerTwo = new PlayerState(playerTwoId);
-            TurnManager = new TurnManager();
+            TurnManager = new TurnManager(isNetworkMatch ? 2 : 1);
             _refactorHandler = new RefactorHandler();
             _evaluator = evaluator ?? new EvaluationEngine();
             _activeRequirements = activeRequirements;
@@ -118,6 +129,36 @@ namespace Core.Session
             OnEvaluationCompleted?.Invoke(localResult);
         }
 
+        // Chamado pela camada de rede com o resultado que o rival calculou na máquina dele.
+        // O histórico do rival precisa de exatamente uma entrada por turno, em ordem: um RPC
+        // duplicado ou atrasado inflaria a soma das penalidades e corromperia o placar.
+        public bool ReceiveOpponentResult(int turnNumber, EvaluationResult result)
+        {
+            if (result == null || turnNumber <= 0) return false;
+            if (turnNumber != OpponentPlayer.EvaluationHistory.Count + 1) return false;
+
+            OpponentPlayer.AddEvaluationResult(result);
+            OnScoreUpdated?.Invoke();
+            return true;
+        }
+
+        private static int RoundRawDelta(PlayerState player)
+        {
+            var history = player.EvaluationHistory;
+            if (history.Count == 0) return 0;
+
+            int previousRaw = history.Count > 1 ? history[history.Count - 2].RawScore : 0;
+            return history[history.Count - 1].RawScore - previousRaw;
+        }
+
+        private static int CalculateScore(PlayerState player)
+        {
+            var history = player.EvaluationHistory;
+            if (history.Count == 0) return 0;
+
+            return history[history.Count - 1].RawScore - history.Sum(e => e.PenaltyScore);
+        }
+
         private IReadOnlyList<Requirement> GetRequirementsUpToCurrentTurn()
         {
             return _activeRequirements.Take(TurnManager.CurrentTurn).ToList();
@@ -140,11 +181,11 @@ namespace Core.Session
             return slot == PlayerSlot.PlayerOne ? PlayerOne : PlayerTwo;
         }
 
-        public void AddClassToPlayer(PlayerSlot slot, ClassNode classNode)
+        public bool AddClassToPlayer(PlayerSlot slot, ClassNode classNode)
         {
-            if (!CanModifyDiagram()) return;
+            if (!CanModifyDiagram() || classNode == null) return false;
 
-            GetPlayerBySlot(slot).AddClass(classNode);
+            return GetPlayerBySlot(slot).AddClass(classNode);
         }
 
         public SetPlayerReadyResult SetPlayerReady(PlayerSlot slot)
@@ -201,31 +242,17 @@ namespace Core.Session
         public bool TryCreateClass(string className, out ClassNode createdNode)
         {
             createdNode = null;
-            if (!CanModifyDiagram())
-            {
-                OnActionFailed?.Invoke("Só é possível criar classes na fase de construção.");
-                return false;
-            }
+            if (!CanModifyDiagram() || string.IsNullOrWhiteSpace(className)) return false;
 
-            if (string.IsNullOrWhiteSpace(className))
-            {
-                OnActionFailed?.Invoke("O nome da classe não pode estar em branco.");
-                return false;
-            }
+            var newClass = new ClassNode(className);
 
-            createdNode = new ClassNode(className);
-            bool success = LocalPlayer.Diagram.Classes.All(c => c.Name != className);
-            if (success)
-            {
-                LocalPlayer.AddClass(createdNode);
-                SelectClass(createdNode);
-                OnDiagramChanged?.Invoke();
-                return true;
-            }
+            // Quem decide se o nome ja existe e o proprio diagrama (indice por nome, O(1)):
+            // reportar sucesso sem verificar deixaria a UI contar uma classe que nao entrou.
+            if (!LocalPlayer.AddClass(newClass)) return false;
 
-            createdNode = null;
-            OnActionFailed?.Invoke($"Já existe uma classe chamada '{className}'.");
-            return false;
+            createdNode = newClass;
+            OnDiagramChanged?.Invoke();
+            return true;
         }
 
         public bool RemoveClass(ClassNode node)
@@ -236,6 +263,8 @@ namespace Core.Session
                 ClearSelection();
             }
             LocalPlayer.RemoveClass(node);
+            if (!LocalPlayer.RemoveClass(node)) return false;
+
             OnDiagramChanged?.Invoke();
             return true;
         }

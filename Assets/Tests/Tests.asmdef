@@ -4,7 +4,11 @@
         "Sys.Core",
         "Sys.Managers",
         "Sys.UI",
-        "Unity.TextMeshPro"
+        "Unity.TextMeshPro",
+        "Sys.Network",
+        "Mirror",
+        "Mirror.Components",
+        "Mirror.Transports"
     ],
     "includePlatforms": [
         "Editor"
