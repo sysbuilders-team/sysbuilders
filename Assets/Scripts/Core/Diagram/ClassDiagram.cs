@@ -25,8 +25,14 @@ namespace Core.Diagram
 
         public bool AddRelation(Relation relation)
         {
-            if (relation == null) return false;
-            
+            if (relation == null || relation.Origin == null || relation.Destination == null) return false;
+
+            bool alreadyExists = _relations.Exists(r => 
+                (r.Origin == relation.Origin && r.Destination == relation.Destination) ||
+                (r.Origin == relation.Destination && r.Destination == relation.Origin));
+
+            if (alreadyExists) return false;
+
             _relations.Add(relation);
             return true;
         }

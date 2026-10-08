@@ -23,8 +23,15 @@ namespace Managers
         [SerializeField] private EvaluationEndTurnController _evaluationModal;
         [SerializeField] private EndGameModalController _endGameModal;
 
-        [Header("Navegação")]
-        [SerializeField] private string _menuSceneName = "Menu"; 
+#if UNITY_EDITOR
+        [Header("Editor Quick Test (Offline)")]
+        [Tooltip("Quando ativado, inicia uma partida local automaticamente ao dar Play na GameScene se nenhuma partida online foi iniciada.")]
+        [SerializeField] private bool _autoStartInEditor = true;
+        [SerializeField] private string _editorTestTheme = "Biblioteca";
+        [SerializeField] private string _editorTestTrailId = "trail_biblioteca_01";
+
+        private bool _isEditorOfflineTest;
+#endif
 
         public MatchSession Session { get; private set; }
         public bool RequireOpponentResult { get; set; }
@@ -280,16 +287,76 @@ namespace Managers
             SceneManager.LoadScene(SceneManager.GetActiveScene().name);
         }
 
-        private void OnDestroy()
+#if UNITY_EDITOR
+        private void Start()
         {
-            UnwireUI();
+            // Se já foi iniciado (ex: MatchSyncBridge chamou StartMatch no Awake/OnStartServer), não faz nada.
+            if (Session != null) return;
 
-            if (Session != null)
+            if (_autoStartInEditor)
             {
-                Session.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
-                Session.TurnManager.OnPhaseChange -= HandlePhaseChange;
-                Session.Dispose();
+                Debug.Log("[GameManager] Modo de Teste Offline no Editor iniciado.");
+                _isEditorOfflineTest = true;
+                StartMatch(_editorTestTheme, _editorTestTrailId, PlayerSlot.PlayerOne);
+
+                if (Session != null)
+                {
+                    Session.OnEvaluationCompleted += HandleEditorOfflineEvaluationCompleted;
+
+                    // Avança da fase Show para Build para permitir teste imediato da diagramação no Turno 1
+                    if (Session.TurnManager.CurrentPhase == TurnPhase.Show)
+                    {
+                        Session.TurnManager.ForceAdvancePhase();
+                    }
+                }
+
+                // Em modo offline de teste no editor, simula prontidão do Player 2 para permitir fluxo de turnos
+                if (_rightBar != null)
+                {
+                    _rightBar.OnEndTurnTriggered += HandleEditorOfflinePlayerReady;
+                }
+                if (_evaluationModal != null)
+                {
+                    _evaluationModal.OnAdvanceClicked += HandleEditorOfflinePlayerReady;
+                }
             }
         }
+
+        private void HandleEditorOfflinePlayerReady()
+        {
+            if (!_isEditorOfflineTest || Session == null) return;
+            // No modo teste local, marca o Player 2 pronto para que o TurnManager avance de fase sem rede
+            Session.SetPlayerReady(PlayerSlot.PlayerTwo);
+        }
+
+        private void HandleEditorOfflineEvaluationCompleted(Core.Evaluation.EvaluationResult result)
+        {
+            if (!_isEditorOfflineTest || Session == null) return;
+            // Após a avaliação do jogador local, avança automaticamente de Evaluate para Show para abrir a modal avaliativa
+            if (Session.TurnManager.CurrentPhase == TurnPhase.Evaluate)
+            {
+                Session.TurnManager.ForceAdvancePhase();
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (_isEditorOfflineTest)
+            {
+                if (_rightBar != null)
+                {
+                    _rightBar.OnEndTurnTriggered -= HandleEditorOfflinePlayerReady;
+                }
+                if (_evaluationModal != null)
+                {
+                    _evaluationModal.OnAdvanceClicked -= HandleEditorOfflinePlayerReady;
+                }
+                if (Session != null)
+                {
+                    Session.OnEvaluationCompleted -= HandleEditorOfflineEvaluationCompleted;
+                }
+            }
+        }
+#endif
     }
 }

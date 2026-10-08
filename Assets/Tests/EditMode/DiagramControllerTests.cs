@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Core.Diagram;
@@ -55,7 +55,30 @@ namespace Tests.EditMode
                 return true;
             }
 
+            public ClassNode SelectedClass { get; private set; }
+            public void SelectClass(ClassNode node)
+            {
+                SelectedClass = node;
+                OnClassSelected?.Invoke(node);
+            }
+            public void ClearSelection()
+            {
+                SelectedClass = null;
+                OnClassSelected?.Invoke(null);
+            }
+            public event Action<ClassNode> OnClassSelected;
+
+            public bool IsAssociationMode { get; private set; }
+            public void SetAssociationMode(bool active)
+            {
+                IsAssociationMode = active;
+                OnAssociationModeChanged?.Invoke(active);
+            }
+            public event Action<bool> OnAssociationModeChanged;
+            public event Action<string> OnActionFailed;
+
             public void TriggerDiagramChanged() => OnDiagramChanged?.Invoke();
+            public void TriggerActionFailed(string msg) => OnActionFailed?.Invoke(msg);
         }
 
         private GameObject _go;
@@ -138,6 +161,47 @@ namespace Tests.EditMode
             Assert.AreEqual(nodeA, _actions.CreatedRelations[0].Origin);
             Assert.AreEqual(nodeB, _actions.CreatedRelations[0].Destination);
             Assert.IsFalse(_controller.IsAssociationMode);
+        }
+
+        [Test]
+        public void PointerClick_InNormalMode_SelectsClassOnDiagramActions()
+        {
+            var nodeA = new ClassNode("Usuario");
+            _diagram.AddClass(nodeA);
+
+            _controller.Initialize(_diagram, _actions);
+            var uiA = _controller.ActiveNodes["Usuario"];
+
+            uiA.OnPointerClick(null);
+
+            Assert.AreEqual(nodeA, _actions.SelectedClass);
+            Assert.AreEqual(uiA, _controller.SelectedNode);
+        }
+
+        [Test]
+        public void DiagramActions_OnClassSelected_UpdatesDiagramControllerSelectedNode()
+        {
+            var nodeA = new ClassNode("Usuario");
+            _diagram.AddClass(nodeA);
+
+            _controller.Initialize(_diagram, _actions);
+            var uiA = _controller.ActiveNodes["Usuario"];
+
+            _actions.SelectClass(nodeA);
+
+            Assert.AreEqual(uiA, _controller.SelectedNode);
+        }
+
+        [Test]
+        public void DiagramActions_OnActionFailed_FiresOnFeedbackMessage()
+        {
+            _controller.Initialize(_diagram, _actions);
+            string receivedMessage = null;
+            _controller.OnFeedbackMessage += msg => receivedMessage = msg;
+
+            _actions.TriggerActionFailed("Erro de teste");
+
+            Assert.AreEqual("Erro de teste", receivedMessage);
         }
 
         private static void SetPrivateField(object target, string fieldName, object value)

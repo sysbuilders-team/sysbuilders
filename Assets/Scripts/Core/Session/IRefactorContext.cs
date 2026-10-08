@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Core.Diagram;
 
 namespace Core.Session
@@ -9,6 +9,8 @@ namespace Core.Session
         int RefactorCost { get; }
         bool CanRefactor(ClassNode classNode);
         bool TryRefactorClass(ClassNode classNode);
+        bool CanRefactorSelected();
+        bool TryRefactorSelectedClass();
         event Action<int> OnRefactorPointsChanged;
     }
 }

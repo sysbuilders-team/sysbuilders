@@ -66,6 +66,11 @@ namespace Core.Session
         public string WinnerName => IsDraw ? null : (PlayerOneScore > PlayerTwoScore) ? PlayerOneName : PlayerTwoName;
         
         public event Action OnDiagramChanged;
+        public event Action<string> OnActionFailed;
+        public ClassNode SelectedClass { get; private set; }
+        public bool IsAssociationMode { get; private set; }
+        public event Action<ClassNode> OnClassSelected;
+        public event Action<bool> OnAssociationModeChanged;
 
         public MatchSession(
             string playerOneId,
@@ -100,11 +105,15 @@ namespace Core.Session
             switch (newPhase)
             {
                 case TurnPhase.Evaluate:
+                    ClearSelection();
+                    SetAssociationMode(false);
                     PlayerOne.LockAllClasses();
                     PlayerTwo.LockAllClasses();
                     EvaluateLocalPlayer();
                     break;
                 case TurnPhase.Show:
+                    ClearSelection();
+                    SetAssociationMode(false);
                     OnRequirementChanged?.Invoke(CurrentRequirement);
                     break;
             }
@@ -191,11 +200,45 @@ namespace Core.Session
 
         public bool CanRefactor(ClassNode classNode)
         {
-            if (!CanModifyDiagram() || !classNode.IsLocked || LocalPlayer.RefactorPoints < LocalPlayer.RefactorCost)
+            if (!CanModifyDiagram() || classNode == null || !classNode.IsLocked || LocalPlayer.RefactorPoints < LocalPlayer.RefactorCost)
                 return false;
             
             return true;
         }
+
+        public bool CanRefactorSelected()
+        {
+            return SelectedClass != null && CanRefactor(SelectedClass);
+        }
+
+        public bool TryRefactorSelectedClass()
+        {
+            if (SelectedClass == null) return false;
+            return TryRefactorClass(SelectedClass);
+        }
+
+        public void SelectClass(ClassNode node)
+        {
+            if (!CanModifyDiagram()) return;
+            SelectedClass = node;
+            OnClassSelected?.Invoke(SelectedClass);
+        }
+
+        public void ClearSelection()
+        {
+            if (SelectedClass == null) return;
+            SelectedClass = null;
+            OnClassSelected?.Invoke(null);
+        }
+
+        public void SetAssociationMode(bool active)
+        {
+            if (!CanModifyDiagram() && active) return;
+            if (IsAssociationMode == active) return;
+            IsAssociationMode = active;
+            OnAssociationModeChanged?.Invoke(IsAssociationMode);
+        }
+
         public bool TryCreateClass(string className, out ClassNode createdNode)
         {
             createdNode = null;
@@ -211,21 +254,42 @@ namespace Core.Session
             OnDiagramChanged?.Invoke();
             return true;
         }
+
         public bool RemoveClass(ClassNode node)
         {
             if (!CanModifyDiagram() || node == null || node.IsLocked) return false;
+            if (SelectedClass == node)
+            {
+                ClearSelection();
+            }
+            LocalPlayer.RemoveClass(node);
             if (!LocalPlayer.RemoveClass(node)) return false;
 
             OnDiagramChanged?.Invoke();
             return true;
         }
+
         public bool AddMethodToClass(ClassNode node, MethodData method)
         {
-            if (!CanModifyDiagram() || node == null || method == null || node.IsLocked) return false;
+            if (!CanModifyDiagram())
+            {
+                OnActionFailed?.Invoke("Só é possível adicionar métodos na fase de construção.");
+                return false;
+            }
+
+            if (node == null || method == null) return false;
+
+            if (node.IsLocked)
+            {
+                OnActionFailed?.Invoke($"A classe '{node.Name}' está congelada. Refatore-a para alterar métodos.");
+                return false;
+            }
+
             node.AddMethod(method);
             OnDiagramChanged?.Invoke();
             return true;
         }
+
         public bool RemoveMethodFromClass(ClassNode node, MethodData method)
         {
             if (!CanModifyDiagram() || node == null || method == null || node.IsLocked) return false;
@@ -236,17 +300,40 @@ namespace Core.Session
             }
             return removed;
         }
+
         public bool AddRelation(ClassNode origin, ClassNode destination, RelationType type = RelationType.Association)
         {
-            if (!CanModifyDiagram() || origin == null || destination == null || origin == destination) return false;
+            if (!CanModifyDiagram())
+            {
+                OnActionFailed?.Invoke("Só é possível criar associações na fase de construção.");
+                return false;
+            }
+
+            if (origin == null || destination == null) return false;
+
+            if (origin == destination)
+            {
+                OnActionFailed?.Invoke("Não é possível associar uma classe a si mesma.");
+                return false;
+            }
+
             var relation = new Relation(origin, destination, type);
             bool added = LocalPlayer.AddRelation(relation);
             if (added)
             {
+                if (IsAssociationMode)
+                {
+                    SetAssociationMode(false);
+                }
                 OnDiagramChanged?.Invoke();
+            }
+            else
+            {
+                OnActionFailed?.Invoke("As classes selecionadas já possuem uma associação.");
             }
             return added;
         }
+
         public bool RemoveRelation(ClassNode origin, ClassNode destination)
         {
             if (!CanModifyDiagram() || origin == null || destination == null) return false;

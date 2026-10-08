@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Core.Diagram;
@@ -39,7 +39,29 @@ namespace Tests.EditMode
             public bool RemoveMethodFromClass(ClassNode node, MethodData method) => true;
             public bool AddRelation(ClassNode origin, ClassNode destination, RelationType type = RelationType.Association) => true;
             public bool RemoveRelation(ClassNode origin, ClassNode destination) => true;
+            public ClassNode SelectedClass { get; private set; }
+            public void SelectClass(ClassNode node)
+            {
+                SelectedClass = node;
+                OnClassSelected?.Invoke(node);
+            }
+            public void ClearSelection()
+            {
+                SelectedClass = null;
+                OnClassSelected?.Invoke(null);
+            }
+            public event Action<ClassNode> OnClassSelected;
+
+            public bool IsAssociationMode { get; private set; }
+            public void SetAssociationMode(bool active)
+            {
+                IsAssociationMode = active;
+                OnAssociationModeChanged?.Invoke(active);
+            }
+            public event Action<bool> OnAssociationModeChanged;
+
             public event Action OnDiagramChanged;
+            public event Action<string> OnActionFailed;
         }
 
         private GameObject _go;
@@ -160,6 +182,40 @@ namespace Tests.EditMode
             _controller.SetAssociationMode(false);
             Assert.IsFalse(_controller.IsAssociationModeActive);
             StringAssert.Contains("Criar Associação", _assocBtnText.text);
+        }
+
+        [Test]
+        public void CreateClassButton_WhenClicked_CallsTryCreateClassAndIncrementsCounter()
+        {
+            _controller.Initialize(_requirementContext, _diagramActions, _turnManager);
+            _turnManager.SetPlayerReady(PlayerSlot.PlayerOne);
+            _turnManager.SetPlayerReady(PlayerSlot.PlayerTwo); // Now in Build phase
+
+            _createClassBtn.onClick.Invoke();
+
+            Assert.AreEqual(1, _controller.ClassesCreatedThisTurn);
+            StringAssert.Contains("1/2", _createClassBtnText.text);
+        }
+
+        [Test]
+        public void MethodCardClicked_WhenClassSelected_CallsAddMethodToClass()
+        {
+            _controller.Initialize(_requirementContext, _diagramActions, _turnManager);
+            var selectedNode = new ClassNode("Usuario");
+            _diagramActions.SelectClass(selectedNode);
+
+            var req = new Requirement("req_1", "Desc", new List<MethodData>
+            {
+                new MethodData("Cadastrar", "Usuario")
+            });
+            _requirementContext.TriggerRequirementChanged(req);
+
+            Assert.AreEqual(1, _controller.ActiveCards.Count);
+            var cardButton = _controller.ActiveCards[0].GetComponent<Button>();
+            cardButton.onClick.Invoke();
+
+            Assert.AreEqual(1, selectedNode.Methods.Count);
+            Assert.AreEqual("Cadastrar", selectedNode.Methods[0].Name);
         }
 
         private static void SetPrivateField(object target, string fieldName, object value)

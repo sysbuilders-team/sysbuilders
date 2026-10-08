@@ -1,7 +1,9 @@
-﻿using System;
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Core.Diagram;
+using TMPro;
 using UnityEngine;
 
 namespace UI
@@ -12,6 +14,11 @@ namespace UI
         [SerializeField] private RectTransform _diagramContent;
         [SerializeField] private GameObject _classNodePrefab;
         [SerializeField] private GameObject _associationLinePrefab;
+
+        [Header("Feedback Toast (Optional)")]
+        [SerializeField] private TMP_Text _feedbackText;
+        [SerializeField] private GameObject _feedbackContainer;
+        private Coroutine _feedbackCoroutine;
 
         private IReadOnlyClassDiagram _diagram;
         private IDiagramActions _diagramActions;
@@ -29,6 +36,7 @@ namespace UI
 
         public event Action<ClassNode> OnNodeSelected;
         public event Action<Relation> OnAssociationCreated;
+        public event Action<string> OnFeedbackMessage;
 
         public void Initialize(IReadOnlyClassDiagram diagram, IDiagramActions diagramActions)
         {
@@ -38,8 +46,11 @@ namespace UI
             _diagramActions = diagramActions ?? throw new ArgumentNullException(nameof(diagramActions));
 
             _diagramActions.OnDiagramChanged += HandleDiagramChanged;
+            _diagramActions.OnClassSelected += HandleClassSelected;
+            _diagramActions.OnAssociationModeChanged += HandleAssociationModeChanged;
+            _diagramActions.OnActionFailed += HandleActionFailed;
 
-            _isAssociationMode = false;
+            _isAssociationMode = _diagramActions.IsAssociationMode;
             _selectedNodeUI = null;
 
             RenderDiagram();
@@ -56,6 +67,9 @@ namespace UI
             if (_diagramActions != null)
             {
                 _diagramActions.OnDiagramChanged -= HandleDiagramChanged;
+                _diagramActions.OnClassSelected -= HandleClassSelected;
+                _diagramActions.OnAssociationModeChanged -= HandleAssociationModeChanged;
+                _diagramActions.OnActionFailed -= HandleActionFailed;
             }
         }
 
@@ -64,9 +78,41 @@ namespace UI
             RenderDiagram();
         }
 
+        private void HandleClassSelected(ClassNode selectedNode)
+        {
+            if (_selectedNodeUI != null)
+            {
+                _selectedNodeUI.SetSelected(false);
+                _selectedNodeUI = null;
+            }
+
+            if (selectedNode != null && _activeNodeUIs.TryGetValue(selectedNode.Name, out var nodeUI))
+            {
+                _selectedNodeUI = nodeUI;
+                _selectedNodeUI.SetSelected(true);
+            }
+
+            OnNodeSelected?.Invoke(selectedNode);
+        }
+
+        private void HandleAssociationModeChanged(bool active)
+        {
+            _isAssociationMode = active;
+            if (!active && _selectedNodeUI != null)
+            {
+                _selectedNodeUI.SetSelected(false);
+                _selectedNodeUI = null;
+            }
+        }
+
         public void SetAssociationMode(bool active)
         {
             _isAssociationMode = active;
+            if (_diagramActions != null && _diagramActions.IsAssociationMode != active)
+            {
+                _diagramActions.SetAssociationMode(active);
+            }
+
             if (!active && _selectedNodeUI != null)
             {
                 _selectedNodeUI.SetSelected(false);
@@ -96,12 +142,10 @@ namespace UI
         public void RenderDiagram()
         {
             if (_diagram == null || _diagramContent == null) return;
-
-            // 1. Sync Class Nodes
+            
             var currentClasses = _diagram.Classes;
             var currentClassNames = new HashSet<string>(currentClasses.Select(c => c.Name));
-
-            // Remove destroyed nodes
+            
             var toRemove = _activeNodeUIs.Keys.Where(name => !currentClassNames.Contains(name)).ToList();
             foreach (var name in toRemove)
             {
@@ -110,8 +154,7 @@ namespace UI
                 DestroyNodeGameObject(nodeUI.gameObject);
                 _activeNodeUIs.Remove(name);
             }
-
-            // Add or update nodes
+            
             foreach (var classNode in currentClasses)
             {
                 if (!_activeNodeUIs.TryGetValue(classNode.Name, out var nodeUI))
@@ -120,9 +163,14 @@ namespace UI
                     _activeNodeUIs[classNode.Name] = nodeUI;
                 }
                 nodeUI.Bind(classNode);
+                bool isSelected = _diagramActions != null && _diagramActions.SelectedClass == classNode;
+                nodeUI.SetSelected(isSelected);
+                if (isSelected)
+                {
+                    _selectedNodeUI = nodeUI;
+                }
             }
-
-            // 2. Sync Association Lines
+            
             RenderRelations();
         }
 
@@ -140,6 +188,9 @@ namespace UI
             }
 
             var nodeUI = nodeGo.GetComponent<ClassNodeUI>() ?? nodeGo.AddComponent<ClassNodeUI>();
+            nodeUI.RectTransform.anchorMin = new Vector2(0f, 1f);
+            nodeUI.RectTransform.anchorMax = new Vector2(0f, 1f);
+            nodeUI.RectTransform.pivot = new Vector2(0.5f, 0.5f);
             nodeUI.RectTransform.anchoredPosition = _nextSpawnPosition;
             _nextSpawnPosition += new Vector2(160f, -40f);
 
@@ -229,14 +280,14 @@ namespace UI
             }
             else
             {
-                if (_selectedNodeUI != null)
+                if (_selectedNodeUI == clickedNodeUI)
                 {
-                    _selectedNodeUI.SetSelected(false);
+                    _diagramActions.ClearSelection();
                 }
-
-                _selectedNodeUI = clickedNodeUI;
-                _selectedNodeUI.SetSelected(true);
-                OnNodeSelected?.Invoke(clickedNodeUI.Node);
+                else
+                {
+                    _diagramActions.SelectClass(clickedNodeUI.Node);
+                }
             }
         }
 
@@ -272,6 +323,34 @@ namespace UI
             {
                 DestroyImmediate(go);
             }
+        }
+
+        private void HandleActionFailed(string message)
+        {
+            Debug.LogWarning($"[DiagramController] {message}");
+            OnFeedbackMessage?.Invoke(message);
+
+            if (_feedbackText != null)
+            {
+                if (_feedbackCoroutine != null)
+                {
+                    StopCoroutine(_feedbackCoroutine);
+                }
+                _feedbackCoroutine = StartCoroutine(ShowFeedbackRoutine(message));
+            }
+        }
+
+        private IEnumerator ShowFeedbackRoutine(string message)
+        {
+            _feedbackText.text = message;
+            if (_feedbackContainer != null) _feedbackContainer.SetActive(true);
+            else _feedbackText.gameObject.SetActive(true);
+
+            yield return new WaitForSeconds(2.5f);
+
+            if (_feedbackContainer != null) _feedbackContainer.SetActive(false);
+            else _feedbackText.gameObject.SetActive(false);
+            _feedbackCoroutine = null;
         }
     }
 }
