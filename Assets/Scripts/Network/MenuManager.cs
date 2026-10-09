@@ -1,12 +1,15 @@
+using System;
 using System.Net;
 using System.Net.Sockets;
+using Core.Discovery;
 using Mirror;
+using Network.Discovery;
 using TMPro;
 using UnityEngine;
 
 namespace Network
 {
-    public class MenuManager : MonoBehaviour
+    public class MenuManager : MonoBehaviour, IRoomJoinActions
     {
         [Header("Painéis de Navegação")]
         [SerializeField] private GameObject _startPanel;
@@ -15,13 +18,54 @@ namespace Network
         [SerializeField] private GameObject _tutorialPanel;
 
         [Header("Referências de Rede")]
-        [SerializeField] private SysNetworkDiscovery _networkDiscovery;
+        [Tooltip("Deixe vazio: o serviço é criado/obtido no mesmo GameObject do NetworkManager.")]
+        [SerializeField] private RoomDiscoveryService _discovery;
         [SerializeField] private TMP_InputField _playerNameInputField;
         [SerializeField] private TMP_InputField _ipInputField;
         [SerializeField] private TMP_Text _localIpText;
+        [SerializeField] private TMP_Text _discoveryStatusText;
+
+        private string _sessionId;
+        private RoomAdvertisement _advertisement;
+
+        public RoomDiscoveryService Discovery => _discovery;
+
+        private void Awake()
+        {
+            _sessionId = Guid.NewGuid().ToString("N");
+        }
+
+        /// <summary>
+        /// Resolve o serviço de descoberta sob demanda.
+        ///
+        /// Ele NÃO pode ser criado neste GameObject: o MenuManager vive no MenuPanel, que fica
+        /// INATIVO quando o lobby (ou a sala) está aberto — e um serviço em objeto inativo não roda
+        /// Update, ou seja, para de processar os datagramas recebidos e de fundir a lista. Era por
+        /// isso que a lista de salas só se atualizava ao sair e voltar do painel.
+        /// Quem cria é o GameRoomManager, no GameObject do NetworkManager, que fica sempre ativo.
+        /// </summary>
+        private RoomDiscoveryService ResolveDiscovery()
+        {
+            if (_discovery != null) return _discovery;
+
+            // Inclui inativos: o serviço pode estar num objeto pai inativo em algum momento.
+            foreach (var behaviour in FindObjectsByType<MonoBehaviour>(
+                         FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (behaviour is not RoomDiscoveryService service) continue;
+
+                _discovery = service;
+                _discovery.OnDiagnostic += HandleDiscoveryDiagnostic;
+                break;
+            }
+
+            return _discovery;
+        }
 
         private void Start()
         {
+            _sessionId = Guid.NewGuid().ToString("N");
+
             string savedName = PlayerPrefs.GetString("PlayerName", "Jogador");
             if (_playerNameInputField != null)
             {
@@ -31,6 +75,16 @@ namespace Network
             if (_localIpText != null)
             {
                 _localIpText.text = $"Seu IP Local: {GetLocalIPAddress()}";
+            }
+
+            UpdateDiscoveryStatus();
+        }
+
+        private void OnDestroy()
+        {
+            if (_discovery != null)
+            {
+                _discovery.OnDiagnostic -= HandleDiscoveryDiagnostic;
             }
         }
 
@@ -43,6 +97,8 @@ namespace Network
             }
         }
 
+        // ------------------------------------------------------------------ host
+
         public void HostGame()
         {
             if (NetworkManager.singleton == null) return;
@@ -51,29 +107,132 @@ namespace Network
 
             NetworkManager.singleton.StartHost();
 
-            if (_networkDiscovery != null)
+            StartAdvertisingRoom();
+
+            // O host também escuta a rede: assim enxerga as outras salas (a própria é filtrada pelo
+            // SessionId) tanto na lista de partidas quanto no painel da sala.
+            ResolveDiscovery()?.StartBrowsing();
+
+            Debug.Log("[MenuManager] Host iniciado, sala publicada por mDNS e descoberta ouvindo a rede local.");
+        }
+
+        /// <summary>
+        /// Sai da sala de espera e volta ao menu inicial. O host encerra a sessão (o cliente cai
+        /// junto); o cliente apenas desconecta. O painel da sala se esconde sozinho, porque
+        /// IRoomLobbySource.IsInRoom deixa de ser verdadeiro.
+        /// </summary>
+        public void SairDaSala()
+        {
+            if (NetworkManager.singleton == null) return;
+
+            if (NetworkServer.active)
             {
-                _networkDiscovery.AdvertiseServer();
+                NetworkManager.singleton.StopHost();
+            }
+            else if (NetworkClient.active)
+            {
+                NetworkManager.singleton.StopClient();
             }
 
-            Debug.Log("[MenuManager] Host iniciado e anunciando na rede local.");
+            AbrirStart();
+
+            Debug.Log("[MenuManager] Saída da sala de espera solicitada.");
+        }
+
+        private void StartAdvertisingRoom()
+        {
+            var discovery = ResolveDiscovery();
+            if (discovery == null) return;
+
+            _advertisement = BuildAdvertisement(CountPlayersInRoom());
+            discovery.StartAdvertising(_advertisement);
+        }
+
+        // A contagem de jogadores do anúncio (1/2 -> 2/2) NÃO é publicada daqui: este componente vive
+        // no MenuPanel, que é desligado quando a sala ou a lista de partidas aparece — e objeto
+        // inativo não roda Update, então o anúncio congelava em 1/2. Quem cuida disso agora é o
+        // GameRoomManager, no objeto do NetworkManager (sempre ativo).
+
+        private RoomAdvertisement BuildAdvertisement(int players)
+        {
+            string playerName = PlayerPrefs.GetString("PlayerName", "Jogador");
+            if (string.IsNullOrWhiteSpace(playerName)) playerName = "Jogador";
+
+            return new RoomAdvertisement(
+                sessionId: _sessionId,
+                roomName: $"Sala de {playerName}",
+                hostName: playerName,
+                theme: PlayerPrefs.GetString("SelectedTheme", "Biblioteca"),
+                port: TransportPortAdapter.ResolvePort(),
+                playerCount: players,
+                maxPlayers: 2,
+                encrypted: TransportPortAdapter.ActiveTransportIsEncrypted(),
+                state: RoomState.Lobby);
+        }
+
+        private static int CountPlayersInRoom()
+        {
+            if (!NetworkServer.active) return 1;
+            return Mathf.Max(1, NetworkServer.connections.Count);
+        }
+
+        // ------------------------------------------------------------------ cliente
+
+        /// <summary>Botão "Buscar Partidas": abre o lobby e começa a escutar mDNS/multicast.</summary>
+        public void BuscarPartidas()
+        {
+            AbrirLobby();
+
+            var discovery = ResolveDiscovery();
+            if (discovery == null) return;
+
+            discovery.StartBrowsing();
+            UpdateDiscoveryStatus();
+            Debug.Log($"[MenuManager] Procurando salas via mDNS na interface {discovery.ActiveInterface}.");
+        }
+
+        public void PararBusca()
+        {
+            ResolveDiscovery()?.StopBrowsing();
+        }
+
+        /// <summary>Chamado pela lista de salas do lobby.</summary>
+        public void JoinRoom(DiscoveredRoom room)
+        {
+            if (room == null) return;
+
+            JoinAddress(room.Address != null ? room.Address.ToString() : null, room.Port, $"sala '{room.Room.RoomName}'");
         }
 
         public void JoinByIP()
         {
-            if (NetworkManager.singleton == null) return;
-
-            SaveCurrentPlayerName();
-
             string ipAddress = (_ipInputField != null && !string.IsNullOrWhiteSpace(_ipInputField.text))
                 ? _ipInputField.text.Trim()
                 : "localhost";
 
-            NetworkManager.singleton.networkAddress = ipAddress;
+            JoinAddress(ipAddress, 0, "IP informado");
+        }
+
+        private void JoinAddress(string address, int port, string description)
+        {
+            if (NetworkManager.singleton == null) return;
+
+            SaveCurrentPlayerName();
+            ResolveDiscovery()?.StopBrowsing();
+
+            // A sala descoberta pode anunciar porta diferente da configurada localmente.
+            if (port > 0) TransportPortAdapter.TryApplyPort(port);
+
+            NetworkManager.singleton.networkAddress =
+                string.IsNullOrWhiteSpace(address) ? "localhost" : address;
+
             NetworkManager.singleton.StartClient();
 
-            Debug.Log($"[MenuManager] Conectando diretamente ao IP: {ipAddress}");
+            Debug.Log($"[MenuManager] Conectando à {description}: " +
+                      $"{NetworkManager.singleton.networkAddress}:{TransportPortAdapter.ResolvePort()}");
         }
+
+        // ------------------------------------------------------------------ painéis
 
         public void AbrirStart() => TrocarPainel(_startPanel);
         public void AbrirLobby() => TrocarPainel(_lobbyPanel);
@@ -88,6 +247,8 @@ namespace Network
             if (_settingsPanel != null) _settingsPanel.SetActive(_settingsPanel == painelAtivo);
         }
 
+        // ------------------------------------------------------------------ interno
+
         private void SaveCurrentPlayerName()
         {
             if (_playerNameInputField != null && !string.IsNullOrWhiteSpace(_playerNameInputField.text))
@@ -95,6 +256,19 @@ namespace Network
                 PlayerPrefs.SetString("PlayerName", _playerNameInputField.text.Trim());
                 PlayerPrefs.Save();
             }
+        }
+
+        private void HandleDiscoveryDiagnostic(string message)
+        {
+            if (_discoveryStatusText != null) _discoveryStatusText.text = message;
+        }
+
+        private void UpdateDiscoveryStatus()
+        {
+            if (_discoveryStatusText == null) return;
+
+            string network = _discovery != null ? _discovery.ActiveInterface : "indisponível";
+            _discoveryStatusText.text = $"Rede: {network}";
         }
 
         private string GetLocalIPAddress()
