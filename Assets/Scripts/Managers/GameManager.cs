@@ -120,9 +120,7 @@ namespace Managers
         {
             _rightBar.OnEndTurnTriggered += HandleLocalReady;
             _evaluationModal.OnAdvanceClicked += HandleLocalReady;
-            _rightBar.OnRefactorButtonClicked += HandleRefactorRequested;
 
-            _toolBox.OnCreateClassClicked += HandleCreateClassRequested;
             _toolBox.OnAssociationModeToggled += _diagram.SetAssociationMode;
             _toolBox.OnMethodCardSelected += HandleMethodCardSelected;
 
@@ -134,7 +132,6 @@ namespace Managers
             if (_rightBar != null)
             {
                 _rightBar.OnEndTurnTriggered -= HandleLocalReady;
-                _rightBar.OnRefactorButtonClicked -= HandleRefactorRequested;
             }
 
             if (_evaluationModal != null)
@@ -144,7 +141,6 @@ namespace Managers
 
             if (_toolBox != null)
             {
-                _toolBox.OnCreateClassClicked -= HandleCreateClassRequested;
                 _toolBox.OnMethodCardSelected -= HandleMethodCardSelected;
                 if (_diagram != null)
                 {
@@ -163,31 +159,6 @@ namespace Managers
             OnLocalPlayerReady?.Invoke();
         }
 
-        private void HandleCreateClassRequested()
-        {
-            if (!_toolBox.CanCreateClass()) return;
-
-            if (_diagram.TryCreateClass(NextClassName()))
-            {
-                _toolBox.NotifyClassCreated();
-            }
-        }
-
-        // TODO: o GDD prevê nome livre. ClassNode.Name é imutável e não há campo de nome
-        // na criação, então por enquanto os nomes são gerados (não afetam a pontuação).
-        private string NextClassName()
-        {
-            var existing = Session.LocalPlayer.Diagram.Classes;
-            int n = existing.Count + 1;
-            string name;
-            do
-            {
-                name = $"Classe{n++}";
-            } while (existing.Any(c => c.Name == name));
-
-            return name;
-        }
-
         private void HandleMethodCardSelected(MethodData method)
         {
             if (method == null || _diagram.IsAssociationMode) return;
@@ -197,18 +168,6 @@ namespace Managers
             if (selected.Node.Methods.Contains(method)) return;
 
             _diagram.TryAddMethodToClass(selected.Node, method);
-        }
-
-        private void HandleRefactorRequested()
-        {
-            var selected = _diagram.SelectedNode;
-            if (selected == null || selected.Node == null) return;
-            if (!Session.CanRefactor(selected.Node)) return;
-
-            if (Session.TryRefactorClass(selected.Node))
-            {
-                _diagram.RenderDiagram(); 
-            }
         }
 
         private void HandleAssociationCreated(Relation relation)

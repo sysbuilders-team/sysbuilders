@@ -18,6 +18,7 @@ namespace Core.Session
         public PlayerState OpponentPlayer => LocalSlot == PlayerSlot.PlayerOne ? PlayerTwo : PlayerOne;
         public TurnManager TurnManager { get; }
         private readonly RefactorHandler _refactorHandler;
+        private readonly IRefactorPointPolicy _refactorPointPolicy;
         private readonly IEvaluationService _evaluator;
         private readonly IReadOnlyList<Requirement> _activeRequirements;
 
@@ -78,7 +79,8 @@ namespace Core.Session
             IReadOnlyList<Requirement> activeRequirements,
             PlayerSlot localSlot,
             IEvaluationService evaluator = null,
-            bool isNetworkMatch = false)
+            bool isNetworkMatch = false,
+            IRefactorPointPolicy refactorPointPolicy = null)
         {
             if (activeRequirements == null || activeRequirements.Count == 0)
                 throw new ArgumentException("A lista de requisitos não pode ser nula ou vazia.", nameof(activeRequirements));
@@ -93,10 +95,15 @@ namespace Core.Session
             PlayerOne = new PlayerState(playerOneId);
             PlayerTwo = new PlayerState(playerTwoId);
             TurnManager = new TurnManager(isNetworkMatch ? 2 : 1);
+            _refactorPointPolicy = refactorPointPolicy ?? new DefaultRefactorPointPolicy();
             _refactorHandler = new RefactorHandler();
             _evaluator = evaluator ?? new EvaluationEngine();
             _activeRequirements = activeRequirements;
             LocalSlot = localSlot;
+
+            PlayerOne.AddRefactorPoints(_refactorPointPolicy.InitialPoints);
+            PlayerTwo.AddRefactorPoints(_refactorPointPolicy.InitialPoints);
+
             TurnManager.OnPhaseChange += HandlePhaseChange;
         }
 
@@ -115,6 +122,18 @@ namespace Core.Session
                     ClearSelection();
                     SetAssociationMode(false);
                     OnRequirementChanged?.Invoke(CurrentRequirement);
+                    break;
+                case TurnPhase.Build:
+                    if (TurnManager.CurrentTurn > 1)
+                    {
+                        int points = _refactorPointPolicy.GetPointsForTurn(TurnManager.CurrentTurn);
+                        if (points > 0)
+                        {
+                            PlayerOne.AddRefactorPoints(points);
+                            PlayerTwo.AddRefactorPoints(points);
+                            OnRefactorPointsChanged?.Invoke(LocalPlayer.RefactorPoints);
+                        }
+                    }
                     break;
             }
         }
@@ -172,6 +191,7 @@ namespace Core.Session
             if (result)
             {
                 OnRefactorPointsChanged?.Invoke(LocalPlayer.RefactorPoints);
+                OnDiagramChanged?.Invoke();
             }
             return result;
         }
@@ -242,17 +262,37 @@ namespace Core.Session
         public bool TryCreateClass(string className, out ClassNode createdNode)
         {
             createdNode = null;
-            if (!CanModifyDiagram() || string.IsNullOrWhiteSpace(className)) return false;
+            if (!CanModifyDiagram()) return false;
 
-            var newClass = new ClassNode(className);
+            string finalName = string.IsNullOrWhiteSpace(className) ? GenerateDefaultClassName() : className.Trim();
+
+            var newClass = new ClassNode(finalName);
 
             // Quem decide se o nome ja existe e o proprio diagrama (indice por nome, O(1)):
             // reportar sucesso sem verificar deixaria a UI contar uma classe que nao entrou.
-            if (!LocalPlayer.AddClass(newClass)) return false;
+            if (!LocalPlayer.AddClass(newClass))
+            {
+                OnActionFailed?.Invoke($"Já existe uma classe chamada '{finalName}' no diagrama.");
+                return false;
+            }
 
             createdNode = newClass;
+            SelectClass(newClass);
             OnDiagramChanged?.Invoke();
             return true;
+        }
+
+        private string GenerateDefaultClassName()
+        {
+            var existing = LocalPlayer.Diagram.Classes;
+            int n = 1;
+            string candidate;
+            do
+            {
+                candidate = $"Classe{n++}";
+            } while (existing.Any(c => c.Name == candidate));
+
+            return candidate;
         }
 
         public bool RemoveClass(ClassNode node)
@@ -262,7 +302,7 @@ namespace Core.Session
             {
                 ClearSelection();
             }
-            LocalPlayer.RemoveClass(node);
+
             if (!LocalPlayer.RemoveClass(node)) return false;
 
             OnDiagramChanged?.Invoke();
