@@ -164,7 +164,7 @@ namespace UI
             {
                 string className = (_classNameInputField != null && !string.IsNullOrWhiteSpace(_classNameInputField.text))
                     ? _classNameInputField.text.Trim()
-                    : $"Classe_{_classesCreatedThisTurn + 1}";
+                    : null;
 
                 if (_diagramActions.TryCreateClass(className, out _))
                 {
