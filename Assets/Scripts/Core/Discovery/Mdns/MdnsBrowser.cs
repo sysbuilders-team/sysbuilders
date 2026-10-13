@@ -6,10 +6,15 @@ using System.Net;
 namespace Core.Discovery.Mdns
 {
     /// <summary>
-    /// mDNS browser: asks for the service type (with the QU bit, requesting a unicast reply) and keeps
-    /// the room list with expiry driven by the TTL of the PTR record announced by the host.
-    /// Goodbye (TTL 0) removes the room immediately.
-    /// </summary>
+    /// /// mDNS browser: asks for the service type on the multicast group and keeps the room list with
+    /// /// expiry driven by the TTL of the PTR record announced by the host.
+    /// ///
+    /// /// The query is sent WITHOUT the QU bit (multicast reply, RFC 6762 section 5.4 default), so two
+    /// /// instances on the same machine (Editor + build sharing port 5353 with SO_REUSEADDR) both receive
+    /// /// the response. See SendQuery for the full rationale.
+    /// ///
+    /// /// Goodbye (TTL 0) removes the room immediately.
+    /// /// </summary>
     public sealed class MdnsBrowser : IRoomBrowser
     {
         public static readonly TimeSpan DefaultQueryInterval = TimeSpan.FromSeconds(15);
