@@ -168,7 +168,11 @@ namespace Network
             }
         }
 
-        public void NotifyLocalPlayerReady(PlayerSlot slot) => CmdSetReady((int)slot);
+        public void NotifyLocalPlayerReady(PlayerSlot slot)
+        {
+            if (gameManager?.Session?.TurnManager == null) return;
+            CmdSetReady((int)slot, gameManager.Session.TurnManager.CurrentTurn);
+        }
 
         private bool IsSenderAuthorizedForSlot(NetworkConnectionToClient sender, PlayerSlot slot)
         {
@@ -179,7 +183,7 @@ namespace Network
         }
 
         [Command(requiresAuthority = false)]
-        private void CmdSetReady(int slotIndex, NetworkConnectionToClient sender = null)
+        private void CmdSetReady(int slotIndex, int turnNumber, NetworkConnectionToClient sender = null)
         {
             var slot = (PlayerSlot)slotIndex;
             if (!IsSenderAuthorizedForSlot(sender, slot))
@@ -187,7 +191,19 @@ namespace Network
                 Debug.LogWarning($"[MatchSyncBridge] CmdSetReady rejeitado: conexão não autorizada para o slot {slot}.");
                 return;
             }
-            
+
+            if (gameManager == null || gameManager.Session == null)
+            {
+                Debug.LogWarning("[MatchSyncBridge] CmdSetReady rejeitado: sessão não inicializada.");
+                return;
+            }
+
+            if (turnNumber != gameManager.Session.TurnManager.CurrentTurn)
+            {
+                Debug.LogWarning($"[MatchSyncBridge] CmdSetReady descartado: turno {turnNumber} não é o atual ({gameManager.Session.TurnManager.CurrentTurn}).");
+                return;
+            }
+
             _readySlots.Add(slot);
             Debug.Log($"[MatchSyncBridge] Server: slot {slot} pronto ({_readySlots.Count}/2)");
 
@@ -196,16 +212,21 @@ namespace Network
                 _readySlots.Clear();
                 RpcAdvancePhase();
             }
-        }
+        } 
 
         [ClientRpc]
         private void RpcAdvancePhase()
         {
-            if (gameManager == null || gameManager.Session == null) return;
+            if (gameManager == null || gameManager.Session == null)
+            {
+                Debug.LogWarning("[MatchSyncBridge] RpcAdvancePhase ignorado: sessão não inicializada (provavelmente retornando ao menu).");
+                return;
+            }
+
             Debug.Log("[MatchSyncBridge] RpcAdvancePhase recebido — avançar TurnManager local.");
             gameManager.Session.TurnManager.ForceAdvancePhase();
         }
-        
+
         private void OnEnable()
         {
             if (gameManager == null) return;
@@ -254,15 +275,15 @@ namespace Network
             if (gameManager == null || gameManager.Session == null) return;
             EncodeSmells(localResult.DetectedSmells, out int[] smellTypes, out int[] smellSeverities, out string[] smellClasses);
             CmdSendEvaluationResult(gameManager.Session.TurnManager.CurrentTurn, (int)gameManager.Session.LocalSlot,
-                localResult.RawScore, localResult.PenaltyScore,
-                smellTypes, smellSeverities, smellClasses);
+                    localResult.RawScore, localResult.PenaltyScore,
+                    smellTypes, smellSeverities, smellClasses);
         }
 
         private const int MaxSmellsPerResult = 50;
 
         // Só primitivos pela rede: os smells viajam como arrays (tipo, severidade, classes juntas por separador).
         private static void EncodeSmells(IReadOnlyList<SmellOccurrence> smells,
-            out int[] types, out int[] severities, out string[] classes)
+                out int[] types, out int[] severities, out string[] classes)
         {
             if (smells == null)
             {
@@ -314,13 +335,25 @@ namespace Network
 
         [Command(requiresAuthority = false)]
         private void CmdSendEvaluationResult(int turnNumber, int slotIndex, int rawScore, int penaltyScore,
-            int[] smellTypes, int[] smellSeverities, string[] smellClasses,
-            NetworkConnectionToClient sender = null)
+                int[] smellTypes, int[] smellSeverities, string[] smellClasses,
+                NetworkConnectionToClient sender = null)
         {
             var slot = (PlayerSlot)slotIndex;
             if (!IsSenderAuthorizedForSlot(sender, slot))
             {
                 Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejeitado: conexão não autorizada para o slot {slot}.");
+                return;
+            }
+
+            if (gameManager == null || gameManager.Session == null)
+            {
+                Debug.LogWarning("[MatchSyncBridge] CmdSendEvaluationResult rejeitado: sessão não inicializada.");
+                return;
+            }
+
+            if (turnNumber != gameManager.Session.TurnManager.CurrentTurn)
+            {
+                Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult descartado: turno {turnNumber} não é o atual ({gameManager.Session.TurnManager.CurrentTurn}).");
                 return;
             }
 
@@ -338,17 +371,17 @@ namespace Network
 
         [ClientRpc]
         private void RpcReceiveEvaluationResult(int turnNumber, int targetSlot, int rawScore, int penaltyScore,
-            int[] smellTypes, int[] smellSeverities, string[] smellClasses)
+                int[] smellTypes, int[] smellSeverities, string[] smellClasses)
         {
             if (gameManager == null || gameManager.Session == null) return;
             if ((int)gameManager.Session.LocalSlot == targetSlot) return;
 
             var rivalResult = new EvaluationResult(
-                rawScore,
-                penaltyScore,
-                new List<string>(),
-                DecodeSmells(smellTypes, smellSeverities, smellClasses)
-            );
+                    rawScore,
+                    penaltyScore,
+                    new List<string>(),
+                    DecodeSmells(smellTypes, smellSeverities, smellClasses)
+                    );
 
             Debug.Log($"[MatchSyncBridge] Slot rival {targetSlot} (turno {turnNumber}) — raw:{rawScore} penalty:{penaltyScore} total:{rivalResult.TotalScore}");
             gameManager.ReceiveOpponentEvaluation(turnNumber, rivalResult);
