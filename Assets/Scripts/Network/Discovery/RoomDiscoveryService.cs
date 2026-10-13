@@ -42,6 +42,7 @@ namespace Network.Discovery
                 error => PendingErrors.Enqueue(error));
         }
 
+        public string LastSocketError { get; set; }
         public string Name { get; }
         public IPAddress Group { get; }
         public int Port { get; }
@@ -82,13 +83,13 @@ namespace Network.Discovery
     ///    subject to being blocked on academic/corporate networks);
     ///  - the "custom multicast with a binary payload" alternative was dropped: standard mDNS
     ///    already covers the case and is the traffic most accepted by firewalls/APs (it looks like
-    ///    Bonjour), so keeping two protocols would be dead code. If 5353 is filtered, a direct IP connection remains.
+    ///    Avahi), so keeping two protocols would be dead code. If 5353 is filtered, a direct IP connection remains.
     /// </summary>
     [DisallowMultipleComponent]
     [AddComponentMenu("SysBuilders/Network/Room Discovery Service")]
     public sealed class RoomDiscoveryService : MonoBehaviour, IRoomDirectory
     {
-        [Header("mDNS (padrao Bonjour)")]
+        [Header("mDNS")]
         [SerializeField] private string _mdnsGroupAddress = "224.0.0.251";
         [SerializeField] private int _mdnsPort = 5353;
 
@@ -246,31 +247,48 @@ namespace Network.Discovery
         // life cycle
 
         private void Update()
+{
+    if (!_channelsReady) return;
+
+    DateTime now = DateTime.UtcNow;
+
+    foreach (var channel in _channels)
+    {
+        try
         {
-            if (!_channelsReady) return;
-
-            DateTime now = DateTime.UtcNow;
-
-            foreach (var channel in _channels)
+            // Datagrams arrive from a background thread: processed here, on the main thread.
+            while (channel.PendingDatagrams.TryDequeue(out MulticastDatagram datagram))
             {
-                // Datagrams arrive from a background thread: processed here, on the main thread.
-                while (channel.PendingDatagrams.TryDequeue(out MulticastDatagram datagram))
-                {
-                    channel.Advertiser.HandleDatagram(datagram, now);
-                    channel.Browser.HandleDatagram(datagram, now);
-                }
-
-                while (channel.PendingErrors.TryDequeue(out Exception error))
-                {
-                    Diag($"[{channel.Name}] erro de socket: {error.Message}");
-                }
-
-                channel.Advertiser.Tick(now);
-                channel.Browser.Tick(now);
+                channel.Advertiser.HandleDatagram(datagram, now);
+                channel.Browser.HandleDatagram(datagram, now);
             }
 
-            MergeRooms();
+            while (channel.PendingErrors.TryDequeue(out Exception error))
+            {
+                Diag($"[{channel.Name}] erro de socket: {error.Message}");
+            }
+
+            channel.Advertiser.Tick(now);
+            channel.Browser.Tick(now);
+
+            channel.LastSocketError = null;   // recovery
         }
+        catch (System.Net.Sockets.SocketException ex)
+        {           
+            if (channel.LastSocketError == null)
+            {
+                channel.LastSocketError = ex.Message;
+                Diag($"[{channel.Name}] rede indisponível: {ex.Message}");
+            }
+        }
+        catch (System.ObjectDisposedException)
+        {
+            // Closed channel during update 
+        }
+    }
+
+    MergeRooms();
+}
 
         private void OnApplicationQuit() => Shutdown();
 
@@ -296,37 +314,40 @@ namespace Network.Discovery
         // intetrn
 
         private void EnsureChannels()
-        {
-            if (_channelsReady) return;
-            _channelsReady = true;
+{
+    if (_channelsReady) return;
 
-            var candidates = NetworkInterfaceSelector.Enumerate();
-            NetworkInterfaceSelector.TryFindByAddress(candidates, ParseAddress(_preferredInterfaceAddress), out var forced);
+    var candidates = NetworkInterfaceSelector.Enumerate();
+    NetworkInterfaceSelector.TryFindByAddress(candidates, ParseAddress(_preferredInterfaceAddress), out var forced);
 
-            InterfaceCandidate selected = forced;
-            string reason;
+    InterfaceCandidate selected = forced;
+    string reason;
 
-            if (selected != null)
-            {
-                reason = "override do Inspector";
-            }
-            else if (!NetworkInterfaceSelector.TrySelectPrimary(candidates, out selected, out reason))
-            {
-                Diag($"Descoberta desabilitada: {reason}. Mostrando apenas conexao por IP.");
-                return;
-            }
+    if (selected != null)
+    {
+        reason = "override do Inspector";
+    }
+    else if (!NetworkInterfaceSelector.TrySelectPrimary(candidates, out selected, out reason))
+    {
+        Diag($"Descoberta desabilitada: {reason}. Mostrando apenas conexao por IP.");
+        return;
+    }
 
-            ActiveInterface = $"{selected.Name} ({selected.Address})";
-            Diag($"Interface de descoberta: {ActiveInterface} [{reason}]");
+    ActiveInterface = $"{selected.Name} ({selected.Address})";
+    Diag($"Interface de descoberta: {ActiveInterface} [{reason}]");
 
-            TryCreateChannel("mDNS", _mdnsGroupAddress, _mdnsPort, selected.Address);
+    TryCreateChannel("mDNS", _mdnsGroupAddress, _mdnsPort, selected.Address);
 
-            if (_channels.Count == 0)
-            {
-                Diag("Descoberta indisponivel: verifique a porta 5353 e o firewall/perfil de rede. " +
-                     "A conexao por IP direto continua funcionando.");
-            }
-        }
+    if (_channels.Count > 0)
+    {
+        _channelsReady = true;
+    }
+    else
+    {
+        Diag("Descoberta indisponivel: verifique a porta 5353 e o firewall/perfil de rede. " +
+             "A conexao por IP direto continua funcionando. Nova tentativa no proximo frame.");
+    }
+}
 
         private void TryCreateChannel(string name, string groupAddress, int port, IPAddress localAddress)
         {
