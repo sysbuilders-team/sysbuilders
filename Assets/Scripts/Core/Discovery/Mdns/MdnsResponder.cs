@@ -46,7 +46,7 @@ namespace Core.Discovery.Mdns
         {
             _current = advertisement ?? throw new ArgumentNullException(nameof(advertisement));
 
-            SendAnnouncement(multicast: true);
+            SendAnnouncement();
             _nextAnnounceUtc = utcNow + _reannounceInterval;
         }
 
@@ -61,7 +61,7 @@ namespace Core.Discovery.Mdns
             }
 
             _current = advertisement;
-            SendAnnouncement(multicast: true);
+            SendAnnouncement();
             _nextAnnounceUtc = utcNow + _reannounceInterval;
         }
 
@@ -103,7 +103,7 @@ namespace Core.Discovery.Mdns
             if (_current == null) return;
             if (utcNow < _nextAnnounceUtc) return;
 
-            SendAnnouncement(multicast: true);
+            SendAnnouncement();
             _nextAnnounceUtc = utcNow + _reannounceInterval;
         }
 
@@ -112,14 +112,12 @@ namespace Core.Discovery.Mdns
             StopAdvertising();
         }
 
-        private void SendAnnouncement(bool multicast)
-        {
-            var records = MdnsRecordBuilder.AnnouncementRecords(_current, _localAddress, _ttl, cacheFlush: multicast);
-            byte[] payload = MdnsCodec.EncodeResponse(0, authoritative: true, records);
-
-            if (multicast) _socket.SendMulticast(payload, _group, _port);
-            else _socket.SendUnicast(payload, new IPEndPoint(IPAddress.Broadcast, _port));
-        }
+        private void SendAnnouncement()
+{
+    var records = MdnsRecordBuilder.AnnouncementRecords(_current, _localAddress, _ttl, cacheFlush: true);
+    byte[] payload = MdnsCodec.EncodeResponse(0, authoritative: true, records);
+    _socket.SendMulticast(payload, _group, _port);
+}
 
         /// <summary>Builds only the answers relevant to the received questions (or null if it is not for us).</summary>
         private IReadOnlyList<MdnsRecord> BuildAnswers(MdnsMessage message)

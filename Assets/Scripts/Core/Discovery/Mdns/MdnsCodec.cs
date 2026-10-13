@@ -195,7 +195,7 @@ namespace Core.Discovery.Mdns
                 if (label.Length == 0) continue;
 
                 byte[] bytes = Encoding.UTF8.GetBytes(label);
-                if (bytes.Length > 63) bytes = new byte[63];
+                if (bytes.Length > 63) Array.Resize(ref bytes, 63);
                 if (bytes.Length == 0) continue;
 
                 writer.Write((byte)bytes.Length);
@@ -246,7 +246,7 @@ namespace Core.Discovery.Mdns
                             if (entry == null) continue;
 
                             byte[] bytes = Encoding.UTF8.GetBytes(entry);
-                            if (bytes.Length > 255) bytes = new byte[255];
+                            if (bytes.Length > 255) Array.Resize(ref bytes, 255);
                             writer.Write((byte)bytes.Length);
                             if (bytes.Length > 0) writer.Write(bytes);
                         }
