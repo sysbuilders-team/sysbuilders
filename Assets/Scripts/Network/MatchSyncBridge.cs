@@ -201,6 +201,7 @@ namespace Network
         [ClientRpc]
         private void RpcAdvancePhase()
         {
+            if (gameManager == null || gameManager.Session == null) return;
             Debug.Log("[MatchSyncBridge] RpcAdvancePhase recebido — avançar TurnManager local.");
             gameManager.Session.TurnManager.ForceAdvancePhase();
         }
