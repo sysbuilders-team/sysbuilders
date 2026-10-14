@@ -30,14 +30,29 @@ namespace Network
 			_evaluatedSlots.Clear();
 
 			var roomManager = NetworkManager.singleton as GameRoomManager;
-			if (roomManager == null || string.IsNullOrEmpty(roomManager.ChosenTheme))
-			{
-				Debug.LogError("[MatchSyncBridge] ChosenTheme não foi definido antes de StartHost. Abortando partida.");
-				AbortLocalMatch("Tema da partida não definido.");
-				return;
-			}
+if (roomManager == null || string.IsNullOrEmpty(roomManager.ChosenTheme))
+{
+    const string reason = "Tema da partida não definido.";
+    Debug.LogError($"[MatchSyncBridge] {reason} Abortando partida.");
 
-			_theme = roomManager.ChosenTheme;
+    // Notify connected clients before aborting locally: without this, a client connected
+    // to a host that never finished setup gets dropped by StopHost with no explanation.
+    // Same pattern as the error path inside the try block below.
+    if (NetworkServer.active)
+    {
+        try { RpcNotifyMatchStartFailed(reason); }
+        catch (Exception notifyEx)
+        {
+            Debug.LogError($"[MatchSyncBridge] Nao foi possivel notificar os clientes da falha: {notifyEx.Message}");
+        }
+    }
+
+    AbortLocalMatch(reason);
+    return;
+}
+
+_theme = roomManager.ChosenTheme;		
+
 			if (requirementManager == null)
 			{
 				if (!TryGetComponent(out requirementManager))
