@@ -30,29 +30,28 @@ namespace Network
 			_evaluatedSlots.Clear();
 
 			var roomManager = NetworkManager.singleton as GameRoomManager;
-if (roomManager == null || string.IsNullOrEmpty(roomManager.ChosenTheme))
-{
-    const string reason = "Tema da partida não definido.";
-    Debug.LogError($"[MatchSyncBridge] {reason} Abortando partida.");
+			if (roomManager == null || string.IsNullOrEmpty(roomManager.ChosenTheme))
+			{
+				const string reason = "Tema da partida não definido.";
+				Debug.LogError($"[MatchSyncBridge] {reason} Abortando partida.");
 
-    // Notify connected clients before aborting locally: without this, a client connected
-    // to a host that never finished setup gets dropped by StopHost with no explanation.
-    // Same pattern as the error path inside the try block below.
-    if (NetworkServer.active)
-    {
-        try { RpcNotifyMatchStartFailed(reason); }
-        catch (Exception notifyEx)
-        {
-            Debug.LogError($"[MatchSyncBridge] Nao foi possivel notificar os clientes da falha: {notifyEx.Message}");
-        }
-    }
+				// Notify connected clients before aborting locally: without this, a client connected
+				// to a host that never finished setup gets dropped by StopHost with no explanation.
+				// Same pattern as the error path inside the try block below.
+				if (NetworkServer.active)
+				{
+					try { RpcNotifyMatchStartFailed(reason); }
+					catch (Exception notifyEx)
+					{
+						Debug.LogError($"[MatchSyncBridge] Nao foi possivel notificar os clientes da falha: {notifyEx.Message}");
+					}
+				}
 
-    AbortLocalMatch(reason);
-    return;
-}
+				AbortLocalMatch(reason);
+				return;
+			}
 
-_theme = roomManager.ChosenTheme;		
-
+			_theme = roomManager.ChosenTheme;
 			if (requirementManager == null)
 			{
 				if (!TryGetComponent(out requirementManager))
@@ -193,7 +192,8 @@ _theme = roomManager.ChosenTheme;
 		public void NotifyLocalPlayerReady(PlayerSlot slot)
 		{
 			if (gameManager?.Session?.TurnManager == null) return;
-			CmdSetReady((int)slot, gameManager.Session.TurnManager.CurrentTurn);
+			var tm = gameManager.Session.TurnManager;
+			CmdSetReady((int)slot, tm.CurrentTurn, (int)tm.CurrentPhase);
 		}
 
 		private bool IsSenderAuthorizedForSlot(NetworkConnectionToClient sender, PlayerSlot slot)
@@ -205,7 +205,7 @@ _theme = roomManager.ChosenTheme;
 		}
 
 		[Command(requiresAuthority = false)]
-		private void CmdSetReady(int slotIndex, int turnNumber, NetworkConnectionToClient sender = null)
+		private void CmdSetReady(int slotIndex, int turnNumber, int phase, NetworkConnectionToClient sender = null)
 		{
 			var slot = (PlayerSlot)slotIndex;
 			if (!IsSenderAuthorizedForSlot(sender, slot))
@@ -220,9 +220,21 @@ _theme = roomManager.ChosenTheme;
 				return;
 			}
 
-			if (turnNumber != gameManager.Session.TurnManager.CurrentTurn)
+			var tm = gameManager.Session.TurnManager;
+
+			if (turnNumber != tm.CurrentTurn)
 			{
-				Debug.LogWarning($"[MatchSyncBridge] CmdSetReady descartado: turno {turnNumber} não é o atual ({gameManager.Session.TurnManager.CurrentTurn}).");
+				Debug.LogWarning($"[MatchSyncBridge] CmdSetReady descartado: turno {turnNumber} não é o atual ({tm.CurrentTurn}).");
+				return;
+			}
+
+			// Phase token: a ready from the wrong phase of the right turn would otherwise reach the
+			// quorum and advance the wrong transition (for example, a Show ready arriving after the
+			// server already moved to Build). Both sides are in lockstep because the server drives
+			// advancement via RpcAdvancePhase, so strict equality is the correct check.
+			if (phase != (int)tm.CurrentPhase)
+			{
+				Debug.LogWarning($"[MatchSyncBridge] CmdSetReady descartado: fase {phase} não é a atual ({(int)tm.CurrentPhase}).");
 				return;
 			}
 
@@ -296,16 +308,17 @@ _theme = roomManager.ChosenTheme;
 		{
 			if (gameManager == null || gameManager.Session == null) return;
 			EncodeSmells(localResult.DetectedSmells, out int[] smellTypes, out int[] smellSeverities, out string[] smellClasses);
-			CmdSendEvaluationResult(gameManager.Session.TurnManager.CurrentTurn, (int)gameManager.Session.LocalSlot,
-					localResult.RawScore, localResult.PenaltyScore,
-					smellTypes, smellSeverities, smellClasses);
+			var tm = gameManager.Session.TurnManager;
+			CmdSendEvaluationResult(tm.CurrentTurn, (int)tm.CurrentPhase, (int)gameManager.Session.LocalSlot,
+				localResult.RawScore, localResult.PenaltyScore,
+				smellTypes, smellSeverities, smellClasses);
 		}
 
 		private const int MaxSmellsPerResult = 50;
 
 		// Só primitivos pela rede: os smells viajam como arrays (tipo, severidade, classes juntas por separador).
 		private static void EncodeSmells(IReadOnlyList<SmellOccurrence> smells,
-				out int[] types, out int[] severities, out string[] classes)
+			out int[] types, out int[] severities, out string[] classes)
 		{
 			if (smells == null)
 			{
@@ -356,9 +369,9 @@ _theme = roomManager.ChosenTheme;
 		}
 
 		[Command(requiresAuthority = false)]
-		private void CmdSendEvaluationResult(int turnNumber, int slotIndex, int rawScore, int penaltyScore,
-				int[] smellTypes, int[] smellSeverities, string[] smellClasses,
-				NetworkConnectionToClient sender = null)
+		private void CmdSendEvaluationResult(int turnNumber, int phase, int slotIndex, int rawScore, int penaltyScore,
+			int[] smellTypes, int[] smellSeverities, string[] smellClasses,
+			NetworkConnectionToClient sender = null)
 		{
 			var slot = (PlayerSlot)slotIndex;
 			if (!IsSenderAuthorizedForSlot(sender, slot))
@@ -373,9 +386,17 @@ _theme = roomManager.ChosenTheme;
 				return;
 			}
 
-			if (turnNumber != gameManager.Session.TurnManager.CurrentTurn)
+			var tm = gameManager.Session.TurnManager;
+
+			if (turnNumber != tm.CurrentTurn)
 			{
-				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult descartado: turno {turnNumber} não é o atual ({gameManager.Session.TurnManager.CurrentTurn}).");
+				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult descartado: turno {turnNumber} não é o atual ({tm.CurrentTurn}).");
+				return;
+			}
+
+			if (phase != (int)tm.CurrentPhase)
+			{
+				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult descartado: fase {phase} não é a atual ({(int)tm.CurrentPhase}).");
 				return;
 			}
 
@@ -393,17 +414,17 @@ _theme = roomManager.ChosenTheme;
 
 		[ClientRpc]
 		private void RpcReceiveEvaluationResult(int turnNumber, int targetSlot, int rawScore, int penaltyScore,
-				int[] smellTypes, int[] smellSeverities, string[] smellClasses)
+			int[] smellTypes, int[] smellSeverities, string[] smellClasses)
 		{
 			if (gameManager == null || gameManager.Session == null) return;
 			if ((int)gameManager.Session.LocalSlot == targetSlot) return;
 
 			var rivalResult = new EvaluationResult(
-					rawScore,
-					penaltyScore,
-					new List<string>(),
-					DecodeSmells(smellTypes, smellSeverities, smellClasses)
-					);
+				rawScore,
+				penaltyScore,
+				new List<string>(),
+				DecodeSmells(smellTypes, smellSeverities, smellClasses)
+			);
 
 			Debug.Log($"[MatchSyncBridge] Slot rival {targetSlot} (turno {turnNumber}) — raw:{rawScore} penalty:{penaltyScore} total:{rivalResult.TotalScore}");
 			gameManager.ReceiveOpponentEvaluation(turnNumber, rivalResult);
