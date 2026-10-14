@@ -25,6 +25,9 @@ namespace Network.Discovery
             Port = port;
 
             _socket = new MulticastSocket();
+
+            try
+            {
             _socket.Bind(port);
             _socket.JoinGroup(group, localAddress);
             _socket.SetOutgoingInterface(localAddress);
@@ -39,7 +42,14 @@ namespace Network.Discovery
 
             _socket.StartReceiving(
                 datagram => PendingDatagrams.Enqueue(datagram),
-                error => PendingErrors.Enqueue(error));
+                error => PendingErrors.Enqueue(error));}
+            catch
+            {
+                //if any step of the setup fails the socket must not leak.
+                //Dispose here and rethrow so TryCreateChannel can report it.
+                _socket.Dispose();
+                throw;
+            }
         }
 
         public string LastSocketError { get; set; }
