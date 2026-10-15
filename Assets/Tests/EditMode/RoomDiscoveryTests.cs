@@ -289,6 +289,115 @@ namespace Tests.EditMode
             Assert.IsNotEmpty(reason);
         }
 
+        // ---------------------------------------------------------------- PR-1 regressions
+
+        [Test]
+        public void MdnsTier_WhitespaceSessionId_IsRejectedNotThrown()
+        {
+            // C1 regression. TryParseRoom promises never to throw, but the old
+            // IsNullOrEmpty check let "id= " reach RoomAdvertisement's constructor,
+            // which uses IsNullOrWhiteSpace and throws.
+            byte[] payload = BuildResponseWithSessionId(" ");
+            Assert.IsTrue(MdnsCodec.TryDecode(payload, out var message));
+
+            Assert.IsFalse(
+                MdnsRecordBuilder.TryParseRoom(message, null, out _, out _),
+                "whitespace session id must be rejected, not passed to the constructor");
+        }
+
+        [Test]
+        public void MdnsTier_OversizedSessionId_IsRejected()
+        {
+            // A 200-char id passes IsNullOrEmpty. Without the cap, an unbounded
+            // string would follow every DiscoveredRoom for the rest of the session.
+            byte[] payload = BuildResponseWithSessionId(new string('a', 200));
+            Assert.IsTrue(MdnsCodec.TryDecode(payload, out var message));
+
+            Assert.IsFalse(
+                MdnsRecordBuilder.TryParseRoom(message, null, out _, out _),
+                "session id above 64 chars must be rejected");
+        }
+
+        [Test]
+        public void MdnsTier_TtlAboveMax_IsClampedTo120()
+        {
+            // A hostile host could send ttl=2^31-1 and pin a ghost entry for years.
+            var room = Room("sessao-ttl");
+            var records = MdnsRecordBuilder.AnnouncementRecords(
+                room, IPAddress.Parse("192.168.1.10"), TimeSpan.FromSeconds(99999), cacheFlush: false);
+            byte[] payload = MdnsCodec.EncodeResponse(0, true, records);
+            Assert.IsTrue(MdnsCodec.TryDecode(payload, out var message));
+
+            Assert.IsTrue(MdnsRecordBuilder.TryParseRoom(message, null, out _, out int ttl));
+            Assert.AreEqual(120, ttl);
+        }
+
+        [Test]
+        public void MdnsBrowser_AfterStopBrowsing_IgnoresNewAnnouncements()
+        {
+            // H4 regression. HandleDatagram used to process every response
+            // regardless of IsBrowsing, so a re-announcement from any host would
+            // silently repopulate a list the player just dismissed.
+            var network = new FakeNetwork();
+            var host = new FakeMulticastSocket(network, "192.168.1.10");
+            var client = new FakeMulticastSocket(network, "192.168.1.20");
+            var group = IPAddress.Parse("224.0.0.251");
+            const int port = 5353;
+
+            host.Bind(port);
+            host.JoinGroup(group, host.Address);
+            client.Bind(port);
+            client.JoinGroup(group, client.Address);
+
+            var responder = new MdnsResponder(host, group, port, host.Address);
+            var browser = new MdnsBrowser(client, group, port);
+
+            DateTime now = T0;
+            host.StartReceiving(d => responder.HandleDatagram(d, now), _ => { });
+            client.StartReceiving(d => browser.HandleDatagram(d, now), _ => { });
+
+            browser.StartBrowsing(now);
+            responder.StartAdvertising(Room("sessao-A"), now);
+            Assert.AreEqual(1, browser.Rooms.Count);
+
+            browser.StopBrowsing();
+            Assert.AreEqual(0, browser.Rooms.Count);
+
+            // A fresh announcement from the same host must not resurrect the room.
+            responder.UpdateAdvertisement(Room("sessao-A", "Sala A v2"), now + TimeSpan.FromSeconds(1));
+            Assert.AreEqual(0, browser.Rooms.Count,
+                "stopped browser must not process new announcements");
+        }
+
+        private static byte[] BuildResponseWithSessionId(string sessionId, int ttlSeconds = 120)
+        {
+            // Hand-built because RoomAdvertisement rejects the very values these
+            // tests need to send through the wire.
+            string instance = $"Instance.{MdnsRecordBuilder.ServiceType}";
+            string target = "sb-test.local";
+            var ttl = TimeSpan.FromSeconds(ttlSeconds);
+
+            var records = new List<MdnsRecord>
+            {
+                MdnsRecord.Ptr(MdnsRecordBuilder.ServiceType, instance, ttl),
+                MdnsRecord.Srv(instance, 7777, target, ttl),
+                MdnsRecord.Txt(instance, new List<string>
+                {
+                    "v=1",
+                    $"id={sessionId}",
+                    "room=Sala",
+                    "host=Host",
+                    "players=1",
+                    "max=2",
+                    "theme=Tema",
+                    "enc=1",
+                    "state=lobby"
+                }, ttl)
+            };
+
+            return MdnsCodec.EncodeResponse(0, true, records);
+        }
+
         // ---------------------------------------------------------------- helpers de pacote
 
         private static byte[] BuildCompressedResponse(RoomAdvertisement room)
