@@ -91,6 +91,12 @@ namespace Core.Discovery.Mdns
                 return;
             }
 
+			// Ignore new announcements and refreshes after StopBrowsing. Without
+		    // this guard, another host's periodic re-announcement silently
+		    // repopulates the list the player just dismissed. Goodbye (handled
+		    // above) still applies so a stopped browser can shed known rooms.
+		    if (!IsBrowsing) return;
+
             if (room.Version != RoomAdvertisement.CurrentVersion)
             {
                 if (!_versionWarned)

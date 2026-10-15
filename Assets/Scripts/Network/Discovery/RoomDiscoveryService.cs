@@ -278,7 +278,22 @@ namespace Network.Discovery
 				}
 
 				if (!_channelsReady) return;
-			} 
+			}
+		
+			// When neither advertising nor browsing is active there is no reason
+		    // to tick the responder or browser, and no reason to grow the pending
+		    // queue. Drain and discard so a later StartBrowsing begins from a
+		    // clean slate instead of replaying the idle-period backlog.
+		    if (!_browsing && !IsAdvertising)
+		    {
+        		foreach (var channel in _channels)
+        		{
+		            while (channel.PendingDatagrams.TryDequeue(out _)) { }
+        		    while (channel.PendingErrors.TryDequeue(out _)) { }
+	    	    }
+    	    	return;
+		    }
+ 
 
 			DateTime now = DateTime.UtcNow;
 
@@ -289,8 +304,19 @@ namespace Network.Discovery
 					// Datagrams arrive from a background thread: processed here, on the main thread.
 					while (channel.PendingDatagrams.TryDequeue(out MulticastDatagram datagram))
 					{
-						channel.Advertiser.HandleDatagram(datagram, now);
-						channel.Browser.HandleDatagram(datagram, now);
+						// A single malformed packet must never kill the discovery
+                        // loop. TryParseRoom now validates aggressively, but
+                        // "should reject" is not "does reject" for data arriving
+                        // from the network — contain the blast radius per datagram.
+                        try
+                        {
+                            channel.Advertiser.HandleDatagram(datagram, now);
+                            channel.Browser.HandleDatagram(datagram, now);
+                        }
+                        catch (Exception ex)
+                        {
+                            Diag($"[{channel.Name}] datagram rejected: {ex.GetType().Name}: {ex.Message}");
+                        }
 					}
 
 					while (channel.PendingErrors.TryDequeue(out Exception error))
