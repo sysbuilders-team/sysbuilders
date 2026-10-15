@@ -15,6 +15,15 @@ namespace Core.Discovery.Mdns
         public const string ServiceType = "_sysbuilders-v1._udp.local";
         public const string MetaServiceName = "_services._dns-sd._udp.local";
         public static readonly TimeSpan DefaultTtl = TimeSpan.FromSeconds(120);
+		// Upper bound for the session id accepted from the network. Hosts generate
+		// a 32-char hex GUID, but 64 leaves room for future formats without letting
+		// a crafted packet allocate an arbitrarily long string that would follow
+		// every DiscoveredRoom for the rest of the session.
+		private const int MaxSessionIdLength = 64;
+		// PTR TTL upper bound. The publisher sends 120s by design (DefaultTtl);
+		// accepting anything above that lets a hostile host extend a ghost entry's
+		// lifetme in the browser's cache indefinitely.
+		private const int MaxAcceptedTtlSeconds = 120;
 
         private const string KeyVersion = "v";
         private const string KeyId = "id";
@@ -114,7 +123,12 @@ namespace Core.Discovery.Mdns
 
             if (pointer == null) return false;
 
-            ttlSeconds = pointer.Ttl;
+			// Clamp before the TTL reaches the browser cache. Otherwise a hostile
+		    // host can send ttl=2^31-1 and pin a ghost entry for the whole session.
+		    ttlSeconds = pointer.Ttl < 0
+	        	? 0
+    	     	: (pointer.Ttl > MaxAcceptedTtlSeconds ? MaxAcceptedTtlSeconds : pointer.Ttl);
+
             string instance = pointer.TargetName;
 
             int port = 0;
@@ -141,7 +155,13 @@ namespace Core.Discovery.Mdns
             if (port <= 0 || text == null) return false;
 
             if (!TryParseTxt(text, out var values)) return false;
-            if (!values.TryGetValue(KeyId, out string sessionId) || string.IsNullOrEmpty(sessionId)) return false;
+
+			// Validation must match RoomAdvertisement's constructor invariantst
+		    // exactly. Otherwise a crafted packet reaches the constructor and throws
+		    // out of a method that promises never to throw.
+		    if (!values.TryGetValue(KeyId, out string sessionId)) return false;
+		    if (string.IsNullOrWhiteSpace(sessionId)) return false;
+		    if (sessionId.Length > MaxSessionIdLength) return false;			
 
             int version = RoomAdvertisement.CurrentVersion;
             if (values.TryGetValue(KeyVersion, out string versionText) &&
@@ -159,15 +179,24 @@ namespace Core.Discovery.Mdns
                 address = record.Address;
                 break;
             }
+			
 
-            address ??= sourceAddress;
+			address ??= sourceAddress;
+
+			// Sanitize free-text fields before construction. SanitizeShortText is
+		    // idempotent, so this is a no-op on well-formed publishers, and it
+		    // guarantees the constructor's ArgumentException paths are unreachable
+		    // from the network.
+		    string roomName = RoomAdvertisement.SanitizeRoomName(Get(values, KeyRoom, "Sala"));
+		    string hostName = RoomAdvertisement.SanitizeShortText(Get(values, KeyHost, "Host"), "Host");
+		    string theme    = RoomAdvertisement.SanitizeShortText(Get(values, KeyTheme, string.Empty), string.Empty);
 
             room = new RoomAdvertisement(
                 sessionId,
-                Get(values, KeyRoom, "Sala"),
-                Get(values, KeyHost, "Host"),
-                Get(values, KeyTheme, string.Empty),
-                port,
+                roomName,
+				hostName,
+				theme,
+				port,
                 ParseInt(values, KeyPlayers),
                 Math.Max(1, ParseInt(values, KeyMax, RoomAdvertisement.DefaultMaxPlayers)),
                 ParseInt(values, KeyEncrypted, 1) != 0,
