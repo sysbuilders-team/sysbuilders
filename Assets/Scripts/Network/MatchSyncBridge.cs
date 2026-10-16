@@ -10,8 +10,6 @@ namespace Network
 {
 	public class MatchSyncBridge : NetworkBehaviour
 	{
-		private const char ClassSeparator = '\u001f';
-
 		[SerializeField] private GameManager gameManager;
 		[SerializeField] private RequirementManager requirementManager;
 
@@ -307,65 +305,11 @@ namespace Network
 		private void HandleLocalEvaluationCompleted(EvaluationResult localResult)
 		{
 			if (gameManager == null || gameManager.Session == null) return;
-			EncodeSmells(localResult.DetectedSmells, out int[] smellTypes, out int[] smellSeverities, out string[] smellClasses);
+			SmellWireCodec.Encode(localResult.DetectedSmells, out int[] smellTypes, out int[] smellSeverities, out string[] smellClasses);
 			var tm = gameManager.Session.TurnManager;
 			CmdSendEvaluationResult(tm.CurrentTurn, (int)tm.CurrentPhase, (int)gameManager.Session.LocalSlot,
 				localResult.RawScore, localResult.PenaltyScore,
 				smellTypes, smellSeverities, smellClasses);
-		}
-
-		private const int MaxSmellsPerResult = 50;
-
-		// Só primitivos pela rede: os smells viajam como arrays (tipo, severidade, classes juntas por separador).
-		private static void EncodeSmells(IReadOnlyList<SmellOccurrence> smells,
-			out int[] types, out int[] severities, out string[] classes)
-		{
-			if (smells == null)
-			{
-				types = Array.Empty<int>();
-				severities = Array.Empty<int>();
-				classes = Array.Empty<string>();
-				return;
-			}
-
-			types = new int[smells.Count];
-			severities = new int[smells.Count];
-			classes = new string[smells.Count];
-
-			for (int i = 0; i < smells.Count; i++)
-			{
-				types[i] = (int)smells[i].Type;
-				severities[i] = smells[i].Severity;
-				var affected = smells[i].AffectedClassNames;
-				classes[i] = affected != null && affected.Count > 0
-					? string.Join(ClassSeparator.ToString(), affected)
-					: string.Empty;
-			}
-		}
-
-		private static List<SmellOccurrence> DecodeSmells(int[] types, int[] severities, string[] classes)
-		{
-			var smells = new List<SmellOccurrence>();
-			if (types == null || severities == null || classes == null) return smells;
-
-			int count = Math.Min(Math.Min(types.Length, Math.Min(severities.Length, classes.Length)), MaxSmellsPerResult);
-			for (int i = 0; i < count; i++)
-			{
-				try
-				{
-					var names = string.IsNullOrEmpty(classes[i])
-						? Array.Empty<string>()
-						: classes[i].Split(ClassSeparator);
-
-					smells.Add(new SmellOccurrence((CodeSmellType)types[i], names, Math.Max(1, severities[i])));
-				}
-				catch (ArgumentException)
-				{
-					// dado inválido vindo da rede: ignora esta ocorrência
-				}
-			}
-
-			return smells;
 		}
 
 		[Command(requiresAuthority = false)]
@@ -423,7 +367,7 @@ namespace Network
 				rawScore,
 				penaltyScore,
 				new List<string>(),
-				DecodeSmells(smellTypes, smellSeverities, smellClasses)
+				SmellWireCodec(smellTypes, smellSeverities, smellClasses)
 			);
 
 			Debug.Log($"[MatchSyncBridge] Slot rival {targetSlot} (turno {turnNumber}) — raw:{rawScore} penalty:{penaltyScore} total:{rivalResult.TotalScore}");

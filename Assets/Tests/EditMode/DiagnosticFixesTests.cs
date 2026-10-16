@@ -56,15 +56,9 @@ namespace Tests.EditMode
             int[] severities = new int[] { 2 };
             string[] classes = new string[] { string.Empty };
 
-            var decoded = (List<SmellOccurrence>)InvokePrivateStatic(
-                typeof(MatchSyncBridge),
-                "DecodeSmells",
-                types,
-                severities,
-                classes
-            );
-
-            Assert.AreEqual(0, decoded.Count, "Entrada com string vazia não deve gerar smell corrompido com classe vazia.");
+            var decoded = SmellWireCodec.Decode(types, severities, classes);
+        
+                    Assert.AreEqual(0, decoded.Count, "Entrada com string vazia não deve gerar smell corrompido com classe vazia.");
         }
 
         [Test]
@@ -73,21 +67,8 @@ namespace Tests.EditMode
             var originalSmell = new SmellOccurrence(CodeSmellType.DuplicateCode, new List<string> { "Player", "Enemy" }, 3);
             var smellsList = new List<SmellOccurrence> { originalSmell };
 
-            object[] encodeArgs = new object[] { smellsList, null, null, null };
-            typeof(MatchSyncBridge).GetMethod("EncodeSmells", BindingFlags.NonPublic | BindingFlags.Static)
-                .Invoke(null, encodeArgs);
-
-            int[] types = (int[])encodeArgs[1];
-            int[] severities = (int[])encodeArgs[2];
-            string[] classes = (string[])encodeArgs[3];
-
-            var decoded = (List<SmellOccurrence>)InvokePrivateStatic(
-                typeof(MatchSyncBridge),
-                "DecodeSmells",
-                types,
-                severities,
-                classes
-            );
+			SmellWireCodec.Encode(smellsList, out int[] types, out int[] severities, out string[] classes);
+            var decoded = SmellWireCodec.Decode(types, severities, classes);			
 
             Assert.AreEqual(1, decoded.Count);
             Assert.AreEqual(2, decoded[0].AffectedClassNames.Count);
@@ -112,13 +93,7 @@ namespace Tests.EditMode
                 classes[i] = "ClassA";
             }
 
-            var decoded = (List<SmellOccurrence>)InvokePrivateStatic(
-                typeof(MatchSyncBridge),
-                "DecodeSmells",
-                types,
-                severities,
-                classes
-            );
+			var decoded = SmellWireCodec.Decode(types, severites, classes);
 
             Assert.AreEqual(50, decoded.Count, "DecodeSmells deve respeitar o teto máximo de 50 elementos por resultado.");
         }
