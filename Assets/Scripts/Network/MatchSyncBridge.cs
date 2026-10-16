@@ -8,8 +8,34 @@ using Managers;
 
 namespace Network
 {
-	public class MatchSyncBridge : NetworkBehaviour
-	{
+		/// <summary>
+		/// Client/server sync bridge for a running match
+		/// Trust model: the server validates shape (authorization, bounds, sequence),
+		/// not	values. Evaluation scores are computed client-side and relayed; a
+		/// malicious client can still send any in-bound score and win. Closing that
+		/// gap requires the server to recompute from the received diagram, tracked
+		/// as future work.
+		/// </summary>
+		public class MatchSyncBridge : NetworkBehaviour
+		{
+		    /// <summary>Upper bound on the abort reason transmitted over the wire.</summary>
+		    private const int MaxAbortReasonLength = 120;
+
+		    /// <summary>
+		    /// Per-turn raw score ceiling. Each revealed requirement awards 100, and
+		    /// at most one requirement is revealed per turn, so rawScore cannot
+		    /// legitimately exceed 100 * turnNumber.
+		    /// </summary>
+		    private const int MaxRawScorePerTurn = 100;
+
+		    /// <summary>
+		    /// Per-turn penalty ceiling. Penalties scale with diagram size and smell
+		    /// severity; observed maximum on a normal game is well under 2000. The
+		    /// cap keeps legitimate players from being rejected while bounding the
+		    /// arithmetic on the server side.
+		    /// </summary>
+		    private const int MaxPenaltyPerTurn = 5000;
+
 		[SerializeField] private GameManager gameManager;
 		[SerializeField] private RequirementManager requirementManager;
 
@@ -104,15 +130,25 @@ namespace Network
 			AbortLocalMatch(reason);
 		}
 
-		// Um cliente que nao conseguiu montar a partida avisa o servidor: sem isso o Host seguiria
-		// jogando sozinho, porque so o caminho de erro do servidor dispara RpcNotifyMatchStartFailed.
-		[Command(requiresAuthority = false)]
-		private void CmdNotifyMatchStartFailed(string reason)
-		{
-			Debug.LogError($"[MatchSyncBridge] Cliente reportou falha ao iniciar a partida: {reason}");
-			RpcNotifyMatchStartFailed(reason);
-		}
+		// A client that failed to start the match notifies the server. Without
+        // this the Host would keep playing alone, because only the server-side
+        // error path triggers RpcNotifyMatchStartFailed. The command is reachable
+        // by any connection (requiresAuthority = false), so it must reject
+        // unknown senders and cap the reason before relaying.
+        [Command(requiresAuthority = false)]
+        private void CmdNotifyMatchStartFailed(string reason, NetworkConnectionToClient sender = null)
+        {
+            if (!IsKnownMatchParticipant(sender))
+            {
+                Debug.LogWarning("[MatchSyncBridge] CmdNotifyMatchStartFailed rejected: connection not authorized.");
+                return;
+            }
 
+            string safeReason = TruncateForWire(reason, MaxAbortReasonLength);
+            Debug.LogError($"[MatchSyncBridge] Cliente reportou falha ao iniciar a partida: {safeReason}");
+            RpcNotifyMatchStartFailed(safeReason);
+        }
+		
 		// Caminho unico de aborto (Host, Client e relay do servidor): loga e devolve a maquina
 		// local para o menu. Idempotente, porque no host o RPC chega tambem na ponta que reportou.
 		private void AbortLocalMatch(string reason)
@@ -330,6 +366,38 @@ namespace Network
 				return;
 			}
 
+			// Shape validation before the relay. The server does not recompute
+            // scores today, but it must not pass obviously-tampered values to
+            // the other peer, and must not relay unbounded arrays.
+            if (rawScore < 0 || rawScore > MaxRawScorePerTurn * turnNumber)
+            {
+                Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: raw {rawScore} out of range for turn {turnNumber}.");
+                return;
+           if (penaltyScore < 0 || penaltyScore > MaxPenaltyPerTurn)
+            {
+                Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: penalty {penaltyScore} out of range.");
+                return;
+            }
+
+            if (smellTypes == null || smellSeverities == null || smellClasses == null)
+            {
+                Debug.LogWarning("[MatchSyncBridge] CmdSendEvaluationResult rejected: null smell arrays.");
+                return;
+            }
+
+            if (smellTypes.Length != smellSeverities.Length || smellTypes.Length != smellClasses.Length)
+            {
+                Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: array length mismatch ({smellTypes.Length}, {smellSeverities.Length}, {smellClasses.Length}).");
+                return;
+            }
+
+            if (smellTypes.Length > SmellWireCodec.MaxSmellsPerResult)
+            {
+                Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: {smellTypes.Length} smells exceeds cap of {SmellWireCodec.MaxSmellsPerResult}.");
+                return;
+            }
+
+
 			var tm = gameManager.Session.TurnManager;
 
 			if (turnNumber != tm.CurrentTurn)
@@ -342,6 +410,30 @@ namespace Network
 			{
 				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult descartado: fase {phase} não é a atual ({(int)tm.CurrentPhase}).");
 				return;
+			}
+
+			/// <summary>
+			/// A sender counts as a known participant when Mirror populated it with
+			/// the local connection (host self-call), an active server connection
+			/// (remote client), or left it null (direct call from tests). Unknown
+			/// connections are rejected.
+			/// </summary>
+			private static bool IsKnownMatchParticipant(NetworkConnectionToClient sender)
+			{
+		    if (sender == null) return true;
+		    if (sender == NetworkServer.localConnection) return true;
+		    return NetworkServer.connections.Values.Contains(sender);
+			}
+
+			/// <summary>
+			/// Truncates a string before it crosses the wire, so a hostile client
+			/// cannot force the server and the other peer to allocate or log an
+			/// arbitrary amount of text.
+			/// </summary>
+			private static string TruncateForWire(string value, int maxLength)
+			{
+			    if (string.IsNullOrEmpty(value)) return string.Empty;
+			    return value.Length <= maxLength ? value : value.Substring(0, maxLength) + "...";
 			}
 
 			RpcReceiveEvaluationResult(turnNumber, slotIndex, rawScore, penaltyScore, smellTypes, smellSeverities, smellClasses);
