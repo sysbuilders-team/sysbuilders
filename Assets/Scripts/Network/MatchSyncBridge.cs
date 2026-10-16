@@ -20,6 +20,7 @@ namespace Network
 		{
 		    /// <summary>Upper bound on the abort reason transmitted over the wire.</summary>
 		    private const int MaxAbortReasonLength = 120;
+            private const int RequiredPlayers = 2;
 
 		    /// <summary>
 		    /// Per-turn raw score ceiling. Each revealed requirement awards 100, and
@@ -52,6 +53,8 @@ namespace Network
 			base.OnStartServer();
 			_readySlots.Clear();
 			_evaluatedSlots.Clear();
+
+            NetworkServer.OnDisconnectedEvent += HandleServerDisconnect;
 
 			var roomManager = NetworkManager.singleton as GameRoomManager;
 			if (roomManager == null || string.IsNullOrEmpty(roomManager.ChosenTheme))
@@ -124,6 +127,14 @@ namespace Network
 			}
 		}
 
+        public override void OnStopServer()
+        {
+                NetworkServer.OnDisconnectedEvent -= HandleServerDisconnect;
+                    _readySlots.Clear();
+                        _evaluatedSlots.Clear();
+                            base.OnStopServer();
+        }
+
 		[ClientRpc]
 		private void RpcNotifyMatchStartFailed(string reason)
 		{
@@ -162,6 +173,23 @@ namespace Network
 			{
 				gameManager.ReturnToMainMenu();
 			}
+		}
+
+		/// <summary>
+		/// A participant dropped while a match was running. The quorum sets are
+		/// stale (the missing peer will never send ready or evaluation), so a
+		/// subsequent phase advance would never reach RequiredPlayers. Abort
+		/// cleanly: log, notify the remaining peer, and return to menu.
+		/// </summary>
+		private void HandleServerDisconnect(NetworkConnectionToClient conn)
+		{
+		    if (_matchAborted) return;
+		    if (gameManager == null || gameManager.Session == null) return;
+
+		    _readySlots.Clear();
+		    _evaluatedSlots.Clear();
+
+		    AbortLocalMatch("O adversário desconectou.");
 		}
 
 		private void OnTrailSynced(string oldTrailId, string newTrailId)
@@ -275,7 +303,7 @@ namespace Network
 			_readySlots.Add(slot);
 			Debug.Log($"[MatchSyncBridge] Server: slot {slot} pronto ({_readySlots.Count}/2)");
 
-			if (_readySlots.Count >= 2)
+			if (_readySlots.Count >= RequiredPlayers)
 			{
 				_readySlots.Clear();
 				RpcAdvancePhase();
@@ -441,7 +469,7 @@ namespace Network
 			_evaluatedSlots.Add(slot);
 			Debug.Log($"[MatchSyncBridge] Server: avaliação do slot {slot} do turno {turnNumber} recebida ({_evaluatedSlots.Count}/2)");
 
-			if (_evaluatedSlots.Count >= 2)
+			if (_evaluatedSlots.Count >= RequiredPlayers)
 			{
 				_evaluatedSlots.Clear();
 				RpcAdvancePhase();
