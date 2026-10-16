@@ -33,14 +33,14 @@ namespace Managers
 
         public void ReturnToMainMenu()
         {
-            if (_onReturnToMenuRequested != null)
-            {
-                _onReturnToMenuRequested.Invoke();
-            }
-            else
-            {
-                SceneManager.LoadScene(_menuSceneName);
-            }
+			// Fire the event first so handlers (e.g. MatchSyncBridge) can tear
+            // down a running network before the scene is destroyed. Navigation
+            // happens unconditionally after: Mirror's StopHost/StopClient do
+            // not load a scene, and the previous fallback only ran when the
+            // callback was null — which it never is from GameManager.Awake.
+            _onReturnToMenuRequested?.Invoke();
+            SceneManager.LoadScene(_menuSceneName);
+         }
         }
     }
 }

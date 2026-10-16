@@ -8,9 +8,34 @@ using Managers;
 
 namespace Network
 {
-	public class MatchSyncBridge : NetworkBehaviour
-	{
-		private const char ClassSeparator = '\u001f';
+		/// <summary>
+		/// Client/server sync bridge for a running match
+		/// Trust model: the server validates shape (authorization, bounds, sequence),
+		/// not	values. Evaluation scores are computed client-side and relayed; a
+		/// malicious client can still send any in-bound score and win. Closing that
+		/// gap requires the server to recompute from the received diagram, tracked
+		/// as future work.
+		/// </summary>
+		public class MatchSyncBridge : NetworkBehaviour
+		{
+		    /// <summary>Upper bound on the abort reason transmitted over the wire.</summary>
+		    private const int MaxAbortReasonLength = 120;
+            private const int RequiredPlayers = 2;
+
+		    /// <summary>
+		    /// Per-turn raw score ceiling. Each revealed requirement awards 100, and
+		    /// at most one requirement is revealed per turn, so rawScore cannot
+		    /// legitimately exceed 100 * turnNumber.
+		    /// </summary>
+		    private const int MaxRawScorePerTurn = 100;
+
+		    /// <summary>
+		    /// Per-turn penalty ceiling. Penalties scale with diagram size and smell
+		    /// severity; observed maximum on a normal game is well under 2000. The
+		    /// cap keeps legitimate players from being rejected while bounding the
+		    /// arithmetic on the server side.
+		    /// </summary>
+		    private const int MaxPenaltyPerTurn = 5000;
 
 		[SerializeField] private GameManager gameManager;
 		[SerializeField] private RequirementManager requirementManager;
@@ -28,6 +53,8 @@ namespace Network
 			base.OnStartServer();
 			_readySlots.Clear();
 			_evaluatedSlots.Clear();
+
+            NetworkServer.OnDisconnectedEvent += HandleServerDisconnect;
 
 			var roomManager = NetworkManager.singleton as GameRoomManager;
 			if (roomManager == null || string.IsNullOrEmpty(roomManager.ChosenTheme))
@@ -100,21 +127,39 @@ namespace Network
 			}
 		}
 
+        public override void OnStopServer()
+        {
+                NetworkServer.OnDisconnectedEvent -= HandleServerDisconnect;
+                    _readySlots.Clear();
+                        _evaluatedSlots.Clear();
+                            base.OnStopServer();
+        }
+
 		[ClientRpc]
 		private void RpcNotifyMatchStartFailed(string reason)
 		{
 			AbortLocalMatch(reason);
 		}
 
-		// Um cliente que nao conseguiu montar a partida avisa o servidor: sem isso o Host seguiria
-		// jogando sozinho, porque so o caminho de erro do servidor dispara RpcNotifyMatchStartFailed.
-		[Command(requiresAuthority = false)]
-		private void CmdNotifyMatchStartFailed(string reason)
-		{
-			Debug.LogError($"[MatchSyncBridge] Cliente reportou falha ao iniciar a partida: {reason}");
-			RpcNotifyMatchStartFailed(reason);
-		}
+		// A client that failed to start the match notifies the server. Without
+        // this the Host would keep playing alone, because only the server-side
+        // error path triggers RpcNotifyMatchStartFailed. The command is reachable
+        // by any connection (requiresAuthority = false), so it must reject
+        // unknown senders and cap the reason before relaying.
+        [Command(requiresAuthority = false)]
+        private void CmdNotifyMatchStartFailed(string reason, NetworkConnectionToClient sender = null)
+        {
+            if (!IsKnownMatchParticipant(sender))
+            {
+                Debug.LogWarning("[MatchSyncBridge] CmdNotifyMatchStartFailed rejected: connection not authorized.");
+                return;
+            }
 
+            string safeReason = TruncateForWire(reason, MaxAbortReasonLength);
+            Debug.LogError($"[MatchSyncBridge] Cliente reportou falha ao iniciar a partida: {safeReason}");
+            RpcNotifyMatchStartFailed(safeReason);
+        }
+		
 		// Caminho unico de aborto (Host, Client e relay do servidor): loga e devolve a maquina
 		// local para o menu. Idempotente, porque no host o RPC chega tambem na ponta que reportou.
 		private void AbortLocalMatch(string reason)
@@ -128,6 +173,23 @@ namespace Network
 			{
 				gameManager.ReturnToMainMenu();
 			}
+		}
+
+		/// <summary>
+		/// A participant dropped while a match was running. The quorum sets are
+		/// stale (the missing peer will never send ready or evaluation), so a
+		/// subsequent phase advance would never reach RequiredPlayers. Abort
+		/// cleanly: log, notify the remaining peer, and return to menu.
+		/// </summary>
+		private void HandleServerDisconnect(NetworkConnectionToClient conn)
+		{
+		    if (_matchAborted) return;
+		    if (gameManager == null || gameManager.Session == null) return;
+
+		    _readySlots.Clear();
+		    _evaluatedSlots.Clear();
+
+		    AbortLocalMatch("O adversário desconectou.");
 		}
 
 		private void OnTrailSynced(string oldTrailId, string newTrailId)
@@ -241,7 +303,7 @@ namespace Network
 			_readySlots.Add(slot);
 			Debug.Log($"[MatchSyncBridge] Server: slot {slot} pronto ({_readySlots.Count}/2)");
 
-			if (_readySlots.Count >= 2)
+			if (_readySlots.Count >= RequiredPlayers)
 			{
 				_readySlots.Clear();
 				RpcAdvancePhase();
@@ -307,65 +369,11 @@ namespace Network
 		private void HandleLocalEvaluationCompleted(EvaluationResult localResult)
 		{
 			if (gameManager == null || gameManager.Session == null) return;
-			EncodeSmells(localResult.DetectedSmells, out int[] smellTypes, out int[] smellSeverities, out string[] smellClasses);
+			SmellWireCodec.Encode(localResult.DetectedSmells, out int[] smellTypes, out int[] smellSeverities, out string[] smellClasses);
 			var tm = gameManager.Session.TurnManager;
 			CmdSendEvaluationResult(tm.CurrentTurn, (int)tm.CurrentPhase, (int)gameManager.Session.LocalSlot,
 				localResult.RawScore, localResult.PenaltyScore,
 				smellTypes, smellSeverities, smellClasses);
-		}
-
-		private const int MaxSmellsPerResult = 50;
-
-		// Só primitivos pela rede: os smells viajam como arrays (tipo, severidade, classes juntas por separador).
-		private static void EncodeSmells(IReadOnlyList<SmellOccurrence> smells,
-			out int[] types, out int[] severities, out string[] classes)
-		{
-			if (smells == null)
-			{
-				types = Array.Empty<int>();
-				severities = Array.Empty<int>();
-				classes = Array.Empty<string>();
-				return;
-			}
-
-			types = new int[smells.Count];
-			severities = new int[smells.Count];
-			classes = new string[smells.Count];
-
-			for (int i = 0; i < smells.Count; i++)
-			{
-				types[i] = (int)smells[i].Type;
-				severities[i] = smells[i].Severity;
-				var affected = smells[i].AffectedClassNames;
-				classes[i] = affected != null && affected.Count > 0
-					? string.Join(ClassSeparator.ToString(), affected)
-					: string.Empty;
-			}
-		}
-
-		private static List<SmellOccurrence> DecodeSmells(int[] types, int[] severities, string[] classes)
-		{
-			var smells = new List<SmellOccurrence>();
-			if (types == null || severities == null || classes == null) return smells;
-
-			int count = Math.Min(Math.Min(types.Length, Math.Min(severities.Length, classes.Length)), MaxSmellsPerResult);
-			for (int i = 0; i < count; i++)
-			{
-				try
-				{
-					var names = string.IsNullOrEmpty(classes[i])
-						? Array.Empty<string>()
-						: classes[i].Split(ClassSeparator);
-
-					smells.Add(new SmellOccurrence((CodeSmellType)types[i], names, Math.Max(1, severities[i])));
-				}
-				catch (ArgumentException)
-				{
-					// dado inválido vindo da rede: ignora esta ocorrência
-				}
-			}
-
-			return smells;
 		}
 
 		[Command(requiresAuthority = false)]
@@ -386,6 +394,38 @@ namespace Network
 				return;
 			}
 
+			// Shape validation before the relay. The server does not recompute
+            // scores today, but it must not pass obviously-tampered values to
+            // the other peer, and must not relay unbounded arrays.
+            if (rawScore < 0 || rawScore > MaxRawScorePerTurn * turnNumber)
+            {
+                Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: raw {rawScore} out of range for turn {turnNumber}.");
+                return;
+           if (penaltyScore < 0 || penaltyScore > MaxPenaltyPerTurn)
+            {
+                Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: penalty {penaltyScore} out of range.");
+                return;
+            }
+
+            if (smellTypes == null || smellSeverities == null || smellClasses == null)
+            {
+                Debug.LogWarning("[MatchSyncBridge] CmdSendEvaluationResult rejected: null smell arrays.");
+                return;
+            }
+
+            if (smellTypes.Length != smellSeverities.Length || smellTypes.Length != smellClasses.Length)
+            {
+                Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: array length mismatch ({smellTypes.Length}, {smellSeverities.Length}, {smellClasses.Length}).");
+                return;
+            }
+
+            if (smellTypes.Length > SmellWireCodec.MaxSmellsPerResult)
+            {
+                Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: {smellTypes.Length} smells exceeds cap of {SmellWireCodec.MaxSmellsPerResult}.");
+                return;
+            }
+
+
 			var tm = gameManager.Session.TurnManager;
 
 			if (turnNumber != tm.CurrentTurn)
@@ -400,12 +440,36 @@ namespace Network
 				return;
 			}
 
+			/// <summary>
+			/// A sender counts as a known participant when Mirror populated it with
+			/// the local connection (host self-call), an active server connection
+			/// (remote client), or left it null (direct call from tests). Unknown
+			/// connections are rejected.
+			/// </summary>
+			private static bool IsKnownMatchParticipant(NetworkConnectionToClient sender)
+			{
+		    if (sender == null) return true;
+		    if (sender == NetworkServer.localConnection) return true;
+		    return NetworkServer.connections.Values.Contains(sender);
+			}
+
+			/// <summary>
+			/// Truncates a string before it crosses the wire, so a hostile client
+			/// cannot force the server and the other peer to allocate or log an
+			/// arbitrary amount of text.
+			/// </summary>
+			private static string TruncateForWire(string value, int maxLength)
+			{
+			    if (string.IsNullOrEmpty(value)) return string.Empty;
+			    return value.Length <= maxLength ? value : value.Substring(0, maxLength) + "...";
+			}
+
 			RpcReceiveEvaluationResult(turnNumber, slotIndex, rawScore, penaltyScore, smellTypes, smellSeverities, smellClasses);
 
 			_evaluatedSlots.Add(slot);
 			Debug.Log($"[MatchSyncBridge] Server: avaliação do slot {slot} do turno {turnNumber} recebida ({_evaluatedSlots.Count}/2)");
 
-			if (_evaluatedSlots.Count >= 2)
+			if (_evaluatedSlots.Count >= RequiredPlayers)
 			{
 				_evaluatedSlots.Clear();
 				RpcAdvancePhase();
@@ -423,7 +487,7 @@ namespace Network
 				rawScore,
 				penaltyScore,
 				new List<string>(),
-				DecodeSmells(smellTypes, smellSeverities, smellClasses)
+				SmellWireCodec(smellTypes, smellSeverities, smellClasses)
 			);
 
 			Debug.Log($"[MatchSyncBridge] Slot rival {targetSlot} (turno {turnNumber}) — raw:{rawScore} penalty:{penaltyScore} total:{rivalResult.TotalScore}");
