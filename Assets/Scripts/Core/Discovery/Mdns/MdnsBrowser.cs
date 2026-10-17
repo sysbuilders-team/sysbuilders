@@ -26,6 +26,8 @@ namespace Core.Discovery.Mdns
         private readonly TimeSpan _queryInterval;
         private readonly TimeSpan _fallbackEntryTtl;
         private readonly Dictionary<string, Entry> _rooms = new Dictionary<string, Entry>(StringComparer.Ordinal);
+        private readonly List<DiscoveredRoom> _cachedRooms = new List<DiscoveredRoom>();
+        private bool _roomsCacheDirty = true;
 
         private DateTime _nextQueryUtc;
         private bool _versionWarned;
@@ -44,7 +46,22 @@ namespace Core.Discovery.Mdns
 
         public bool IsBrowsing { get; private set; }
 
-        public IReadOnlyCollection<DiscoveredRoom> Rooms => _rooms.Values.Select(e => e.Room).ToList();
+		public IReadOnlyCollection<DiscoveredRoom> Rooms
+        {
+            get
+            {
+                if (_roomsCacheDirty)
+                {
+                    _cachedRooms.Clear();
+                    foreach(var entry in _rooms.Values)
+                    {
+                        _cachedRooms.Add(entry.Room);
+                    }
+                    _roomsCacheDirty = false;
+                }
+                return _cachedRooms;
+            }
+        }		
 
         public event Action<DiscoveredRoom> OnRoomFound;
         public event Action<DiscoveredRoom> OnRoomUpdated;
@@ -116,12 +133,14 @@ namespace Core.Discovery.Mdns
             {
                 bool changed = !existing.Room.Room.HasSameContent(room);
                 _rooms[room.SessionId] = new Entry(discovered, utcNow, entryTtl);
+				_roomsCacheDirty = true;
 
                 if (changed) OnRoomUpdated?.Invoke(discovered);
             }
             else
             {
                 _rooms[room.SessionId] = new Entry(discovered, utcNow, entryTtl);
+				_roomsCacheDirty = true;
                 OnRoomFound?.Invoke(discovered);
             }
         }
@@ -182,6 +201,7 @@ namespace Core.Discovery.Mdns
             if (string.IsNullOrEmpty(sessionId)) return;
             if (!_rooms.Remove(sessionId)) return;
 
+			_roomsCacheDirty = true;
             OnRoomLost?.Invoke($"{sessionId} ({reason})");
         }
 

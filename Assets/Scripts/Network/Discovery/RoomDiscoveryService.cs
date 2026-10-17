@@ -16,6 +16,7 @@ namespace Network.Discovery
 	/// </summary>
 	internal sealed class DiscoveryChannel : IDisposable
 	{
+		private const int MaxPendingDatagrams = 256;
 		private readonly MulticastSocket _socket;
 
 		public DiscoveryChannel(string name, IPAddress group, int port, IPAddress localAddress)
@@ -41,15 +42,27 @@ namespace Network.Discovery
 				Advertiser = new MdnsResponder(_socket, group, port, localAddress);
 
 				_socket.StartReceiving(
-						datagram => PendingDatagrams.Enqueue(datagram),
-						error => PendingErrors.Enqueue(error));}
+		 datagram =>
+					 {
+						 // Under flood (or a stalled main thread) the queue
+						 // would otherwise grow without bound. Drop the
+						 // oldest so a later drain sees fresh packets rather
+						 // than a historical backlog.
+						 if (PendingDatagrams.Count >= MaxPendingDatagrams)
+						 {
+							 PendingDatagrams.TryDequeue(out _);
+						 }
+						 PendingDatagrams.Enqueue(datagram);
+					 },
+		   error => PendingErrors.Enqueue(error));
+      }
 				catch
-				{
-					//if any step of the setup fails the socket must not leak.
-					//Dispose here and rethrow so TryCreateChannel can report it.
-					_socket.Dispose();
-					throw;
-				}
+			{
+				//if any step of the setup fails the socket must not leak.
+				//Dispose here and rethrow so TryCreateChannel can report it.
+				_socket.Dispose();
+				throw;
+			}
 		}
 
 		public string LastSocketError { get; set; }
@@ -119,6 +132,8 @@ namespace Network.Discovery
 
 		private static readonly TimeSpan ChannelRetryInterval = TimeSpan.FromSeconds(5);
 		private DateTime _nextChannelRetryUtc;
+		private const int MaxDatagramsPerFrame = 64;
+		private bool _roomsDirty;
 
 		public IReadOnlyCollection<DiscoveredRoom> Rooms => _rooms.Values.ToList();
 		public bool IsBrowsing => _browsing;
@@ -279,21 +294,22 @@ namespace Network.Discovery
 
 				if (!_channelsReady) return;
 			}
-		
+
 			// When neither advertising nor browsing is active there is no reason
-		    // to tick the responder or browser, and no reason to grow the pending
-		    // queue. Drain and discard so a later StartBrowsing begins from a
-		    // clean slate instead of replaying the idle-period backlog.
-		    if (!_browsing && !IsAdvertising)
-		    {
-        		foreach (var channel in _channels)
-        		{
-		            while (channel.PendingDatagrams.TryDequeue(out _)) { }
-        		    while (channel.PendingErrors.TryDequeue(out _)) { }
-	    	    }
-    	    	return;
-		    }
- 
+			// to tick the responder or browser, and no reason to grow the pending
+			// queue. Drain and discard so a later StartBrowsing begins from a
+			// clean slate instead of replaying the idle-period backlog.
+			if (!_browsing && !IsAdvertising)
+			{
+				foreach (var channel in _channels)
+				{
+					while (channel.PendingDatagrams.TryDequeue(out _)) { }
+					while (channel.PendingErrors.TryDequeue(out _)) { }
+				}
+				_roomsDirty = false;
+				return;
+			}
+
 
 			DateTime now = DateTime.UtcNow;
 
@@ -302,21 +318,25 @@ namespace Network.Discovery
 				try
 				{
 					// Datagrams arrive from a background thread: processed here, on the main thread.
-					while (channel.PendingDatagrams.TryDequeue(out MulticastDatagram datagram))
+					// Cap the drain so a flood cannot stall the frame; the rest stays queued
+					// (with drop-oldest in the receive callback) for the next Update.
+					int processed = 0;
+					while (processed < MaxDatagramsPerFrame && channel.PendingDatagrams.TryDequeue(out MulticastDatagram datagram))
 					{
+						processed++;
 						// A single malformed packet must never kill the discovery
-                        // loop. TryParseRoom now validates aggressively, but
-                        // "should reject" is not "does reject" for data arriving
-                        // from the network — contain the blast radius per datagram.
-                        try
-                        {
-                            channel.Advertiser.HandleDatagram(datagram, now);
-                            channel.Browser.HandleDatagram(datagram, now);
-                        }
-                        catch (Exception ex)
-                        {
-                            Diag($"[{channel.Name}] datagram rejected: {ex.GetType().Name}: {ex.Message}");
-                        }
+						// loop. TryParseRoom now validates aggressively, but
+						// "should reject" is not "does reject" for data arriving
+						// from the network — contain the blast radius per datagram.
+						try
+						{
+							channel.Advertiser.HandleDatagram(datagram, now);
+							channel.Browser.HandleDatagram(datagram, now);
+						}
+						catch (Exception ex)
+						{
+							Diag($"[{channel.Name}] datagram rejected: {ex.GetType().Name}: {ex.Message}");
+						}
 					}
 
 					while (channel.PendingErrors.TryDequeue(out Exception error))
@@ -330,7 +350,7 @@ namespace Network.Discovery
 					channel.LastSocketError = null;   // recovery
 				}
 				catch (System.Net.Sockets.SocketException ex)
-				{           
+				{
 					if (channel.LastSocketError == null)
 					{
 						channel.LastSocketError = ex.Message;
@@ -342,8 +362,11 @@ namespace Network.Discovery
 					// Closed channel during update 
 				}
 			}
-
-			MergeRooms();
+			if (_roomsDirty)
+			{
+				_roomsDirty = false;
+				MergeRooms();
+			}
 		}
 
 		private void OnApplicationQuit() => Shutdown();
@@ -443,7 +466,15 @@ namespace Network.Discovery
 
 			try
 			{
-				_channels.Add(new DiscoveryChannel(name, group, port, localAddress));
+				var channel = new DiscoveryChannel(name, group, port, localAddress);
+				// Browser events fire on the main thread (inside Tick or
+				// HandleDatagram, both driven from Update). Use them as the
+				// signal to run MergeRooms next frame.
+				channel.Browser.OnRoomFound += _ => _roomsDirty = true;
+				channel.Browser.OnRoomUpdated += _ => _roomsDirty = true;
+				channel.Browser.OnRoomLost += _ => _roomsDirty = true;
+
+				_channels.Add(channel);
 				Diag($"[{name}] ativo em {group}:{port}.");
 			}
 			catch (Exception ex)

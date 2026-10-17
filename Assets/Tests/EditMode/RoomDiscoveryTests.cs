@@ -382,6 +382,40 @@ namespace Tests.EditMode
 					"stopped browser must not process new announcements");
 		}
 
+		[Test]
+public void MdnsBrowser_Rooms_ReflectsAddAndRemoveAcrossCacheBoundaries()
+{
+    // Regression for the Rooms snapshot cache: the property must not
+    // return a stale list after OnRoomFound or OnRoomLost fires.
+    var network = new FakeNetwork();
+    var host = new FakeMulticastSocket(network, "192.168.1.10");
+    var client = new FakeMulticastSocket(network, "192.168.1.20");
+    var group = IPAddress.Parse("224.0.0.251");
+    const int port = 5353;
+
+    host.Bind(port);
+    host.JoinGroup(group, host.Address);
+    client.Bind(port);
+    client.JoinGroup(group, client.Address);
+
+    var responder = new MdnsResponder(host, group, port, host.Address);
+    var browser = new MdnsBrowser(client, group, port);
+
+    DateTime now = T0;
+    host.StartReceiving(d => responder.HandleDatagram(d, now), _ => { });
+    client.StartReceiving(d => browser.HandleDatagram(d, now), _ => { });
+
+    browser.StartBrowsing(now);
+    Assert.AreEqual(0, browser.Rooms.Count);
+
+    responder.StartAdvertising(Room("sessao-cache"), now);
+    Assert.AreEqual(1, browser.Rooms.Count, "cache must invalidate after OnRoomFound");
+
+    responder.StopAdvertising();
+    Assert.AreEqual(0, browser.Rooms.Count, "cache must invalidate after OnRoomLost");
+}
+
+
 		private static byte[] BuildResponseWithSessionId(string sessionId, int ttlSeconds = 120)
 		{
 			// Hand-built because RoomAdvertisement rejects the very values these
