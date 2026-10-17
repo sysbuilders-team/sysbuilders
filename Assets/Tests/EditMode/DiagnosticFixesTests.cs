@@ -93,7 +93,7 @@ namespace Tests.EditMode
                 classes[i] = "ClassA";
             }
 
-			var decoded = SmellWireCodec.Decode(types, severites, classes);
+			var decoded = SmellWireCodec.Decode(types, severities, classes);
 
             Assert.AreEqual(50, decoded.Count, "DecodeSmells deve respeitar o teto máximo de 50 elementos por resultado.");
         }
