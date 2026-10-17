@@ -413,6 +413,51 @@ namespace Tests.EditMode
 
 		// ---------------------------------------------------------------- packet helpers
 
+		// ---------------------------------------------------------------- fingerprint (PR-3)
+
+[Test]
+public void MdnsRecordBuilder_Announcement_IncludesFingerprintWhenPresent()
+{
+    var room = new RoomAdvertisement(
+        "sessao-fp", "Sala", "Host", "Tema", 7777, 1, 2, true, RoomState.Lobby, "AB:CD:EF");
+
+    var txt = MdnsRecordBuilder.BuildTxtStrings(room);
+
+    CollectionAssert.Contains(txt, "fp=AB:CD:EF");
+}
+
+[Test]
+public void MdnsTier_FingerprintTravelsThroughParse()
+{
+    var room = new RoomAdvertisement(
+        "sessao-fp2", "Sala", "Host", "Tema", 7777, 1, 2, true, RoomState.Lobby, "AB:CD:EF");
+
+    var records = MdnsRecordBuilder.AnnouncementRecords(
+        room, IPAddress.Parse("192.168.1.10"), MdnsRecordBuilder.DefaultTtl, cacheFlush: false);
+
+    byte[] payload = MdnsCodec.EncodeResponse(0, true, records);
+    Assert.IsTrue(MdnsCodec.TryDecode(payload, out var message));
+
+    Assert.IsTrue(MdnsRecordBuilder.TryParseRoom(message, null, out var parsed, out _));
+    Assert.AreEqual("AB:CD:EF", parsed.PublicKeyFingerprint);
+}
+
+[Test]
+public void MdnsTier_AbsentFingerprint_IsNullNotError()
+{
+    var room = Room("sessao-nofp");
+
+    var records = MdnsRecordBuilder.AnnouncementRecords(
+        room, IPAddress.Parse("192.168.1.10"), MdnsRecordBuilder.DefaultTtl, cacheFlush: false);
+
+    byte[] payload = MdnsCodec.EncodeResponse(0, true, records);
+    Assert.IsTrue(MdnsCodec.TryDecode(payload, out var message));
+
+    Assert.IsTrue(MdnsRecordBuilder.TryParseRoom(message, null, out var parsed, out _));
+    Assert.IsNull(parsed.PublicKeyFingerprint);
+}
+
+
 		private static byte[] BuildCompressedResponse(RoomAdvertisement room)
 		{
 			var bytes = new List<byte>();

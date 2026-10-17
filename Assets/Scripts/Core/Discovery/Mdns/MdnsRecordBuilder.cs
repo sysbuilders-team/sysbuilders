@@ -35,6 +35,16 @@ namespace Core.Discovery.Mdns
         private const string KeyEncrypted = "enc";
         private const string KeyState = "state";
 
+        // Optional TXT key. Older builds did not publish it, so its absence
+        // is normal and consumers must fall back to fingerprint-less TOFU.
+        private const string KeyFingerprint = "fp";
+
+        // PubKeyInfo.Fingerprint is a hex string, typically with colons.
+        // 128 is generous headroom over SHA-256 (95 chars with separators)
+        // and bounds what a hostile host can push into every client's log
+        // and room list.
+        private const int MaxFingerprintLength = 128;
+
         public static string ShortId(string sessionId)
         {
             if (string.IsNullOrEmpty(sessionId)) return "0000";
@@ -69,6 +79,11 @@ namespace Core.Discovery.Mdns
                 $"{KeyEncrypted}={(room.Encrypted ? 1 : 0)}",
                 $"{KeyState}={(room.State == RoomState.InGame ? "game" : "lobby")}"
             };
+
+			if (!string.IsNullOrEmpty(room.PublicKeyFingerprint))
+			{
+				entries.Add($"{KeyFingerprint}={room.PublicKeyFingerprint}");
+			}
 
             return entries;
         }
@@ -183,6 +198,14 @@ namespace Core.Discovery.Mdns
 
 			address ??= sourceAddress;
 
+			string fingerprint = null;
+            if (values.TryGetValue(KeyFingerprint, out string rawFingerprint) &&
+                !string.IsNullOrWhiteSpace(rawFingerprint) &&
+                rawFingerprint.Length <= MaxFingerprintLength)
+            {
+                fingerprint = rawFingerprint.Trim();
+            }
+
 			// Sanitize free-text fields before construction. SanitizeShortText is
 		    // idempotent, so this is a no-op on well-formed publishers, and it
 		    // guarantees the constructor's ArgumentException paths are unreachable
@@ -203,7 +226,7 @@ namespace Core.Discovery.Mdns
                 string.Equals(Get(values, KeyState, "lobby"), "game", StringComparison.OrdinalIgnoreCase)
                     ? RoomState.InGame
                     : RoomState.Lobby,
-                null,
+                fingerprint,
                 version);
 
             return true;
