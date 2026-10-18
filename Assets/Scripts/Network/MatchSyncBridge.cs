@@ -21,8 +21,6 @@ namespace Network
 	{
 		private const int MaxAbortReasonLength = 120;
 		private const int RequiredPlayers = 2;
-		private const int MaxRawScorePerTurn = 100;
-		private const int MaxPenaltyPerTurn = 5000;
 
 		[SerializeField] private GameManager gameManager;
 		[SerializeField] private RequirementManager requirementManager;
@@ -365,35 +363,14 @@ namespace Network
 				return;
 			}
 
-			if (rawScore < 0 || rawScore > MaxRawScorePerTurn * turnNumber)
+			if (!EvaluationPayloadValidator.TryValidate(
+		turnNumber, rawScore, penaltyScore,
+		smellTypes, smellSeverities, smellClasses,
+		out string reason))
 			{
-				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: raw {rawScore} out of range for turn {turnNumber}.");
-				return;
-			}
-
-			if (penaltyScore < 0 || penaltyScore > MaxPenaltyPerTurn)
-			{
-				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: penalty {penaltyScore} out of range.");
-				return;
-			}
-
-			if (smellTypes == null || smellSeverities == null || smellClasses == null)
-			{
-				Debug.LogWarning("[MatchSyncBridge] CmdSendEvaluationResult rejected: null smell arrays.");
-				return;
-			}
-
-			if (smellTypes.Length != smellSeverities.Length || smellTypes.Length != smellClasses.Length)
-			{
-				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: array length mismatch ({smellTypes.Length}, {smellSeverities.Length}, {smellClasses.Length}).");
-				return;
-			}
-
-			if (smellTypes.Length > SmellWireCodec.MaxSmellsPerResult)
-			{
-				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: {smellTypes.Length} smells exceeds cap of {SmellWireCodec.MaxSmellsPerResult}.");
-				return;
-			}
+			Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: {reason}");
+			return;
+			}	
 
 			var tm = gameManager.Session.TurnManager;
 
