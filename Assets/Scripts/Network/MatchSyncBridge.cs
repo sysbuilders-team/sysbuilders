@@ -21,8 +21,6 @@ namespace Network
 	{
 		private const int MaxAbortReasonLength = 120;
 		private const int RequiredPlayers = 2;
-		private const int MaxRawScorePerTurn = 100;
-		private const int MaxPenaltyPerTurn = 5000;
 
 		[SerializeField] private GameManager gameManager;
 		[SerializeField] private RequirementManager requirementManager;
@@ -30,16 +28,14 @@ namespace Network
 		[SyncVar] private string _theme;
 		[SyncVar(hook = nameof(OnTrailSynced))] private string _trailId;
 
-		private readonly HashSet<PlayerSlot> _readySlots = new HashSet<PlayerSlot>();
-		private readonly HashSet<PlayerSlot> _evaluatedSlots = new HashSet<PlayerSlot>();
-		private MatchSession _subscribedSession;
+		private readonly ReadyQuorum _quorum = new ReadyQuorum(RequiredPlayers);	
+        private MatchSession _subscribedSession;
 		private bool _matchAborted;
 
 		public override void OnStartServer()
 		{
 			base.OnStartServer();
-			_readySlots.Clear();
-			_evaluatedSlots.Clear();
+			_quorum.ClearAll();
 
 			NetworkServer.OnDisconnectedEvent += HandleServerDisconnect;
 
@@ -112,8 +108,7 @@ namespace Network
 		public override void OnStopServer()
 		{
 			NetworkServer.OnDisconnectedEvent -= HandleServerDisconnect;
-			_readySlots.Clear();
-			_evaluatedSlots.Clear();
+			_quorum.ClearAll();
 			base.OnStopServer();
 		}
 
@@ -155,8 +150,7 @@ namespace Network
 			if (_matchAborted) return;
 			if (gameManager == null || gameManager.Session == null) return;
 
-			_readySlots.Clear();
-			_evaluatedSlots.Clear();
+			_quorum.ClearAll();
 
 			AbortLocalMatch("O adversário desconectou.");
 		}
@@ -275,12 +269,12 @@ namespace Network
 				return;
 			}
 
-			_readySlots.Add(slot);
-			Debug.Log($"[MatchSyncBridge] Server: slot {slot} pronto ({_readySlots.Count}/2)");
+			_quorum.MarkReady(slot);
+			Debug.Log($"[MatchSyncBridge] Server: slot {slot} pronto ({_quorum.ReadyCount}/{RequiredPlayers})");
 
-			if (_readySlots.Count >= RequiredPlayers)
+			if (_quorum.IsReadyQuorumMet)
 			{
-				_readySlots.Clear();
+				_quorum.ClearAll();
 				RpcAdvancePhase();
 			}
 		}
@@ -369,35 +363,14 @@ namespace Network
 				return;
 			}
 
-			if (rawScore < 0 || rawScore > MaxRawScorePerTurn * turnNumber)
+			if (!EvaluationPayloadValidator.TryValidate(
+		turnNumber, rawScore, penaltyScore,
+		smellTypes, smellSeverities, smellClasses,
+		out string reason))
 			{
-				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: raw {rawScore} out of range for turn {turnNumber}.");
-				return;
-			}
-
-			if (penaltyScore < 0 || penaltyScore > MaxPenaltyPerTurn)
-			{
-				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: penalty {penaltyScore} out of range.");
-				return;
-			}
-
-			if (smellTypes == null || smellSeverities == null || smellClasses == null)
-			{
-				Debug.LogWarning("[MatchSyncBridge] CmdSendEvaluationResult rejected: null smell arrays.");
-				return;
-			}
-
-			if (smellTypes.Length != smellSeverities.Length || smellTypes.Length != smellClasses.Length)
-			{
-				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: array length mismatch ({smellTypes.Length}, {smellSeverities.Length}, {smellClasses.Length}).");
-				return;
-			}
-
-			if (smellTypes.Length > SmellWireCodec.MaxSmellsPerResult)
-			{
-				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: {smellTypes.Length} smells exceeds cap of {SmellWireCodec.MaxSmellsPerResult}.");
-				return;
-			}
+			Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: {reason}");
+			return;
+			}	
 
 			var tm = gameManager.Session.TurnManager;
 
@@ -415,12 +388,12 @@ namespace Network
 
 			RpcReceiveEvaluationResult(turnNumber, slotIndex, rawScore, penaltyScore, smellTypes, smellSeverities, smellClasses);
 
-			_evaluatedSlots.Add(slot);
-			Debug.Log($"[MatchSyncBridge] Server: avaliação do slot {slot} do turno {turnNumber} recebida ({_evaluatedSlots.Count}/2)");
+			_quorum.MarkEvaluated(slot);
+			Debug.Log($"[MatchSyncBridge] Server: avaliação do slot {slot} do turno {turnNumber} recebida ({_quorum.EvaluatedCount}/{RequiredPlayers})");
 
-			if (_evaluatedSlots.Count >= RequiredPlayers)
+			if (_quorum.IsEvaluationQuorumMet)
 			{
-				_evaluatedSlots.Clear();
+				_quorum.ClearEvaluated();
 				RpcAdvancePhase();
 			}
 		}
