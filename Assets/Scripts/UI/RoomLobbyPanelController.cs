@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text;
 using Core.Discovery;
 using TMPro;
 using UnityEngine;
@@ -37,7 +36,7 @@ namespace UI
         private readonly List<SlotRow> _rows = new List<SlotRow>(2);
 
         private IRoomLobbySource _source;
-        private string _signature;
+        private bool _subscribed;
 
         private sealed class SlotRow
         {
@@ -61,46 +60,62 @@ namespace UI
 
         private void OnDestroy()
         {
+			if(_subscribed && _source != null)
+			{
+				_source.OnSlotsChanged -= HandleSlotsChanged;
+			}
+			
             if (_readyButton != null) _readyButton.onClick.RemoveListener(ToggleReady);
             ClearRows();
         }
 
         private void Update()
-        {
-            EnsureSource();
+		{
+			EnsureSource();
 
-            bool inRoom = _source != null && _source.IsInRoom;
-            bool lobbyOpen = _lobbyListPanel != null && _lobbyListPanel.activeSelf;
-            bool shouldShow = inRoom && !lobbyOpen;
-            bool wasShowing = _panelRoot != null && _panelRoot.activeSelf;
+			if (_source != null && !_subscribed)
+			{
+				_source.OnSlotsChanged += HandleSlotsChanged;
+				_subscribed = true;
+				// The adapter only fires OnSlotsChanged when its state hash
+				// changes; if we subscribed after a change already happened,
+				// render once to catch the current state. No-ops if the panel
+				// is not yet visible.
+				HandleSlotsChanged();
+			}
 
-            if (_panelRoot != null && wasShowing != shouldShow) _panelRoot.SetActive(shouldShow);
+			bool inRoom = _source != null && _source.IsInRoom;
+			bool lobbyOpen = _lobbyListPanel != null && _lobbyListPanel.activeSelf;
+			bool shouldShow = inRoom && !lobbyOpen;
+			bool wasShowing = _panelRoot != null && _panelRoot.activeSelf;
 
-            if (shouldShow)
-            {
-                HideMenuPanels();
-            }
-            else if (wasShowing && !inRoom)
-            {
-                RestoreFallbackPanel();
-            }
+			if (_panelRoot != null && wasShowing != shouldShow)
+			{
+				_panelRoot.SetActive(shouldShow);
 
-            if (!shouldShow)
-            {
-                _signature = null;
-                return;
-            }
+				// Becoming visible: HandleSlotsChanged skipped renders while
+				// the panel was hidden, so refresh from the current state.
+				if (shouldShow) HandleSlotsChanged();
+			}
 
-            var slots = _source.Slots;
-            string signature = BuildSignature(slots, _source.IsLocalPlayerReady, _source.CanSetReady);
+			if (shouldShow)
+			{
+				HideMenuPanels();
+			}
+			else if (wasShowing && !inRoom)
+			{
+				RestoreFallbackPanel();
+			}
+		}
 
-            // Só mexe na UI quando algo mudou (o Update roda a cada frame).
-            if (signature == _signature) return;
-            _signature = signature;
+		private void HandleSlotsChanged()
+		{
+		    if (_panelRoot == null || !_panelRoot.activeSelf) return;
+		    if (_source == null) return;
 
-            SyncRows(slots);
-            UpdateControls();
-        }
+		    SyncRows(_source.Slots);
+		    UpdateControls();
+		} 
         
         private void HideMenuPanels()
         {
@@ -123,7 +138,6 @@ namespace UI
             if (_source == null) return;
 
             _source.SetLocalReady(!_source.IsLocalPlayerReady);
-            _signature = null;   // força a atualização no próximo frame
         }
 
         private void EnsureSource()
@@ -144,19 +158,7 @@ namespace UI
             return null;
         }
 
-        private static string BuildSignature(IReadOnlyList<RoomSlotInfo> slots, bool localReady, bool canSetReady)
-        {
-            var builder = new StringBuilder(64);
-            builder.Append(canSetReady ? '1' : '0');
-            builder.Append(localReady ? '1' : '0');
-
-            foreach (var slot in slots)
-            {
-                builder.Append('|').Append(slot.Index).Append(':').Append(slot.DisplayName).Append(':').Append(slot.IsReady ? '1' : '0');
-            }
-
-            return builder.ToString();
-        }
+       
 
         private void SyncRows(IReadOnlyList<RoomSlotInfo> slots)
         {
