@@ -22,6 +22,14 @@ namespace Tests.EditMode
                 return true;
             }
 
+            public bool RenameClass(ClassNode node, string newName)
+            {
+                if (node == null || string.IsNullOrWhiteSpace(newName)) return false;
+                node.Rename(newName);
+                OnDiagramChanged?.Invoke();
+                return true;
+            }
+
             public bool RemoveClass(ClassNode node)
             {
                 OnDiagramChanged?.Invoke();
@@ -202,6 +210,24 @@ namespace Tests.EditMode
             _actions.TriggerActionFailed("Erro de teste");
 
             Assert.AreEqual("Erro de teste", receivedMessage);
+        }
+
+        [Test]
+        public void TryRenameClass_WhenRenamed_PreservesNodeUIInstanceAndUpdatesKey()
+        {
+            var node = new ClassNode("Usuario");
+            _diagram.AddClass(node);
+            _controller.Initialize(_diagram, _actions);
+
+            var initialUI = _controller.ActiveNodes["Usuario"];
+            Assert.IsNotNull(initialUI);
+
+            bool success = _controller.TryRenameClass(node, "Cliente");
+
+            Assert.IsTrue(success);
+            Assert.AreEqual("Cliente", node.Name);
+            Assert.IsTrue(_controller.ActiveNodes.ContainsKey("Cliente"));
+            Assert.AreSame(initialUI, _controller.ActiveNodes["Cliente"], "A mesma instância de GameObject/UI deve ser preservada ao renomear!");
         }
 
         private static void SetPrivateField(object target, string fieldName, object value)

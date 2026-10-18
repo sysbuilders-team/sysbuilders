@@ -86,5 +86,76 @@ namespace Tests.EditMode
             Assert.IsTrue(validAssoc);
             Assert.IsFalse(_editor.IsAssociationMode, "Deve desativar o modo de associação após criar.");
         }
+
+        [Test]
+        public void RenameClass_WhenValid_RenamesClassAndFiresDiagramChanged()
+        {
+            _editor.TryCreateClass("AntigoNome", out var node);
+            bool diagramChangedFired = false;
+            _editor.OnDiagramChanged += () => diagramChangedFired = true;
+
+            bool renamed = _editor.RenameClass(node, "NovoNome");
+
+            Assert.IsTrue(renamed);
+            Assert.AreEqual("NovoNome", node.Name);
+            Assert.IsTrue(diagramChangedFired);
+            Assert.IsNotNull(_player.Diagram.FindClassByName("NovoNome"));
+            Assert.IsNull(_player.Diagram.FindClassByName("AntigoNome"));
+        }
+
+        [Test]
+        public void RenameClass_WhenLocked_FailsAndFiresActionFailed()
+        {
+            _editor.TryCreateClass("ClasseTravada", out var node);
+            node.Lock();
+
+            string failure = null;
+            _editor.OnActionFailed += msg => failure = msg;
+
+            bool renamed = _editor.RenameClass(node, "Tentativa");
+
+            Assert.IsFalse(renamed);
+            Assert.AreEqual("ClasseTravada", node.Name);
+            Assert.IsNotNull(failure);
+        }
+
+        [Test]
+        public void RenameClass_WhenDuplicateName_FailsAndKeepsOriginalName()
+        {
+            _editor.TryCreateClass("ClasseA", out var nodeA);
+            _editor.TryCreateClass("ClasseB", out var nodeB);
+
+            string failure = null;
+            _editor.OnActionFailed += msg => failure = msg;
+
+            bool renamed = _editor.RenameClass(nodeB, "ClasseA");
+
+            Assert.IsFalse(renamed);
+            Assert.AreEqual("ClasseB", nodeB.Name);
+            Assert.IsNotNull(failure);
+        }
+
+        [Test]
+        public void RenameClass_WhenEmptyOrWhitespace_Fails()
+        {
+            _editor.TryCreateClass("Valida", out var node);
+
+            Assert.IsFalse(_editor.RenameClass(node, ""));
+            Assert.IsFalse(_editor.RenameClass(node, "   "));
+            Assert.IsFalse(_editor.RenameClass(node, null));
+            Assert.AreEqual("Valida", node.Name);
+        }
+
+        [Test]
+        public void RenameClass_WhenCanModifyIsFalse_ReturnsFalse()
+        {
+            _editor.TryCreateClass("NomeInicial", out var node);
+            _canModify = false;
+
+            bool renamed = _editor.RenameClass(node, "OutroNome");
+
+            Assert.IsFalse(renamed);
+            Assert.AreEqual("NomeInicial", node.Name);
+        }
     }
 }

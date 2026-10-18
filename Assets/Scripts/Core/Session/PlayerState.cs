@@ -34,6 +34,12 @@ namespace Core.Session
             return _classDiagram.AddClass(classNode);
         }
 
+        public bool RenameClass(ClassNode classNode, string newName)
+        {
+            if (classNode == null) return false;
+            return _classDiagram.RenameClass(classNode, newName);
+        }
+
         public bool RemoveClass(ClassNode classNode)
         {
             if (classNode == null) return false;

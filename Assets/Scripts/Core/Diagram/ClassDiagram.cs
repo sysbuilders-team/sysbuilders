@@ -23,6 +23,34 @@ namespace Core.Diagram
             return true;
         }
 
+        public bool RenameClass(ClassNode classNode, string newName)
+        {
+            if (classNode == null || string.IsNullOrWhiteSpace(newName)) return false;
+            if (!_classes.Contains(classNode)) return false;
+
+            string trimmed = newName.Trim();
+            if (string.Equals(classNode.Name, trimmed, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (_classesByName.ContainsKey(trimmed)) return false;
+
+            if (classNode.Name != null)
+            {
+                _classesByName.Remove(classNode.Name);
+            }
+
+            if (!classNode.Rename(trimmed))
+            {
+                if (classNode.Name != null) _classesByName[classNode.Name] = classNode;
+                return false;
+            }
+
+            _classesByName.Add(trimmed, classNode);
+            return true;
+        }
+
         public bool AddRelation(Relation relation)
         {
             if (relation == null || relation.Origin == null || relation.Destination == null) return false;

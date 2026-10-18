@@ -23,14 +23,16 @@ namespace UI
         private IReadOnlyClassDiagram _diagram;
         private IDiagramActions _diagramActions;
 
-        private readonly Dictionary<string, ClassNodeUI> _activeNodeUIs = new Dictionary<string, ClassNodeUI>();
+        private readonly Dictionary<ClassNode, ClassNodeUI> _activeNodeUIs = new Dictionary<ClassNode, ClassNodeUI>();
         private readonly List<AssociationLineUI> _activeLineUIs = new List<AssociationLineUI>();
 
         private ClassNodeUI _selectedNodeUI;
         private bool _isAssociationMode;
         private Vector2 _nextSpawnPosition = new Vector2(100f, -100f);
 
-        public IReadOnlyDictionary<string, ClassNodeUI> ActiveNodes => _activeNodeUIs;
+        public IReadOnlyDictionary<string, ClassNodeUI> ActiveNodes => 
+            _activeNodeUIs.ToDictionary(kvp => kvp.Key.Name, kvp => kvp.Value);
+        public IReadOnlyDictionary<ClassNode, ClassNodeUI> ActiveNodesByNode => _activeNodeUIs;
         public ClassNodeUI SelectedNode => _selectedNodeUI;
         public bool IsAssociationMode => _isAssociationMode;
 
@@ -86,7 +88,7 @@ namespace UI
                 _selectedNodeUI = null;
             }
 
-            if (selectedNode != null && _activeNodeUIs.TryGetValue(selectedNode.Name, out var nodeUI))
+            if (selectedNode != null && _activeNodeUIs.TryGetValue(selectedNode, out var nodeUI))
             {
                 _selectedNodeUI = nodeUI;
                 _selectedNodeUI.SetSelected(true);
@@ -127,6 +129,12 @@ namespace UI
             return _diagramActions.TryCreateClass(className, out _);
         }
 
+        public bool TryRenameClass(ClassNode node, string newName)
+        {
+            if (_diagramActions == null || node == null) return false;
+            return _diagramActions.RenameClass(node, newName);
+        }
+
         public bool TryAddMethodToClass(ClassNode node, MethodData method)
         {
             if (_diagramActions == null || node == null || method == null) return false;
@@ -143,24 +151,24 @@ namespace UI
         {
             if (_diagram == null || _diagramContent == null) return;
             
-            var currentClasses = _diagram.Classes;
-            var currentClassNames = new HashSet<string>(currentClasses.Select(c => c.Name));
+            var currentClasses = new HashSet<ClassNode>(_diagram.Classes);
             
-            var toRemove = _activeNodeUIs.Keys.Where(name => !currentClassNames.Contains(name)).ToList();
-            foreach (var name in toRemove)
+            var toRemove = _activeNodeUIs.Keys.Where(node => !currentClasses.Contains(node)).ToList();
+            foreach (var node in toRemove)
             {
-                var nodeUI = _activeNodeUIs[name];
+                var nodeUI = _activeNodeUIs[node];
                 nodeUI.OnNodeClicked -= HandleNodeClicked;
+                nodeUI.OnRenameRequested -= HandleRenameRequested;
                 DestroyNodeGameObject(nodeUI.gameObject);
-                _activeNodeUIs.Remove(name);
+                _activeNodeUIs.Remove(node);
             }
             
-            foreach (var classNode in currentClasses)
+            foreach (var classNode in _diagram.Classes)
             {
-                if (!_activeNodeUIs.TryGetValue(classNode.Name, out var nodeUI))
+                if (!_activeNodeUIs.TryGetValue(classNode, out var nodeUI))
                 {
                     nodeUI = InstantiateNodeUI(classNode);
-                    _activeNodeUIs[classNode.Name] = nodeUI;
+                    _activeNodeUIs[classNode] = nodeUI;
                 }
                 nodeUI.Bind(classNode);
                 bool isSelected = _diagramActions != null && _diagramActions.SelectedClass == classNode;
@@ -200,6 +208,7 @@ namespace UI
             }
 
             nodeUI.OnNodeClicked += HandleNodeClicked;
+            nodeUI.OnRenameRequested += HandleRenameRequested;
             return nodeUI;
         }
 
@@ -220,8 +229,8 @@ namespace UI
             {
                 if (relation.Origin == null || relation.Destination == null) continue;
 
-                if (_activeNodeUIs.TryGetValue(relation.Origin.Name, out var originUI) &&
-                    _activeNodeUIs.TryGetValue(relation.Destination.Name, out var destUI))
+                if (_activeNodeUIs.TryGetValue(relation.Origin, out var originUI) &&
+                    _activeNodeUIs.TryGetValue(relation.Destination, out var destUI))
                 {
                     var lineUI = CreateLineUI();
                     lineUI.Connect(originUI.RectTransform, destUI.RectTransform);
@@ -245,6 +254,17 @@ namespace UI
             }
 
             return lineGo.GetComponent<AssociationLineUI>() ?? lineGo.AddComponent<AssociationLineUI>();
+        }
+
+        private void HandleRenameRequested(ClassNodeUI nodeUI, string newName)
+        {
+            if (_diagramActions == null || nodeUI == null || nodeUI.Node == null) return;
+
+            bool renamed = _diagramActions.RenameClass(nodeUI.Node, newName);
+            if (!renamed)
+            {
+                nodeUI.UpdateDisplay();
+            }
         }
 
         private void HandleNodeClicked(ClassNodeUI clickedNodeUI)
@@ -298,6 +318,7 @@ namespace UI
                 if (nodeUI != null)
                 {
                     nodeUI.OnNodeClicked -= HandleNodeClicked;
+                    nodeUI.OnRenameRequested -= HandleRenameRequested;
                     DestroyNodeGameObject(nodeUI.gameObject);
                 }
             }

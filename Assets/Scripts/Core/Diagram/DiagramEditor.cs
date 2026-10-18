@@ -95,6 +95,50 @@ namespace Core.Diagram
             return candidate;
         }
 
+        public bool RenameClass(ClassNode node, string newName)
+        {
+            if (node == null) return false;
+
+            if (!CanModifyDiagram)
+            {
+                OnActionFailed?.Invoke("Só é possível renomear classes na fase de construção.");
+                return false;
+            }
+
+            if (!LocalPlayer.Diagram.Classes.Contains(node))
+            {
+                OnActionFailed?.Invoke("A classe selecionada não pertence ao seu diagrama.");
+                return false;
+            }
+
+            if (node.IsLocked)
+            {
+                OnActionFailed?.Invoke($"A classe '{node.Name}' está congelada. Refatore-a para renomeá-la.");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                OnActionFailed?.Invoke("O nome da classe não pode ser vazio.");
+                return false;
+            }
+
+            string trimmed = newName.Trim();
+            if (string.Equals(node.Name, trimmed, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (!LocalPlayer.RenameClass(node, trimmed))
+            {
+                OnActionFailed?.Invoke($"Já existe uma classe chamada '{trimmed}' no diagrama.");
+                return false;
+            }
+
+            OnDiagramChanged?.Invoke();
+            return true;
+        }
+
         public bool RemoveClass(ClassNode node)
         {
             if (!CanModifyDiagram || node == null || node.IsLocked) return false;

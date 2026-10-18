@@ -245,6 +245,7 @@ namespace Core.Session
         public void ClearSelection() => _editor.ClearSelection();
         public void SetAssociationMode(bool active) => _editor.SetAssociationMode(active);
         public bool TryCreateClass(string className, out ClassNode createdNode) => _editor.TryCreateClass(className, out createdNode);
+        public bool RenameClass(ClassNode node, string newName) => _editor.RenameClass(node, newName);
         public bool RemoveClass(ClassNode node) => _editor.RemoveClass(node);
         public bool AddMethodToClass(ClassNode node, MethodData method) => _editor.AddMethodToClass(node, method);
         public bool RemoveMethodFromClass(ClassNode node, MethodData method) => _editor.RemoveMethodFromClass(node, method);

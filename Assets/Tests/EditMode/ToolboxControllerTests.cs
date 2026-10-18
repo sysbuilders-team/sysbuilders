@@ -34,6 +34,7 @@ namespace Tests.EditMode
                 createdNode = new ClassNode(className);
                 return true;
             }
+            public bool RenameClass(ClassNode node, string newName) => true;
             public bool RemoveClass(ClassNode node) => true;
             public bool AddMethodToClass(ClassNode node, MethodData method) => true;
             public bool RemoveMethodFromClass(ClassNode node, MethodData method) => true;

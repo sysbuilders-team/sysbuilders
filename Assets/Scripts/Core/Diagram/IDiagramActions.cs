@@ -5,6 +5,7 @@ namespace Core.Diagram
     public interface IDiagramActions
     {
         bool TryCreateClass(string className, out ClassNode createdNode);
+        bool RenameClass(ClassNode node, string newName);
         bool RemoveClass(ClassNode node);
 
         bool AddMethodToClass(ClassNode node, MethodData method);

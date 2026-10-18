@@ -30,7 +30,10 @@ namespace UI
         public RectTransform RectTransform => _rectTransform != null ? _rectTransform : (_rectTransform = GetComponent<RectTransform>());
 
         public event Action<ClassNodeUI> OnNodeClicked;
+        public event Action<ClassNodeUI, string> OnRenameRequested;
         public event Action<ClassNodeUI, MethodData> OnRemoveMethodRequested;
+
+        public bool CanRename => Node != null && !Node.IsLocked;
 
         private void Awake()
         {
@@ -43,6 +46,18 @@ namespace UI
                 if (textObj != null) _classNameText = textObj.GetComponent<TMP_Text>();
             }
 
+            if (_classNameInput == null)
+            {
+                var inputObj = transform.Find("Header_DragArea/Input_ClassName");
+                if (inputObj != null) _classNameInput = inputObj.GetComponent<TMP_InputField>();
+            }
+
+            if (_classNameInput != null)
+            {
+                _classNameInput.onEndEdit.RemoveListener(HandleInputEndEdit);
+                _classNameInput.onEndEdit.AddListener(HandleInputEndEdit);
+            }
+
             if (_methodsContainer == null)
             {
                 var containerObj = transform.Find("Methods_Container");
@@ -52,6 +67,14 @@ namespace UI
             if (_backgroundImage == null)
             {
                 _backgroundImage = GetComponent<Image>();
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (_classNameInput != null)
+            {
+                _classNameInput.onEndEdit.RemoveListener(HandleInputEndEdit);
             }
         }
 
@@ -137,8 +160,57 @@ namespace UI
             }
         }
 
+        public void BeginEditName()
+        {
+            if (!CanRename) return;
+
+            if (_classNameInput != null)
+            {
+                _classNameInput.gameObject.SetActive(true);
+                _classNameInput.text = Node.Name;
+
+                if (_classNameText != null)
+                {
+                    _classNameText.gameObject.SetActive(false);
+                }
+
+                _classNameInput.Select();
+                _classNameInput.ActivateInputField();
+            }
+        }
+
+        public void EndEditName()
+        {
+            if (_classNameInput != null && _classNameText != null)
+            {
+                _classNameInput.gameObject.SetActive(false);
+                _classNameText.gameObject.SetActive(true);
+            }
+            UpdateDisplay();
+        }
+
+        private void HandleInputEndEdit(string newName)
+        {
+            if (Node != null && !string.IsNullOrWhiteSpace(newName))
+            {
+                string trimmed = newName.Trim();
+                if (!string.Equals(trimmed, Node.Name, StringComparison.Ordinal))
+                {
+                    OnRenameRequested?.Invoke(this, trimmed);
+                }
+            }
+
+            EndEditName();
+        }
+
         public void OnPointerClick(PointerEventData eventData)
         {
+            if (eventData != null && eventData.clickCount == 2 && CanRename)
+            {
+                BeginEditName();
+                return;
+            }
+
             OnNodeClicked?.Invoke(this);
         }
 
