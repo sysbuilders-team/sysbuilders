@@ -26,6 +26,12 @@ namespace Network.Discovery
 
         private readonly List<RoomSlotInfo> _slots = new List<RoomSlotInfo>(2);
         private readonly List<NetworkRoomPlayer> _ordered = new List<NetworkRoomPlayer>(2);
+        private int _readyCount;
+        private int _lastStateHash;
+        private GameObject _lastLocalPlayerObject;
+        private GameRoomPlayer _cachedLocalPlayer;
+
+        public event Action OnSlotsChanged;
 
         // Being connected to a room is enough to show the panel: the local room player can take a
         // few frames to spawn on the client, and that is what left the client without a Ready button.
@@ -35,30 +41,9 @@ namespace Network.Discovery
 
         public int MaxPlayers => _maxPlayers;
 
-        public IReadOnlyList<RoomSlotInfo> Slots
-        {
-            get
-            {
-                Rebuild();
-                return _slots;
-            }
-        }
+        public IReadOnlyList<RoomSlotInfo> Slots => _slots;
 
-        public int ReadyCount
-        {
-            get
-            {
-                Rebuild();
-
-                int count = 0;
-                foreach (var slot in _slots)
-                {
-                    if (slot.IsReady) count++;
-                }
-
-                return count;
-            }
-        }
+        public int ReadyCount => _readyCount;
 
         public bool IsLocalPlayerReady
         {
@@ -78,13 +63,44 @@ namespace Network.Discovery
             local.CmdChangeReadyState(ready);
         }
 
-        private void Update()
-        {
-            if (!_disableMirrorRoomGui) return;
+		private void Update()
+		{
+		    // Poll a cheap hash of the room state. Rebuild only when it changes.
+		    // Beats the previous behavior — full Rebuild plus allocations every
+		    // frame — while avoiding a hard dependency on Mirror's room
+		    // callbacks, which differ across Mirror versions.
+		    int hash = ComputeStateHash();
+		    if (hash != _lastStateHash)
+		    {
+		        _lastStateHash = hash;
+		        Rebuild();
+		        OnSlotsChanged?.Invoke();
+		    }
 
-            Rebuild();
-            ApplyMirrorGuiFlag();
-        }
+		    if (_disableMirrorRoomGui) ApplyMirrorGuiFlag();
+		}       
+ 		
+		private int ComputeStateHash()
+		{
+		    var room = RoomManager();
+		    if (room == null) return 0;
+
+		    unchecked
+		    {
+		        int hash = room.roomSlots.Count;
+		        foreach (var slot in room.roomSlots)
+		        {
+		            if (slot == null) continue;
+		            hash = hash * 31 + slot.index;
+		            hash = hash * 31 + (slot.readyToBegin ? 1 : 0);
+		            if (slot is GameRoomPlayer rp && !string.IsNullOrEmpty(rp.playerName))
+		            {
+		                hash = hash * 31 + rp.playerName.GetHashCode();
+		            }
+		        }
+		        return hash;
+		    }
+		 }
 
         /// <summary>Keeps the default Mirror box off (including for whoever joins later).</summary>
         private void ApplyMirrorGuiFlag()
@@ -102,6 +118,7 @@ namespace Network.Discovery
         {
             _slots.Clear();
             _ordered.Clear();
+			_readyCount = 0;
 
             var room = RoomManager();
             if (room == null) return;
@@ -119,17 +136,24 @@ namespace Network.Discovery
             {
                 string playerName = slot is GameRoomPlayer roomPlayer ? roomPlayer.playerName : null;
                 _slots.Add(new RoomSlotInfo(slot.index, playerName, slot.readyToBegin, slot == local));
+				if (slot.readyToBegin) _readyCount++;
             }
         }
 
         private static NetworkRoomManager RoomManager() => NetworkManager.singleton as NetworkRoomManager;
 
-        private static GameRoomPlayer LocalRoomPlayer()
-        {
-            if (!NetworkClient.active) return null;
+        private GameRoomPlayer LocalRoomPlayer()
+		{
+		    if (!NetworkClient.active) return null;
 
-            var player = NetworkClient.localPlayer;
-            return player != null ? player.GetComponent<GameRoomPlayer>() : null;
-        }
+		    var playerObject = NetworkClient.localPlayer != null ? NetworkClient.localPlayer.gameObject : null;
+		    if (playerObject != _lastLocalPlayerObject)
+		    {
+		        _lastLocalPlayerObject = playerObject;
+		        _cachedLocalPlayer = playerObject != null ? playerObject.GetComponent<GameRoomPlayer>() : null;
+		    }
+
+		    return _cachedLocalPlayer;
+		} 
     }
 }
