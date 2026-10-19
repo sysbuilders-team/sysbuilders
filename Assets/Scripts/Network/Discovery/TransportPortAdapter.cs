@@ -1,4 +1,5 @@
 using Mirror;
+using Mirror.Transports.Encryption;
 using UnityEngine;
 
 namespace Network.Discovery
@@ -49,6 +50,17 @@ namespace Network.Discovery
         {
             var transport = Transport.active;
             return transport != null && transport.IsEncrypted;
+        }
+
+        /// <summary>
+        /// Fingerprint of the host public key, when the active transport exposes one.
+        /// Only meaningful on the host and only after StartHost: ServerStart is what loads the
+        /// persisted keypair, so calling this before hosting returns null.
+        /// </summary>
+        public static string ActiveTransportFingerprint()
+        {
+            var transport = Transport.active;
+            return transport is EncryptionTransport encryption ? encryption.EncryptionPublicKeyFingerprint : null;
         }
     }
 }

@@ -1,6 +1,4 @@
 using System;
-using System.Net;
-using System.Net.Sockets;
 using Core.Discovery;
 using Mirror;
 using Network.Discovery;
@@ -64,8 +62,6 @@ namespace Network
 
 		private void Start()
 		{
-			_sessionId = Guid.NewGuid().ToString("N");
-
 			string savedName = PlayerPrefs.GetString("PlayerName", "Jogador");
 			if (_playerNameInputField != null)
 			{
@@ -170,6 +166,7 @@ namespace Network
 					playerCount: players,
 					maxPlayers: 2,
 					encrypted: TransportPortAdapter.ActiveTransportIsEncrypted(),
+					publicKeyFingerprint: TransportPortAdapter.ActiveTransportFingerprint(),
 					state: RoomState.Lobby);
 		}
 
@@ -271,23 +268,19 @@ namespace Network
 			_discoveryStatusText.text = $"Rede: {network}";
 		}
 
-		private string GetLocalIPAddress()
+		/// <summary>
+		/// IPv4 of the primary interface, using the same selection as discovery. Dns.GetHostEntry
+		/// blocks the main thread and can stall the menu for seconds when DNS is misconfigured.
+		/// </summary>
+		private static string GetLocalIPAddress()
 		{
-			try
+			var candidates = NetworkInterfaceSelector.Enumerate();
+			if (NetworkInterfaceSelector.TrySelectPrimary(candidates, out var selected, out string reason))
 			{
-				var host = Dns.GetHostEntry(Dns.GetHostName());
-				foreach (var ip in host.AddressList)
-				{
-					if (ip.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(ip))
-					{
-						return ip.ToString();
-					}
-				}
+				return selected.Address.ToString();
 			}
-			catch
-			{
 
-			}
+			Debug.LogWarning($"[MenuManager] Could not determine the local IPv4 address: {reason}");
 			return "127.0.0.1";
 		}
 	}

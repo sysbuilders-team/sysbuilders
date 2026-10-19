@@ -290,6 +290,18 @@ namespace Tests.EditMode
 		}
 
 		[Test]
+		public void TofuPolicy_NoFingerprint_IsRejectedUnlessExplicitlyAllowed()
+		{
+			// "No fingerprint" must not be treated as "trusted". The mismatch flag governs only
+			// the mismatch case and must not leak into this one.
+			Assert.IsFalse(TofuPolicy.ShouldAccept(TofuDecision.NoFingerprint, rejectOnMismatch: true));
+			Assert.IsFalse(TofuPolicy.ShouldAccept(TofuDecision.NoFingerprint, rejectOnMismatch: false));
+
+			Assert.IsTrue(TofuPolicy.ShouldAccept(TofuDecision.NoFingerprint, rejectOnMismatch: true,
+					acceptNoFingerprint: true));
+		}
+
+		[Test]
 		public void NetworkInterfaceSelector_PrefersPhysicalInterfaceWithGateway()
 		{
 			var lan = new InterfaceCandidate("Ethernet", "Realtek", IPAddress.Parse("192.168.1.37"), true, true, true, false);
@@ -605,6 +617,18 @@ public void MdnsTier_AbsentFingerprint_IsNullNotError()
 
     Assert.IsTrue(MdnsRecordBuilder.TryParseRoom(message, null, out var parsed, out _));
     Assert.IsNull(parsed.PublicKeyFingerprint);
+}
+
+[Test]
+public void RoomAdvertisement_WithPlayers_PreservesFingerprint()
+{
+    // GameRoomManager republishes through WithPlayers on every player-count change; if the
+    // copy dropped the fingerprint the room list entry would go blank seconds after hosting.
+    var room = new RoomAdvertisement("sessao-fp-copy", "Sala", "Host", "Tema", 7777, 1, 2,
+        true, RoomState.Lobby, "AB:CD:EF");
+
+    Assert.AreEqual("AB:CD:EF", room.WithPlayers(2, RoomState.Lobby).PublicKeyFingerprint);
+    Assert.AreEqual("AB:CD:EF", room.WithVersion(2).PublicKeyFingerprint);
 }
 
 
