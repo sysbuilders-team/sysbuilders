@@ -17,6 +17,9 @@ namespace Network
 		[Tooltip("Recusa a conexão quando a chave pública do host mudou em relação ao que foi confiado (TOFU).")]
 		[SerializeField] private bool _rejectOnFingerprintMismatch = true;
 
+		[Tooltip("Accepts a host that presents no public key fingerprint. Off by default: an unverifiable host is not trusted silently.")]
+		[SerializeField] private bool _acceptHostsWithoutFingerprint;
+
 		public string ChosenTheme { get; private set; }
 		public string ChosenTrailId { get; private set; }
 
@@ -111,10 +114,10 @@ namespace Network
 
 			if (decision == TofuDecision.Mismatch)
 			{
-				// Recusa ESTA conexão, mas esquece a chave antiga: a próxima tentativa cai em
-				// "primeiro uso" e o jogador confia na chave nova de forma explícita (segundo clique).
-				KnownHostStore.Forget(host);
-				description += " Conexão recusada: clique de novo para confiar na chave nova.";
+				// The stored key is kept on purpose. Forgetting it here turned the rejection into a
+				// two-click bypass: the next attempt evaluated as first use and accepted the new key
+				// automatically. Trusting a rotated key is an explicit action now, driven by a
+				// confirmation UI that calls KnownHostStore.Forget.
 				Debug.LogError($"[GameRoomManager] {description}");
 			}
 			else
@@ -127,7 +130,7 @@ namespace Network
 
 			if (TofuPolicy.ShouldStore(decision)) KnownHostStore.Store(host, presented);
 
-			return TofuPolicy.ShouldAccept(decision, _rejectOnFingerprintMismatch);
+			return TofuPolicy.ShouldAccept(decision, _rejectOnFingerprintMismatch, _acceptHostsWithoutFingerprint);
 		}
 
 		/// <summary>

@@ -28,12 +28,19 @@ namespace Core.Discovery
                 : TofuDecision.Mismatch;
         }
 
-        public static bool ShouldAccept(TofuDecision decision, bool rejectOnMismatch)
+        /// <summary>
+        /// Decides whether the connection may proceed. A host that presents no fingerprint is
+        /// rejected unless explicitly allowed: "no fingerprint" must never be silently equivalent
+        /// to "trusted".
+        /// </summary>
+        public static bool ShouldAccept(TofuDecision decision, bool rejectOnMismatch, bool acceptNoFingerprint = false)
         {
             switch (decision)
             {
                 case TofuDecision.Mismatch:
                     return !rejectOnMismatch;
+                case TofuDecision.NoFingerprint:
+                    return acceptNoFingerprint;
                 default:
                     return true;
             }

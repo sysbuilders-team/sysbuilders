@@ -290,6 +290,18 @@ namespace Tests.EditMode
 		}
 
 		[Test]
+		public void TofuPolicy_NoFingerprint_IsRejectedUnlessExplicitlyAllowed()
+		{
+			// "No fingerprint" must not be treated as "trusted". The mismatch flag governs only
+			// the mismatch case and must not leak into this one.
+			Assert.IsFalse(TofuPolicy.ShouldAccept(TofuDecision.NoFingerprint, rejectOnMismatch: true));
+			Assert.IsFalse(TofuPolicy.ShouldAccept(TofuDecision.NoFingerprint, rejectOnMismatch: false));
+
+			Assert.IsTrue(TofuPolicy.ShouldAccept(TofuDecision.NoFingerprint, rejectOnMismatch: true,
+					acceptNoFingerprint: true));
+		}
+
+		[Test]
 		public void NetworkInterfaceSelector_PrefersPhysicalInterfaceWithGateway()
 		{
 			var lan = new InterfaceCandidate("Ethernet", "Realtek", IPAddress.Parse("192.168.1.37"), true, true, true, false);
