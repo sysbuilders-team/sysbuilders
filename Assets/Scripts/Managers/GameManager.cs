@@ -26,7 +26,12 @@ namespace Managers
         [SerializeField] private string _menuSceneName = "Menu";
 
         public MatchSession Session { get; private set; }
-        public bool RequireOpponentResult { get; set; }
+
+        /// <summary>
+        /// True when the session must wait for the opponent before advancing the phase.
+        /// Set only by StartMatch, so it can never disagree with the session it describes.
+        /// </summary>
+        public bool RequireOpponentResult { get; private set; }
 
         public event Action OnLocalPlayerReady;
         public event Action OnReturnToMenuRequested;
@@ -44,12 +49,13 @@ namespace Managers
             );
         }
 
-        public void Initialize(string theme, string trailId, PlayerSlot localSlot = PlayerSlot.PlayerOne)
+        public void Initialize(string theme, string trailId, PlayerSlot localSlot = PlayerSlot.PlayerOne,
+            bool isNetworkMatch = false)
         {
-            StartMatch(theme, trailId, localSlot);
+            StartMatch(theme, trailId, localSlot, isNetworkMatch);
         }
 
-        public void StartMatch(string theme, string trailId, PlayerSlot localSlot)
+        public void StartMatch(string theme, string trailId, PlayerSlot localSlot, bool isNetworkMatch = false)
         {
             if (Session != null)
             {
@@ -57,8 +63,10 @@ namespace Managers
                 return;
             }
 
+            RequireOpponentResult = isNetworkMatch;
+
             var requirements = _requirementManager.GetTrailById(theme, trailId);
-            Session = new MatchSession("Jogador 1", "Jogador 2", requirements, localSlot, isNetworkMatch: RequireOpponentResult);
+            Session = new MatchSession("Jogador 1", "Jogador 2", requirements, localSlot, isNetworkMatch: isNetworkMatch);
 
             Session.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
             Session.TurnManager.OnPhaseChange += HandlePhaseChange;

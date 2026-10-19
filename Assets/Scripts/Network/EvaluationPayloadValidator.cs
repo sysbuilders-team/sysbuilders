@@ -27,6 +27,19 @@ namespace Network
         /// </summary>
         public const int MaxPenaltyPerTurn = 5000;
 
+        /// <summary>Validates the payload exactly as it arrives from the network.</summary>
+        public static bool TryValidate(MatchResultPayload payload, out string reason)
+        {
+            return TryValidate(
+                payload.TurnNumber,
+                payload.RawScore,
+                payload.PenaltyScore,
+                payload.SmellTypes,
+                payload.SmellSeverities,
+                payload.SmellClasses,
+                out reason);
+        }
+
         public static bool TryValidate(
             int turnNumber,
             int rawScore,

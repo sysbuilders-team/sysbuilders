@@ -19,7 +19,6 @@ namespace Network
 	/// </summary>
 	public class MatchSyncBridge : NetworkBehaviour
 	{
-		private const int MaxAbortReasonLength = 120;
 		private const int RequiredPlayers = 2;
 
 		[SerializeField] private GameManager gameManager;
@@ -30,7 +29,7 @@ namespace Network
 
 		private readonly ReadyQuorum _quorum = new ReadyQuorum(RequiredPlayers);	
         private MatchSession _subscribedSession;
-		private bool _matchAborted;
+		private readonly MatchAbortCoordinator _abort = new MatchAbortCoordinator();
 
 		public override void OnStartServer()
 		{
@@ -40,25 +39,7 @@ namespace Network
 			NetworkServer.OnDisconnectedEvent += HandleServerDisconnect;
 
 			var roomManager = NetworkManager.singleton as GameRoomManager;
-			if (roomManager == null || string.IsNullOrEmpty(roomManager.ChosenTheme))
-			{
-				const string reason = "Tema da partida não definido.";
-				Debug.LogError($"[MatchSyncBridge] {reason} Abortando partida.");
 
-				if (NetworkServer.active)
-				{
-					try { RpcNotifyMatchStartFailed(reason); }
-					catch (Exception notifyEx)
-					{
-						Debug.LogError($"[MatchSyncBridge] Nao foi possivel notificar os clientes da falha: {notifyEx.Message}");
-					}
-				}
-
-				AbortLocalMatch(reason);
-				return;
-			}
-
-			_theme = roomManager.ChosenTheme;
 			if (requirementManager == null)
 			{
 				if (!TryGetComponent(out requirementManager))
@@ -67,42 +48,24 @@ namespace Network
 				}
 			}
 
-			try
+			MatchStartPlan plan = MatchStartCoordinator.Resolve(
+				roomManager?.ChosenTheme,
+				requirementManager != null ? requirementManager.GetRandomTrailId : null);
+
+			if (!plan.Succeeded)
 			{
-				if (requirementManager == null)
-				{
-					throw new InvalidOperationException("RequirementManager não encontrado para sortear a trilha.");
-				}
+				Debug.LogError($"[MatchSyncBridge] Erro ao iniciar partida no servidor: {plan.FailureReason}");
 
-				_trailId = requirementManager.GetRandomTrailId(_theme);
-
-				if (string.IsNullOrEmpty(_trailId))
-				{
-					throw new InvalidOperationException($"Nenhuma trilha encontrada para o tema '{_theme}'.");
-				}
-
-				Debug.Log($"[MatchSyncBridge] Server: tema={_theme} | trail={_trailId}");
-
-				StartLocalMatch(_theme, _trailId, PlayerSlot.PlayerOne);
+				NotifyMatchStartFailed(plan.FailureReason);
+				AbortLocalMatch(plan.FailureReason);
+				return;
 			}
-			catch (Exception ex)
-			{
-				Debug.LogError($"[MatchSyncBridge] Erro crítico ao iniciar partida no servidor: {ex.Message}");
 
-				if (NetworkServer.active)
-				{
-					try
-					{
-						RpcNotifyMatchStartFailed(ex.Message);
-					}
-					catch (Exception notifyEx)
-					{
-						Debug.LogError($"[MatchSyncBridge] Nao foi possivel notificar os clientes da falha: {notifyEx.Message}");
-					}
-				}
+			_theme = plan.Theme;
+			_trailId = plan.TrailId;
+			Debug.Log($"[MatchSyncBridge] Server: tema={_theme} | trail={_trailId}");
 
-				AbortLocalMatch(ex.Message);
-			}
+			StartLocalMatch(_theme, _trailId, PlayerSlot.PlayerOne);
 		}
 
 		public override void OnStopServer()
@@ -110,6 +73,21 @@ namespace Network
 			NetworkServer.OnDisconnectedEvent -= HandleServerDisconnect;
 			_quorum.ClearAll();
 			base.OnStopServer();
+		}
+
+		/// <summary>Tells every client why the match could not start. Best effort: never throws.</summary>
+		private void NotifyMatchStartFailed(string reason)
+		{
+			if (!NetworkServer.active) return;
+
+			try
+			{
+				RpcNotifyMatchStartFailed(reason);
+			}
+			catch (Exception notifyEx)
+			{
+				Debug.LogError($"[MatchSyncBridge] Nao foi possivel notificar os clientes da falha: {notifyEx.Message}");
+			}
 		}
 
 		[ClientRpc]
@@ -127,15 +105,14 @@ namespace Network
 				return;
 			}
 
-			string safeReason = TruncateForWire(reason, MaxAbortReasonLength);
+			string safeReason = MatchAbortCoordinator.SanitizeReason(reason);
 			Debug.LogError($"[MatchSyncBridge] Cliente reportou falha ao iniciar a partida: {safeReason}");
 			RpcNotifyMatchStartFailed(safeReason);
 		}
 
 		private void AbortLocalMatch(string reason)
 		{
-			if (_matchAborted) return;
-			_matchAborted = true;
+			if (!_abort.TryBeginAbort()) return;
 
 			Debug.LogError($"[MatchSyncBridge] Partida abortada: {reason}");
 
@@ -147,7 +124,7 @@ namespace Network
 
 		private void HandleServerDisconnect(NetworkConnectionToClient conn)
 		{
-			if (_matchAborted) return;
+			if (_abort.HasAborted) return;
 			if (gameManager == null || gameManager.Session == null) return;
 
 			_quorum.ClearAll();
@@ -195,9 +172,8 @@ namespace Network
 
 		private void StartLocalMatch(string theme, string trailId, PlayerSlot slot)
 		{
-			gameManager.RequireOpponentResult = true;
-			gameManager.StartMatch(theme, trailId, slot);
-			_matchAborted = false;
+			gameManager.StartMatch(theme, trailId, slot, isNetworkMatch: true);
+			_abort.Reset();
 
 			if (gameManager.Session != null && _subscribedSession != gameManager.Session)
 			{
@@ -231,12 +207,6 @@ namespace Network
 				if (ReferenceEquals(conn, sender)) return true;
 			}
 			return false;
-		}
-
-		private static string TruncateForWire(string value, int maxLength)
-		{
-			if (string.IsNullOrEmpty(value)) return string.Empty;
-			return value.Length <= maxLength ? value : value.Substring(0, maxLength) + "...";
 		}
 
 		[Command(requiresAuthority = false)]
@@ -274,7 +244,10 @@ namespace Network
 
 			if (_quorum.IsReadyQuorumMet)
 			{
-				_quorum.ClearAll();
+				// Clear only the quorum this path owns. Evaluations are cleared by
+				// CmdSendEvaluationResult; wiping them here would erase a late result
+				// instead of letting the evaluation path decide.
+				_quorum.ClearReady();
 				RpcAdvancePhase();
 			}
 		}
@@ -338,19 +311,29 @@ namespace Network
 		private void HandleLocalEvaluationCompleted(EvaluationResult localResult)
 		{
 			if (gameManager == null || gameManager.Session == null) return;
+
 			SmellWireCodec.Encode(localResult.DetectedSmells, out int[] smellTypes, out int[] smellSeverities, out string[] smellClasses);
 			var tm = gameManager.Session.TurnManager;
-			CmdSendEvaluationResult(tm.CurrentTurn, (int)tm.CurrentPhase, (int)gameManager.Session.LocalSlot,
-				localResult.RawScore, localResult.PenaltyScore,
-				smellTypes, smellSeverities, smellClasses);
+
+			var payload = new MatchResultPayload
+			{
+				TurnNumber = tm.CurrentTurn,
+				Phase = (int)tm.CurrentPhase,
+				SlotIndex = (int)gameManager.Session.LocalSlot,
+				RawScore = localResult.RawScore,
+				PenaltyScore = localResult.PenaltyScore,
+				SmellTypes = smellTypes,
+				SmellSeverities = smellSeverities,
+				SmellClasses = smellClasses
+			};
+
+			CmdSendEvaluationResult(payload);
 		}
 
 		[Command(requiresAuthority = false)]
-		private void CmdSendEvaluationResult(int turnNumber, int phase, int slotIndex, int rawScore, int penaltyScore,
-			int[] smellTypes, int[] smellSeverities, string[] smellClasses,
-			NetworkConnectionToClient sender = null)
+		private void CmdSendEvaluationResult(MatchResultPayload payload, NetworkConnectionToClient sender = null)
 		{
-			var slot = (PlayerSlot)slotIndex;
+			var slot = (PlayerSlot)payload.SlotIndex;
 			if (!IsSenderAuthorizedForSlot(sender, slot))
 			{
 				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejeitado: conexão não autorizada para o slot {slot}.");
@@ -363,33 +346,30 @@ namespace Network
 				return;
 			}
 
-			if (!EvaluationPayloadValidator.TryValidate(
-		turnNumber, rawScore, penaltyScore,
-		smellTypes, smellSeverities, smellClasses,
-		out string reason))
+			if (!EvaluationPayloadValidator.TryValidate(payload, out string reason))
 			{
-			Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: {reason}");
-			return;
-			}	
+				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: {reason}");
+				return;
+			}
 
 			var tm = gameManager.Session.TurnManager;
 
-			if (turnNumber != tm.CurrentTurn)
+			if (payload.TurnNumber != tm.CurrentTurn)
 			{
-				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult descartado: turno {turnNumber} não é o atual ({tm.CurrentTurn}).");
+				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult descartado: turno {payload.TurnNumber} não é o atual ({tm.CurrentTurn}).");
 				return;
 			}
 
-			if (phase != (int)tm.CurrentPhase)
+			if (payload.Phase != (int)tm.CurrentPhase)
 			{
-				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult descartado: fase {phase} não é a atual ({(int)tm.CurrentPhase}).");
+				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult descartado: fase {payload.Phase} não é a atual ({(int)tm.CurrentPhase}).");
 				return;
 			}
 
-			RpcReceiveEvaluationResult(turnNumber, slotIndex, rawScore, penaltyScore, smellTypes, smellSeverities, smellClasses);
+			RpcReceiveEvaluationResult(payload);
 
 			_quorum.MarkEvaluated(slot);
-			Debug.Log($"[MatchSyncBridge] Server: avaliação do slot {slot} do turno {turnNumber} recebida ({_quorum.EvaluatedCount}/{RequiredPlayers})");
+			Debug.Log($"[MatchSyncBridge] Server: avaliação do slot {slot} do turno {payload.TurnNumber} recebida ({_quorum.EvaluatedCount}/{RequiredPlayers})");
 
 			if (_quorum.IsEvaluationQuorumMet)
 			{
@@ -399,21 +379,20 @@ namespace Network
 		}
 
 		[ClientRpc]
-		private void RpcReceiveEvaluationResult(int turnNumber, int targetSlot, int rawScore, int penaltyScore,
-			int[] smellTypes, int[] smellSeverities, string[] smellClasses)
+		private void RpcReceiveEvaluationResult(MatchResultPayload payload)
 		{
 			if (gameManager == null || gameManager.Session == null) return;
-			if ((int)gameManager.Session.LocalSlot == targetSlot) return;
+			if ((int)gameManager.Session.LocalSlot == payload.SlotIndex) return;
 
 			var rivalResult = new EvaluationResult(
-				rawScore,
-				penaltyScore,
+				payload.RawScore,
+				payload.PenaltyScore,
 				new List<string>(),
-				SmellWireCodec.Decode(smellTypes, smellSeverities, smellClasses)
+				SmellWireCodec.Decode(payload.SmellTypes, payload.SmellSeverities, payload.SmellClasses)
 			);
 
-			Debug.Log($"[MatchSyncBridge] Slot rival {targetSlot} (turno {turnNumber}) — raw:{rawScore} penalty:{penaltyScore} total:{rivalResult.TotalScore}");
-			gameManager.ReceiveOpponentEvaluation(turnNumber, rivalResult);
+			Debug.Log($"[MatchSyncBridge] Slot rival {payload.SlotIndex} (turno {payload.TurnNumber}) | raw:{payload.RawScore} penalty:{payload.PenaltyScore} total:{rivalResult.TotalScore}");
+			gameManager.ReceiveOpponentEvaluation(payload.TurnNumber, rivalResult);
 		}
 	}
 }
