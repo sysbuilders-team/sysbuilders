@@ -81,7 +81,9 @@ namespace Tests.EditMode
 			// Network byte order: without it, no off-the-shelf responder (dns-sd/avahi)
 			// understands the announcement.
 			Assert.AreEqual(0x00, bytes[4]);
-			Assert.AreEqual(0x04, bytes[5], "ANCOUNT should be big-endian");
+			Assert.AreEqual(0x00, bytes[5], "QDCOUNT is zero for a response");
+			Assert.AreEqual(0x00, bytes[6]);
+			Assert.AreEqual(0x04, bytes[7], "ANCOUNT should be big-endian");
 
 			Assert.IsTrue(MdnsCodec.TryDecode(bytes, out var message));
 			Assert.AreEqual(4, message.Answers.Count);
@@ -199,7 +201,9 @@ namespace Tests.EditMode
 			// Short TTL and reannounce every 10s: the browser expires by the PTR record TTL.
 			var responder = new MdnsResponder(host, group, port, host.Address,
 					ttl: TimeSpan.FromSeconds(20), reannounceInterval: TimeSpan.FromSeconds(10));
-			var browser = new MdnsBrowser(client, group, port);
+			// A long query interval keeps the browser's own query (and the host's answer) out of
+			// the TTL assertion: otherwise the refresh at T0+21 moves expiry to T0+41.
+			var browser = new MdnsBrowser(client, group, port, queryInterval: TimeSpan.FromMinutes(10));
 
 			var lost = new List<string>();
 			browser.OnRoomLost += l => lost.Add(l);
