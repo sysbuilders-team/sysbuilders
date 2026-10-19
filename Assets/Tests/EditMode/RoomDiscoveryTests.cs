@@ -607,6 +607,18 @@ public void MdnsTier_AbsentFingerprint_IsNullNotError()
     Assert.IsNull(parsed.PublicKeyFingerprint);
 }
 
+[Test]
+public void RoomAdvertisement_WithPlayers_PreservesFingerprint()
+{
+    // GameRoomManager republishes through WithPlayers on every player-count change; if the
+    // copy dropped the fingerprint the room list entry would go blank seconds after hosting.
+    var room = new RoomAdvertisement("sessao-fp-copy", "Sala", "Host", "Tema", 7777, 1, 2,
+        true, RoomState.Lobby, "AB:CD:EF");
+
+    Assert.AreEqual("AB:CD:EF", room.WithPlayers(2, RoomState.Lobby).PublicKeyFingerprint);
+    Assert.AreEqual("AB:CD:EF", room.WithVersion(2).PublicKeyFingerprint);
+}
+
 
 		private static byte[] BuildCompressedResponse(RoomAdvertisement room)
 		{

@@ -170,6 +170,7 @@ namespace Network
 					playerCount: players,
 					maxPlayers: 2,
 					encrypted: TransportPortAdapter.ActiveTransportIsEncrypted(),
+					publicKeyFingerprint: TransportPortAdapter.ActiveTransportFingerprint(),
 					state: RoomState.Lobby);
 		}
 
