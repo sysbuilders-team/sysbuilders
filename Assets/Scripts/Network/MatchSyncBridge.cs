@@ -172,8 +172,7 @@ namespace Network
 
 		private void StartLocalMatch(string theme, string trailId, PlayerSlot slot)
 		{
-			gameManager.RequireOpponentResult = true;
-			gameManager.StartMatch(theme, trailId, slot);
+			gameManager.StartMatch(theme, trailId, slot, isNetworkMatch: true);
 			_abort.Reset();
 
 			if (gameManager.Session != null && _subscribedSession != gameManager.Session)
