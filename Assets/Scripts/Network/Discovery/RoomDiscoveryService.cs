@@ -330,8 +330,13 @@ namespace Network.Discovery
 						// from the network — contain the blast radius per datagram.
 						try
 						{
-							channel.Advertiser.HandleDatagram(datagram, now);
-							channel.Browser.HandleDatagram(datagram, now);
+							// Decode once: the responder and the browser consume the same
+							// message instead of parsing the payload twice.
+							if (!MdnsCodec.TryDecode(datagram.Payload, out MdnsMessage message))
+								continue;
+
+							channel.Advertiser.HandleMessage(message, datagram, now);
+							channel.Browser.HandleMessage(message, datagram, now);
 						}
 						catch (Exception ex)
 						{

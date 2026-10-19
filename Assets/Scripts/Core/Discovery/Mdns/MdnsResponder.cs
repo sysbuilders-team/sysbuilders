@@ -78,8 +78,18 @@ namespace Core.Discovery.Mdns
 
 		public void HandleDatagram(MulticastDatagram datagram, DateTime utcNow)
 		{
-			if (_current == null) return;
 			if (!MdnsCodec.TryDecode(datagram.Payload, out MdnsMessage message)) return;
+			HandleMessage(message, datagram, utcNow);
+		}
+
+		/// <summary>
+		/// Processes one already-decoded message. The caller (RoomDiscoveryService) decodes each
+		/// datagram once and fans it out to the advertiser and the browser, so this method never
+		/// touches datagram.Payload.
+		/// </summary>
+		public void HandleMessage(MdnsMessage message, MulticastDatagram datagram, DateTime utcNow)
+		{
+			if (_current == null) return;
 			if (message.IsResponse || message.IsTruncated) return;
 			if (message.Questions.Count == 0) return;
 

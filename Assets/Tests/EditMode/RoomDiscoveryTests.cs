@@ -81,7 +81,9 @@ namespace Tests.EditMode
 			// Network byte order: without it, no off-the-shelf responder (dns-sd/avahi)
 			// understands the announcement.
 			Assert.AreEqual(0x00, bytes[4]);
-			Assert.AreEqual(0x04, bytes[5], "ANCOUNT should be big-endian");
+			Assert.AreEqual(0x00, bytes[5], "QDCOUNT is zero for a response");
+			Assert.AreEqual(0x00, bytes[6]);
+			Assert.AreEqual(0x04, bytes[7], "ANCOUNT should be big-endian");
 
 			Assert.IsTrue(MdnsCodec.TryDecode(bytes, out var message));
 			Assert.AreEqual(4, message.Answers.Count);
@@ -199,7 +201,9 @@ namespace Tests.EditMode
 			// Short TTL and reannounce every 10s: the browser expires by the PTR record TTL.
 			var responder = new MdnsResponder(host, group, port, host.Address,
 					ttl: TimeSpan.FromSeconds(20), reannounceInterval: TimeSpan.FromSeconds(10));
-			var browser = new MdnsBrowser(client, group, port);
+			// A long query interval keeps the browser's own query (and the host's answer) out of
+			// the TTL assertion: otherwise the refresh at T0+21 moves expiry to T0+41.
+			var browser = new MdnsBrowser(client, group, port, queryInterval: TimeSpan.FromMinutes(10));
 
 			var lost = new List<string>();
 			browser.OnRoomLost += l => lost.Add(l);
@@ -414,6 +418,118 @@ public void MdnsBrowser_Rooms_ReflectsAddAndRemoveAcrossCacheBoundaries()
     responder.StopAdvertising();
     Assert.AreEqual(0, browser.Rooms.Count, "cache must invalidate after OnRoomLost");
 }
+
+		// ---------------------------------------------------------------- decode-once (H4)
+
+		[Test]
+		public void MdnsBrowser_HandleMessage_DoesNotDecodeThePayload()
+		{
+			// RoomDiscoveryService decodes each datagram once and fans the MdnsMessage out to
+			// the advertiser and the browser. If HandleMessage ever decodes again, this
+			// deliberately corrupt payload makes the room disappear.
+			var network = new FakeNetwork();
+			var client = new FakeMulticastSocket(network, "192.168.1.20");
+			var group = IPAddress.Parse("224.0.0.251");
+			const int port = 5353;
+
+			client.Bind(port);
+			client.JoinGroup(group, client.Address);
+
+			var browser = new MdnsBrowser(client, group, port);
+			browser.StartBrowsing(T0);
+
+			byte[] valid = MdnsCodec.EncodeResponse(0, true,
+					MdnsRecordBuilder.AnnouncementRecords(Room("sessao-H"), IPAddress.Parse("192.168.1.10"),
+							MdnsRecordBuilder.DefaultTtl, cacheFlush: false));
+			Assert.IsTrue(MdnsCodec.TryDecode(valid, out MdnsMessage message));
+
+			var corrupt = new MulticastDatagram(new byte[] { 0x00, 0x01, 0x02 },
+					new IPEndPoint(IPAddress.Parse("192.168.1.10"), port));
+
+			browser.HandleMessage(message, corrupt, T0);
+
+			Assert.AreEqual(1, browser.Rooms.Count, "HandleMessage must consume the message it was given");
+		}
+
+		// ---------------------------------------------------------------- source binding (H6)
+
+		[Test]
+		public void MdnsBrowser_RejectsRefreshFromDifferentIP()
+		{
+			var network = new FakeNetwork();
+			var host = new FakeMulticastSocket(network, "192.168.1.10");
+			var attacker = new FakeMulticastSocket(network, "192.168.1.11");
+			var client = new FakeMulticastSocket(network, "192.168.1.20");
+			var group = IPAddress.Parse("224.0.0.251");
+			const int port = 5353;
+
+			host.Bind(port);
+			host.JoinGroup(group, host.Address);
+			client.Bind(port);
+			client.JoinGroup(group, client.Address);
+
+			var responder = new MdnsResponder(host, group, port, host.Address);
+			var browser = new MdnsBrowser(client, group, port);
+			var diagnostics = new List<string>();
+			browser.OnDiagnostic += d => diagnostics.Add(d);
+
+			DateTime now = T0;
+			host.StartReceiving(d => responder.HandleDatagram(d, now), _ => { });
+			client.StartReceiving(d => browser.HandleDatagram(d, now), _ => { });
+
+			browser.StartBrowsing(now);
+			responder.StartAdvertising(Room("sessao-S", "Sala C", port: 7777), now);
+			Assert.AreEqual(1, browser.Rooms.Count);
+
+			// Same session id, different source: the room must keep its original publisher.
+			var hijack = new RoomAdvertisement("sessao-S", "Hijacked", "Attacker", "Tema", 9999, 1, 2);
+			attacker.SendMulticast(
+					MdnsCodec.EncodeResponse(0, true,
+							MdnsRecordBuilder.AnnouncementRecords(hijack, attacker.Address,
+									MdnsRecordBuilder.DefaultTtl, cacheFlush: false)),
+					group, port);
+
+			DiscoveredRoom room = browser.Rooms.Single();
+			Assert.AreEqual(7777, room.Port, "port must stay with the first announcer");
+			Assert.AreEqual("Sala C", room.Room.RoomName);
+			Assert.AreEqual(1, diagnostics.Count, "the mismatch is reported exactly once");
+		}
+
+		[Test]
+		public void MdnsBrowser_RejectsGoodbyeFromDifferentIP()
+		{
+			var network = new FakeNetwork();
+			var host = new FakeMulticastSocket(network, "192.168.1.10");
+			var attacker = new FakeMulticastSocket(network, "192.168.1.11");
+			var client = new FakeMulticastSocket(network, "192.168.1.20");
+			var group = IPAddress.Parse("224.0.0.251");
+			const int port = 5353;
+
+			host.Bind(port);
+			host.JoinGroup(group, host.Address);
+			client.Bind(port);
+			client.JoinGroup(group, client.Address);
+
+			var responder = new MdnsResponder(host, group, port, host.Address);
+			var browser = new MdnsBrowser(client, group, port);
+			var lost = new List<string>();
+			browser.OnRoomLost += l => lost.Add(l);
+
+			DateTime now = T0;
+			host.StartReceiving(d => responder.HandleDatagram(d, now), _ => { });
+			client.StartReceiving(d => browser.HandleDatagram(d, now), _ => { });
+
+			browser.StartBrowsing(now);
+			responder.StartAdvertising(Room("sessao-G", "Sala G"), now);
+			Assert.AreEqual(1, browser.Rooms.Count);
+
+			attacker.SendMulticast(
+					MdnsCodec.EncodeResponse(0, true, MdnsRecordBuilder.GoodbyeRecords(Room("sessao-G"))),
+					group, port);
+
+			Assert.AreEqual(1, browser.Rooms.Count, "goodbye from another address must be ignored");
+			Assert.AreEqual(0, lost.Count);
+		}
 
 
 		private static byte[] BuildResponseWithSessionId(string sessionId, int ttlSeconds = 120)

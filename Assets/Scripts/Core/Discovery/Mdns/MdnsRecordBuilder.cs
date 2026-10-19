@@ -22,7 +22,7 @@ namespace Core.Discovery.Mdns
 		private const int MaxSessionIdLength = 64;
 		// PTR TTL upper bound. The publisher sends 120s by design (DefaultTtl);
 		// accepting anything above that lets a hostile host extend a ghost entry's
-		// lifetme in the browser's cache indefinitely.
+		// lifetime in the browser's cache indefinitely.
 		private const int MaxAcceptedTtlSeconds = 120;
 
         private const string KeyVersion = "v";
@@ -171,7 +171,7 @@ namespace Core.Discovery.Mdns
 
             if (!TryParseTxt(text, out var values)) return false;
 
-			// Validation must match RoomAdvertisement's constructor invariantst
+			// Validation must match RoomAdvertisement's constructor invariants
 		    // exactly. Otherwise a crafted packet reaches the constructor and throws
 		    // out of a method that promises never to throw.
 		    if (!values.TryGetValue(KeyId, out string sessionId)) return false;

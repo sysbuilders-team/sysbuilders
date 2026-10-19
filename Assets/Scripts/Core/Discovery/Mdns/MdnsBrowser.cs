@@ -32,6 +32,13 @@ namespace Core.Discovery.Mdns
         private DateTime _nextQueryUtc;
         private bool _versionWarned;
 
+        // Session id -> the address that first announced it. Kept in sync with _rooms:
+        // RemoveRoom deletes both, so a binding never outlives its room and a host that
+        // legitimately changes address can re-bind after the old entry expires.
+        private readonly Dictionary<string, IPAddress> _sessionSource =
+            new Dictionary<string, IPAddress>(StringComparer.Ordinal);
+        private bool _sourceMismatchWarned;
+
         public MdnsBrowser(IMulticastSocket socket, IPAddress group, int port,
             TimeSpan? queryInterval = null, TimeSpan? fallbackEntryTtl = null)
         {
@@ -95,10 +102,38 @@ namespace Core.Discovery.Mdns
         public void HandleDatagram(MulticastDatagram datagram, DateTime utcNow)
         {
             if (!MdnsCodec.TryDecode(datagram.Payload, out MdnsMessage message)) return;
+            HandleMessage(message, datagram, utcNow);
+        }
+
+        /// <summary>
+        /// Processes one already-decoded message. The caller (RoomDiscoveryService) decodes each
+        /// datagram once and fans it out to the advertiser and the browser, so this method never
+        /// touches datagram.Payload.
+        /// </summary>
+        public void HandleMessage(MdnsMessage message, MulticastDatagram datagram, DateTime utcNow)
+        {
             if (!message.IsResponse) return;
 
             if (!MdnsRecordBuilder.TryParseRoom(message, datagram.Remote?.Address, out RoomAdvertisement room,
                     out int ttlSeconds)) return;
+
+            // The transport source is the only identity in the packet we can trust (the A record
+            // is attacker-controlled). Bind each id to its first announcer so another host cannot
+            // refresh or kill a room that is not its own.
+            IPAddress source = datagram.Remote?.Address;
+            if (source == null) return;
+
+            if (_sessionSource.TryGetValue(room.SessionId, out IPAddress bound) && !bound.Equals(source))
+            {
+                if (!_sourceMismatchWarned)
+                {
+                    _sourceMismatchWarned = true;
+                    OnDiagnostic?.Invoke(
+                        $"Um host em {source} tentou anunciar '{room.RoomName}' com o id de {bound}. " +
+                        "Anuncio ignorado: o id ja esta vinculado ao endereco que o anunciou primeiro.");
+                }
+                return;
+            }
 
             // TTL 0 in the PTR = goodbye: we remove before the version check, because the signal is
             // unambiguous and always beneficial (the room no longer exists).
@@ -128,6 +163,12 @@ namespace Core.Discovery.Mdns
 
             TimeSpan entryTtl = ttlSeconds > 0 ? TimeSpan.FromSeconds(ttlSeconds) : _fallbackEntryTtl;
             var discovered = new DiscoveredRoom(room, datagram.Remote?.Address, DiscoveryTier.Mdns, utcNow);
+
+            // First accepted sighting owns the id for as long as the room lives.
+            if (!_sessionSource.ContainsKey(room.SessionId))
+            {
+                _sessionSource[room.SessionId] = source;
+            }
 
             if (_rooms.TryGetValue(room.SessionId, out var existing))
             {
@@ -201,6 +242,7 @@ namespace Core.Discovery.Mdns
             if (string.IsNullOrEmpty(sessionId)) return;
             if (!_rooms.Remove(sessionId)) return;
 
+            _sessionSource.Remove(sessionId);
 			_roomsCacheDirty = true;
             OnRoomLost?.Invoke($"{sessionId} ({reason})");
         }
