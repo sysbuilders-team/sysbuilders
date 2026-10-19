@@ -19,7 +19,6 @@ namespace Network
 	/// </summary>
 	public class MatchSyncBridge : NetworkBehaviour
 	{
-		private const int MaxAbortReasonLength = 120;
 		private const int RequiredPlayers = 2;
 
 		[SerializeField] private GameManager gameManager;
@@ -30,7 +29,7 @@ namespace Network
 
 		private readonly ReadyQuorum _quorum = new ReadyQuorum(RequiredPlayers);	
         private MatchSession _subscribedSession;
-		private bool _matchAborted;
+		private readonly MatchAbortCoordinator _abort = new MatchAbortCoordinator();
 
 		public override void OnStartServer()
 		{
@@ -57,15 +56,7 @@ namespace Network
 			{
 				Debug.LogError($"[MatchSyncBridge] Erro ao iniciar partida no servidor: {plan.FailureReason}");
 
-				if (NetworkServer.active)
-				{
-					try { RpcNotifyMatchStartFailed(plan.FailureReason); }
-					catch (Exception notifyEx)
-					{
-						Debug.LogError($"[MatchSyncBridge] Nao foi possivel notificar os clientes da falha: {notifyEx.Message}");
-					}
-				}
-
+				NotifyMatchStartFailed(plan.FailureReason);
 				AbortLocalMatch(plan.FailureReason);
 				return;
 			}
@@ -84,6 +75,21 @@ namespace Network
 			base.OnStopServer();
 		}
 
+		/// <summary>Tells every client why the match could not start. Best effort: never throws.</summary>
+		private void NotifyMatchStartFailed(string reason)
+		{
+			if (!NetworkServer.active) return;
+
+			try
+			{
+				RpcNotifyMatchStartFailed(reason);
+			}
+			catch (Exception notifyEx)
+			{
+				Debug.LogError($"[MatchSyncBridge] Nao foi possivel notificar os clientes da falha: {notifyEx.Message}");
+			}
+		}
+
 		[ClientRpc]
 		private void RpcNotifyMatchStartFailed(string reason)
 		{
@@ -99,15 +105,14 @@ namespace Network
 				return;
 			}
 
-			string safeReason = TruncateForWire(reason, MaxAbortReasonLength);
+			string safeReason = MatchAbortCoordinator.SanitizeReason(reason);
 			Debug.LogError($"[MatchSyncBridge] Cliente reportou falha ao iniciar a partida: {safeReason}");
 			RpcNotifyMatchStartFailed(safeReason);
 		}
 
 		private void AbortLocalMatch(string reason)
 		{
-			if (_matchAborted) return;
-			_matchAborted = true;
+			if (!_abort.TryBeginAbort()) return;
 
 			Debug.LogError($"[MatchSyncBridge] Partida abortada: {reason}");
 
@@ -119,7 +124,7 @@ namespace Network
 
 		private void HandleServerDisconnect(NetworkConnectionToClient conn)
 		{
-			if (_matchAborted) return;
+			if (_abort.HasAborted) return;
 			if (gameManager == null || gameManager.Session == null) return;
 
 			_quorum.ClearAll();
@@ -169,7 +174,7 @@ namespace Network
 		{
 			gameManager.RequireOpponentResult = true;
 			gameManager.StartMatch(theme, trailId, slot);
-			_matchAborted = false;
+			_abort.Reset();
 
 			if (gameManager.Session != null && _subscribedSession != gameManager.Session)
 			{
@@ -203,12 +208,6 @@ namespace Network
 				if (ReferenceEquals(conn, sender)) return true;
 			}
 			return false;
-		}
-
-		private static string TruncateForWire(string value, int maxLength)
-		{
-			if (string.IsNullOrEmpty(value)) return string.Empty;
-			return value.Length <= maxLength ? value : value.Substring(0, maxLength) + "...";
 		}
 
 		[Command(requiresAuthority = false)]
