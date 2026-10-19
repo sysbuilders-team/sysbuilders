@@ -40,25 +40,7 @@ namespace Network
 			NetworkServer.OnDisconnectedEvent += HandleServerDisconnect;
 
 			var roomManager = NetworkManager.singleton as GameRoomManager;
-			if (roomManager == null || string.IsNullOrEmpty(roomManager.ChosenTheme))
-			{
-				const string reason = "Tema da partida não definido.";
-				Debug.LogError($"[MatchSyncBridge] {reason} Abortando partida.");
 
-				if (NetworkServer.active)
-				{
-					try { RpcNotifyMatchStartFailed(reason); }
-					catch (Exception notifyEx)
-					{
-						Debug.LogError($"[MatchSyncBridge] Nao foi possivel notificar os clientes da falha: {notifyEx.Message}");
-					}
-				}
-
-				AbortLocalMatch(reason);
-				return;
-			}
-
-			_theme = roomManager.ChosenTheme;
 			if (requirementManager == null)
 			{
 				if (!TryGetComponent(out requirementManager))
@@ -67,42 +49,32 @@ namespace Network
 				}
 			}
 
-			try
+			MatchStartPlan plan = MatchStartCoordinator.Resolve(
+				roomManager?.ChosenTheme,
+				requirementManager != null ? requirementManager.GetRandomTrailId : null);
+
+			if (!plan.Succeeded)
 			{
-				if (requirementManager == null)
-				{
-					throw new InvalidOperationException("RequirementManager não encontrado para sortear a trilha.");
-				}
-
-				_trailId = requirementManager.GetRandomTrailId(_theme);
-
-				if (string.IsNullOrEmpty(_trailId))
-				{
-					throw new InvalidOperationException($"Nenhuma trilha encontrada para o tema '{_theme}'.");
-				}
-
-				Debug.Log($"[MatchSyncBridge] Server: tema={_theme} | trail={_trailId}");
-
-				StartLocalMatch(_theme, _trailId, PlayerSlot.PlayerOne);
-			}
-			catch (Exception ex)
-			{
-				Debug.LogError($"[MatchSyncBridge] Erro crítico ao iniciar partida no servidor: {ex.Message}");
+				Debug.LogError($"[MatchSyncBridge] Erro ao iniciar partida no servidor: {plan.FailureReason}");
 
 				if (NetworkServer.active)
 				{
-					try
-					{
-						RpcNotifyMatchStartFailed(ex.Message);
-					}
+					try { RpcNotifyMatchStartFailed(plan.FailureReason); }
 					catch (Exception notifyEx)
 					{
 						Debug.LogError($"[MatchSyncBridge] Nao foi possivel notificar os clientes da falha: {notifyEx.Message}");
 					}
 				}
 
-				AbortLocalMatch(ex.Message);
+				AbortLocalMatch(plan.FailureReason);
+				return;
 			}
+
+			_theme = plan.Theme;
+			_trailId = plan.TrailId;
+			Debug.Log($"[MatchSyncBridge] Server: tema={_theme} | trail={_trailId}");
+
+			StartLocalMatch(_theme, _trailId, PlayerSlot.PlayerOne);
 		}
 
 		public override void OnStopServer()
