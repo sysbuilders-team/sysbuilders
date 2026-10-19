@@ -132,5 +132,25 @@ namespace Tests.EditMode
 
             Assert.IsTrue(ok);
         }
+
+        [Test]
+        public void PayloadOverload_UsesTheSameRulesAsTheFieldSignature()
+        {
+            var payload = new MatchResultPayload
+            {
+                TurnNumber = 1,
+                RawScore = 100,
+                PenaltyScore = 50,
+                SmellTypes = ValidTypes(),
+                SmellSeverities = ValidSeverities(),
+                SmellClasses = ValidClasses()
+            };
+
+            Assert.IsTrue(EvaluationPayloadValidator.TryValidate(payload, out _));
+
+            payload.RawScore = -1;
+            Assert.IsFalse(EvaluationPayloadValidator.TryValidate(payload, out string reason));
+            StringAssert.Contains("raw", reason);
+        }
     }
 }

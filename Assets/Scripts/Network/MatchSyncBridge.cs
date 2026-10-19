@@ -338,19 +338,29 @@ namespace Network
 		private void HandleLocalEvaluationCompleted(EvaluationResult localResult)
 		{
 			if (gameManager == null || gameManager.Session == null) return;
+
 			SmellWireCodec.Encode(localResult.DetectedSmells, out int[] smellTypes, out int[] smellSeverities, out string[] smellClasses);
 			var tm = gameManager.Session.TurnManager;
-			CmdSendEvaluationResult(tm.CurrentTurn, (int)tm.CurrentPhase, (int)gameManager.Session.LocalSlot,
-				localResult.RawScore, localResult.PenaltyScore,
-				smellTypes, smellSeverities, smellClasses);
+
+			var payload = new MatchResultPayload
+			{
+				TurnNumber = tm.CurrentTurn,
+				Phase = (int)tm.CurrentPhase,
+				SlotIndex = (int)gameManager.Session.LocalSlot,
+				RawScore = localResult.RawScore,
+				PenaltyScore = localResult.PenaltyScore,
+				SmellTypes = smellTypes,
+				SmellSeverities = smellSeverities,
+				SmellClasses = smellClasses
+			};
+
+			CmdSendEvaluationResult(payload);
 		}
 
 		[Command(requiresAuthority = false)]
-		private void CmdSendEvaluationResult(int turnNumber, int phase, int slotIndex, int rawScore, int penaltyScore,
-			int[] smellTypes, int[] smellSeverities, string[] smellClasses,
-			NetworkConnectionToClient sender = null)
+		private void CmdSendEvaluationResult(MatchResultPayload payload, NetworkConnectionToClient sender = null)
 		{
-			var slot = (PlayerSlot)slotIndex;
+			var slot = (PlayerSlot)payload.SlotIndex;
 			if (!IsSenderAuthorizedForSlot(sender, slot))
 			{
 				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejeitado: conexão não autorizada para o slot {slot}.");
@@ -363,33 +373,30 @@ namespace Network
 				return;
 			}
 
-			if (!EvaluationPayloadValidator.TryValidate(
-		turnNumber, rawScore, penaltyScore,
-		smellTypes, smellSeverities, smellClasses,
-		out string reason))
+			if (!EvaluationPayloadValidator.TryValidate(payload, out string reason))
 			{
-			Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: {reason}");
-			return;
-			}	
+				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult rejected: {reason}");
+				return;
+			}
 
 			var tm = gameManager.Session.TurnManager;
 
-			if (turnNumber != tm.CurrentTurn)
+			if (payload.TurnNumber != tm.CurrentTurn)
 			{
-				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult descartado: turno {turnNumber} não é o atual ({tm.CurrentTurn}).");
+				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult descartado: turno {payload.TurnNumber} não é o atual ({tm.CurrentTurn}).");
 				return;
 			}
 
-			if (phase != (int)tm.CurrentPhase)
+			if (payload.Phase != (int)tm.CurrentPhase)
 			{
-				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult descartado: fase {phase} não é a atual ({(int)tm.CurrentPhase}).");
+				Debug.LogWarning($"[MatchSyncBridge] CmdSendEvaluationResult descartado: fase {payload.Phase} não é a atual ({(int)tm.CurrentPhase}).");
 				return;
 			}
 
-			RpcReceiveEvaluationResult(turnNumber, slotIndex, rawScore, penaltyScore, smellTypes, smellSeverities, smellClasses);
+			RpcReceiveEvaluationResult(payload);
 
 			_quorum.MarkEvaluated(slot);
-			Debug.Log($"[MatchSyncBridge] Server: avaliação do slot {slot} do turno {turnNumber} recebida ({_quorum.EvaluatedCount}/{RequiredPlayers})");
+			Debug.Log($"[MatchSyncBridge] Server: avaliação do slot {slot} do turno {payload.TurnNumber} recebida ({_quorum.EvaluatedCount}/{RequiredPlayers})");
 
 			if (_quorum.IsEvaluationQuorumMet)
 			{
@@ -399,21 +406,20 @@ namespace Network
 		}
 
 		[ClientRpc]
-		private void RpcReceiveEvaluationResult(int turnNumber, int targetSlot, int rawScore, int penaltyScore,
-			int[] smellTypes, int[] smellSeverities, string[] smellClasses)
+		private void RpcReceiveEvaluationResult(MatchResultPayload payload)
 		{
 			if (gameManager == null || gameManager.Session == null) return;
-			if ((int)gameManager.Session.LocalSlot == targetSlot) return;
+			if ((int)gameManager.Session.LocalSlot == payload.SlotIndex) return;
 
 			var rivalResult = new EvaluationResult(
-				rawScore,
-				penaltyScore,
+				payload.RawScore,
+				payload.PenaltyScore,
 				new List<string>(),
-				SmellWireCodec.Decode(smellTypes, smellSeverities, smellClasses)
+				SmellWireCodec.Decode(payload.SmellTypes, payload.SmellSeverities, payload.SmellClasses)
 			);
 
-			Debug.Log($"[MatchSyncBridge] Slot rival {targetSlot} (turno {turnNumber}) — raw:{rawScore} penalty:{penaltyScore} total:{rivalResult.TotalScore}");
-			gameManager.ReceiveOpponentEvaluation(turnNumber, rivalResult);
+			Debug.Log($"[MatchSyncBridge] Slot rival {payload.SlotIndex} (turno {payload.TurnNumber}) | raw:{payload.RawScore} penalty:{payload.PenaltyScore} total:{rivalResult.TotalScore}");
+			gameManager.ReceiveOpponentEvaluation(payload.TurnNumber, rivalResult);
 		}
 	}
 }
