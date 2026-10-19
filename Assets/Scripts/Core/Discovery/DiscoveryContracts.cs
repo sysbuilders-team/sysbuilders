@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using Core.Discovery.Mdns;
 
 namespace Core.Discovery
 {
@@ -57,8 +58,11 @@ namespace Core.Discovery
         void UpdateAdvertisement(RoomAdvertisement advertisement, DateTime utcNow);
         void StopAdvertising();
 
-        /// <summary>Handles one received datagram (a client query, for example).</summary>
-        void HandleDatagram(MulticastDatagram datagram, DateTime utcNow);
+        /// <summary>
+        /// Processes one already-decoded message. Decoding belongs to the caller, so a received
+        /// datagram is parsed once and fanned out to the advertiser and the browser.
+        /// </summary>
+        void HandleMessage(MdnsMessage message, MulticastDatagram datagram, DateTime utcNow);
 
         /// <summary>Called periodically (by the Unity layer, in Update) to re-announce.</summary>
         void Tick(DateTime utcNow);
@@ -76,7 +80,11 @@ namespace Core.Discovery
         /// <summary>Immediate query (the "Buscar Partidas" button) that keeps the current list.</summary>
         void Refresh(DateTime utcNow);
 
-        void HandleDatagram(MulticastDatagram datagram, DateTime utcNow);
+        /// <summary>
+        /// Processes one already-decoded message. Decoding belongs to the caller, so a received
+        /// datagram is parsed once and fanned out to the advertiser and the browser.
+        /// </summary>
+        void HandleMessage(MdnsMessage message, MulticastDatagram datagram, DateTime utcNow);
         void Tick(DateTime utcNow);
 
         event Action<DiscoveredRoom> OnRoomFound;

@@ -415,6 +415,38 @@ public void MdnsBrowser_Rooms_ReflectsAddAndRemoveAcrossCacheBoundaries()
     Assert.AreEqual(0, browser.Rooms.Count, "cache must invalidate after OnRoomLost");
 }
 
+		// ---------------------------------------------------------------- decode-once (H4)
+
+		[Test]
+		public void MdnsBrowser_HandleMessage_DoesNotDecodeThePayload()
+		{
+			// RoomDiscoveryService decodes each datagram once and fans the MdnsMessage out to
+			// the advertiser and the browser. If HandleMessage ever decodes again, this
+			// deliberately corrupt payload makes the room disappear.
+			var network = new FakeNetwork();
+			var client = new FakeMulticastSocket(network, "192.168.1.20");
+			var group = IPAddress.Parse("224.0.0.251");
+			const int port = 5353;
+
+			client.Bind(port);
+			client.JoinGroup(group, client.Address);
+
+			var browser = new MdnsBrowser(client, group, port);
+			browser.StartBrowsing(T0);
+
+			byte[] valid = MdnsCodec.EncodeResponse(0, true,
+					MdnsRecordBuilder.AnnouncementRecords(Room("sessao-H"), IPAddress.Parse("192.168.1.10"),
+							MdnsRecordBuilder.DefaultTtl, cacheFlush: false));
+			Assert.IsTrue(MdnsCodec.TryDecode(valid, out MdnsMessage message));
+
+			var corrupt = new MulticastDatagram(new byte[] { 0x00, 0x01, 0x02 },
+					new IPEndPoint(IPAddress.Parse("192.168.1.10"), port));
+
+			browser.HandleMessage(message, corrupt, T0);
+
+			Assert.AreEqual(1, browser.Rooms.Count, "HandleMessage must consume the message it was given");
+		}
+
 
 		private static byte[] BuildResponseWithSessionId(string sessionId, int ttlSeconds = 120)
 		{

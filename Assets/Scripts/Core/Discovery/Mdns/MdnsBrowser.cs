@@ -95,6 +95,16 @@ namespace Core.Discovery.Mdns
         public void HandleDatagram(MulticastDatagram datagram, DateTime utcNow)
         {
             if (!MdnsCodec.TryDecode(datagram.Payload, out MdnsMessage message)) return;
+            HandleMessage(message, datagram, utcNow);
+        }
+
+        /// <summary>
+        /// Processes one already-decoded message. The caller (RoomDiscoveryService) decodes each
+        /// datagram once and fans it out to the advertiser and the browser, so this method never
+        /// touches datagram.Payload.
+        /// </summary>
+        public void HandleMessage(MdnsMessage message, MulticastDatagram datagram, DateTime utcNow)
+        {
             if (!message.IsResponse) return;
 
             if (!MdnsRecordBuilder.TryParseRoom(message, datagram.Remote?.Address, out RoomAdvertisement room,
