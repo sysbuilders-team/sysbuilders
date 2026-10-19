@@ -244,7 +244,10 @@ namespace Network
 
 			if (_quorum.IsReadyQuorumMet)
 			{
-				_quorum.ClearAll();
+				// Clear only the quorum this path owns. Evaluations are cleared by
+				// CmdSendEvaluationResult; wiping them here would erase a late result
+				// instead of letting the evaluation path decide.
+				_quorum.ClearReady();
 				RpcAdvancePhase();
 			}
 		}
