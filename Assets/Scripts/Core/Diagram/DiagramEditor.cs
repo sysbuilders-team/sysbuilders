@@ -1,13 +1,26 @@
 using System;
 using System.Linq;
+using Core.Requirements;
 using Core.Session;
 
 namespace Core.Diagram
 {
     public class DiagramEditor : IDiagramActions
     {
+        public const int DefaultMaxClassesPerTurn = 2;
+        public const int DefaultMaxClassesPerMatch = Trail.DefaultMaxClasses;
+
         private readonly Func<PlayerState> _localPlayerProvider;
         private readonly Func<bool> _canModifyProvider;
+
+        public int ClassesCreatedThisTurn { get; private set; }
+        public int MaxClassesPerTurn { get; }
+        public int TotalClassesCreated => LocalPlayer?.Diagram.Classes.Count ?? 0;
+        public int MaxClassesPerMatch { get; }
+        public bool CanCreateClass =>
+            CanModifyDiagram &&
+            ClassesCreatedThisTurn < MaxClassesPerTurn &&
+            TotalClassesCreated < MaxClassesPerMatch;
 
         public ClassNode SelectedClass { get; private set; }
         public bool IsAssociationMode { get; private set; }
@@ -20,10 +33,36 @@ namespace Core.Diagram
         private PlayerState LocalPlayer => _localPlayerProvider();
         public bool CanModifyDiagram => _canModifyProvider();
 
-        public DiagramEditor(Func<PlayerState> localPlayerProvider, Func<bool> canModifyProvider)
+        public DiagramEditor(
+            Func<PlayerState> localPlayerProvider,
+            Func<bool> canModifyProvider,
+            int maxClassesPerTurn = DefaultMaxClassesPerTurn,
+            int maxClassesPerMatch = DefaultMaxClassesPerMatch)
         {
             _localPlayerProvider = localPlayerProvider ?? throw new ArgumentNullException(nameof(localPlayerProvider));
             _canModifyProvider = canModifyProvider ?? throw new ArgumentNullException(nameof(canModifyProvider));
+
+            if (maxClassesPerTurn < 1)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(maxClassesPerTurn),
+                    "O limite de classes por turno deve ser pelo menos 1.");
+            }
+
+            if (maxClassesPerMatch < 1)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(maxClassesPerMatch),
+                    "O limite de classes por partida deve ser pelo menos 1.");
+            }
+
+            MaxClassesPerTurn = maxClassesPerTurn;
+            MaxClassesPerMatch = maxClassesPerMatch;
+        }
+
+        public void ResetTurnQuota()
+        {
+            ClassesCreatedThisTurn = 0;
         }
 
         public void SelectClass(ClassNode node)
@@ -67,6 +106,18 @@ namespace Core.Diagram
             createdNode = null;
             if (!CanModifyDiagram) return false;
 
+            if (TotalClassesCreated >= MaxClassesPerMatch)
+            {
+                OnActionFailed?.Invoke($"Limite máximo de {MaxClassesPerMatch} classes na partida atingido.");
+                return false;
+            }
+
+            if (ClassesCreatedThisTurn >= MaxClassesPerTurn)
+            {
+                OnActionFailed?.Invoke($"Limite de {MaxClassesPerTurn} classes por turno atingido.");
+                return false;
+            }
+
             string finalName = string.IsNullOrWhiteSpace(className) ? GenerateDefaultClassName() : className.Trim();
             var newClass = new ClassNode(finalName);
 
@@ -76,6 +127,7 @@ namespace Core.Diagram
                 return false;
             }
 
+            ClassesCreatedThisTurn++;
             createdNode = newClass;
             SelectClass(newClass);
             OnDiagramChanged?.Invoke();
@@ -134,22 +186,6 @@ namespace Core.Diagram
                 OnActionFailed?.Invoke($"Já existe uma classe chamada '{trimmed}' no diagrama.");
                 return false;
             }
-
-            OnDiagramChanged?.Invoke();
-            return true;
-        }
-
-        public bool RemoveClass(ClassNode node)
-        {
-            if (!CanModifyDiagram || node == null || node.IsLocked) return false;
-            if (!LocalPlayer.Diagram.Classes.Contains(node)) return false;
-
-            if (SelectedClass == node)
-            {
-                ClearSelection();
-            }
-
-            if (!LocalPlayer.RemoveClass(node)) return false;
 
             OnDiagramChanged?.Invoke();
             return true;

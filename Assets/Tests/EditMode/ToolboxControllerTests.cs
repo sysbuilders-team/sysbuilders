@@ -29,14 +29,34 @@ namespace Tests.EditMode
 
         private class FakeDiagramActions : IDiagramActions
         {
+            public int ClassesCreatedThisTurn { get; set; }
+            public int MaxClassesPerTurn { get; set; } = DiagramEditor.DefaultMaxClassesPerTurn;
+            public int TotalClassesCreated { get; set; }
+            public int MaxClassesPerMatch { get; set; } = DiagramEditor.DefaultMaxClassesPerMatch;
+            public bool CanCreateClass =>
+                ClassesCreatedThisTurn < MaxClassesPerTurn &&
+                TotalClassesCreated < MaxClassesPerMatch;
+
             public bool TryCreateClass(string className, out ClassNode createdNode)
             {
-                createdNode = new ClassNode(className);
+                if (!CanCreateClass)
+                {
+                    createdNode = null;
+                    return false;
+                }
+
+                ClassesCreatedThisTurn++;
+                TotalClassesCreated++;
+                createdNode = new ClassNode(className ?? $"Classe{TotalClassesCreated}");
+                OnDiagramChanged?.Invoke();
                 return true;
             }
             public bool RenameClass(ClassNode node, string newName) => true;
-            public bool RemoveClass(ClassNode node) => true;
-            public bool AddMethodToClass(ClassNode node, MethodData method) => true;
+            public bool AddMethodToClass(ClassNode node, MethodData method)
+            {
+                node?.AddMethod(method);
+                return true;
+            }
             public bool RemoveMethodFromClass(ClassNode node, MethodData method) => true;
             public bool AddRelation(ClassNode origin, ClassNode destination, RelationType type = RelationType.Association) => true;
             public bool RemoveRelation(ClassNode origin, ClassNode destination) => true;
@@ -108,7 +128,6 @@ namespace Tests.EditMode
             SetPrivateField(_controller, "_methodsContainer", _methodsContainer);
             SetPrivateField(_controller, "_associationButton", _assocBtn);
             SetPrivateField(_controller, "_associationButtonText", _assocBtnText);
-            SetPrivateField(_controller, "_maxClassesPerTurn", 2);
 
             _requirementContext = new FakeRequirementContext();
             _diagramActions = new FakeDiagramActions();
@@ -130,25 +149,30 @@ namespace Tests.EditMode
         }
 
         [Test]
-        public void Initialize_DisplaysClassCreationLimit()
+        public void Initialize_DisplaysTurnAndMatchClassCreationLimits()
         {
             _controller.Initialize(_requirementContext, _diagramActions, _turnManager);
 
             StringAssert.Contains("0/2", _createClassBtnText.text);
+            StringAssert.Contains("0/7", _createClassBtnText.text);
             Assert.IsTrue(_createClassBtn.interactable);
         }
 
         [Test]
-        public void NotifyClassCreated_IncrementsCountAndDisablesWhenMaxReached()
+        public void CreateClassButton_UpdatesCountersAndDisablesWhenTurnOrMatchLimitReached()
         {
+            _diagramActions.MaxClassesPerTurn = 2;
+            _diagramActions.MaxClassesPerMatch = 3;
             _controller.Initialize(_requirementContext, _diagramActions, _turnManager);
 
-            Assert.IsTrue(_controller.NotifyClassCreated());
+            _createClassBtn.onClick.Invoke();
             StringAssert.Contains("1/2", _createClassBtnText.text);
+            StringAssert.Contains("1/3", _createClassBtnText.text);
             Assert.IsTrue(_createClassBtn.interactable);
 
-            Assert.IsTrue(_controller.NotifyClassCreated());
+            _createClassBtn.onClick.Invoke();
             StringAssert.Contains("2/2", _createClassBtnText.text);
+            StringAssert.Contains("2/3", _createClassBtnText.text);
             Assert.IsFalse(_createClassBtn.interactable);
             Assert.IsFalse(_controller.CanCreateClass());
         }
@@ -189,13 +213,13 @@ namespace Tests.EditMode
         public void CreateClassButton_WhenClicked_CallsTryCreateClassAndIncrementsCounter()
         {
             _controller.Initialize(_requirementContext, _diagramActions, _turnManager);
-            _turnManager.SetPlayerReady(PlayerSlot.PlayerOne);
-            _turnManager.SetPlayerReady(PlayerSlot.PlayerTwo); // Now in Build phase
 
             _createClassBtn.onClick.Invoke();
 
             Assert.AreEqual(1, _controller.ClassesCreatedThisTurn);
+            Assert.AreEqual(1, _controller.TotalClassesCreated);
             StringAssert.Contains("1/2", _createClassBtnText.text);
+            StringAssert.Contains("1/7", _createClassBtnText.text);
         }
 
         [Test]

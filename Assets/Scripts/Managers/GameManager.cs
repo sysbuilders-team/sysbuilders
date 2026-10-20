@@ -65,8 +65,14 @@ namespace Managers
 
             RequireOpponentResult = isNetworkMatch;
 
-            var requirements = _requirementManager.GetTrailById(theme, trailId);
-            Session = new MatchSession("Jogador 1", "Jogador 2", requirements, localSlot, isNetworkMatch: isNetworkMatch);
+            var trail = _requirementManager.GetTrailById(theme, trailId);
+            Session = new MatchSession(
+                "Jogador 1",
+                "Jogador 2",
+                trail.RequirementByTurn,
+                localSlot,
+                isNetworkMatch: isNetworkMatch,
+                maxClassesPerMatch: trail.MaxClasses);
 
             Session.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
             Session.TurnManager.OnPhaseChange += HandlePhaseChange;

@@ -16,7 +16,6 @@ namespace UI
         [SerializeField] private Button _createClassButton;
         [SerializeField] private TMP_Text _createClassButtonText;
         [SerializeField] private TMP_InputField _classNameInputField;
-        [SerializeField] private int _maxClassesPerTurn = 2; // TODO: ver isso conforme novas regras ou de acordo com os requirements designados
 
         [Header("Lista de Métodos")]
         [SerializeField] private Transform _methodsContainer;
@@ -30,13 +29,13 @@ namespace UI
         private IDiagramActions _diagramActions;
         private ITurnContext _turnContext;
 
-        private int _classesCreatedThisTurn;
-        private int _lastTrackedTurn = -1;
         private bool _isAssociationModeActive;
         private readonly List<MethodCardUI> _activeCards = new List<MethodCardUI>();
 
-        public int ClassesCreatedThisTurn => _classesCreatedThisTurn;
-        public int MaxClassesPerTurn => _maxClassesPerTurn;
+        public int ClassesCreatedThisTurn => _diagramActions?.ClassesCreatedThisTurn ?? 0;
+        public int MaxClassesPerTurn => _diagramActions?.MaxClassesPerTurn ?? DiagramEditor.DefaultMaxClassesPerTurn;
+        public int TotalClassesCreated => _diagramActions?.TotalClassesCreated ?? 0;
+        public int MaxClassesPerMatch => _diagramActions?.MaxClassesPerMatch ?? DiagramEditor.DefaultMaxClassesPerMatch;
         public bool IsAssociationModeActive => _isAssociationModeActive;
         public IReadOnlyList<MethodCardUI> ActiveCards => _activeCards;
 
@@ -82,8 +81,6 @@ namespace UI
             _diagramActions.OnAssociationModeChanged += HandleAssociationModeChanged;
             _diagramActions.OnDiagramChanged += HandleDiagramChanged;
 
-            _lastTrackedTurn = _turnContext.CurrentTurn;
-            _classesCreatedThisTurn = 0;
             _isAssociationModeActive = _diagramActions.IsAssociationMode;
 
             UpdateAllDisplays();
@@ -152,6 +149,7 @@ namespace UI
 
         private void HandleDiagramChanged()
         {
+            UpdateCreateClassButtonDisplay();
             PopulateMethodsList(_requirementContext?.CurrentRequirement);
         }
 
@@ -162,12 +160,6 @@ namespace UI
 
         private void HandlePhaseChange(TurnPhase newPhase)
         {
-            if (_turnContext != null && _turnContext.CurrentTurn != _lastTrackedTurn)
-            {
-                _lastTrackedTurn = _turnContext.CurrentTurn;
-                _classesCreatedThisTurn = 0;
-            }
-
             if (newPhase != TurnPhase.Build)
             {
                 SetAssociationMode(false);
@@ -195,27 +187,18 @@ namespace UI
 
                 if (_diagramActions.TryCreateClass(className, out _))
                 {
-                    NotifyClassCreated();
                     if (_classNameInputField != null) _classNameInputField.text = string.Empty;
+                    UpdateCreateClassButtonDisplay();
                 }
             }
 
             OnCreateClassClicked?.Invoke();
         }
 
-        public bool NotifyClassCreated()
-        {
-            if (!CanCreateClass()) return false;
-
-            _classesCreatedThisTurn++;
-            UpdateCreateClassButtonDisplay();
-            return true;
-        }
-
         public bool CanCreateClass()
         {
-            if (_turnContext == null) return false;
-            return _turnContext.CurrentPhase == TurnPhase.Build && _classesCreatedThisTurn < _maxClassesPerTurn;
+            if (_turnContext == null || _turnContext.CurrentPhase != TurnPhase.Build) return false;
+            return _diagramActions != null && _diagramActions.CanCreateClass;
         }
 
         private void HandleAssociationButtonClicked()
@@ -363,7 +346,7 @@ namespace UI
         {
             if (_createClassButtonText != null)
             {
-                _createClassButtonText.text = $"Criar Classe ({_classesCreatedThisTurn}/{_maxClassesPerTurn})";
+                _createClassButtonText.text = $"Criar Classe (Turno: {ClassesCreatedThisTurn}/{MaxClassesPerTurn} | Total: {TotalClassesCreated}/{MaxClassesPerMatch})";
             }
 
             if (_createClassButton != null)
@@ -384,10 +367,7 @@ namespace UI
         {
             bool isBuildPhase = phase == TurnPhase.Build;
 
-            if (_createClassButton != null)
-            {
-                _createClassButton.interactable = isBuildPhase && _classesCreatedThisTurn < _maxClassesPerTurn;
-            }
+            UpdateCreateClassButtonDisplay();
 
             if (_associationButton != null)
             {

@@ -12,7 +12,6 @@ namespace Core.Session
         public IReadOnlyClassDiagram Diagram => _classDiagram;
         private int _refactorPoints;
         public int RefactorPoints => _refactorPoints;
-        // TODO: Counter of classcreations this turns to limit how many allowed, generally 2 or 3 per turn.
         public int RefactorCost { get; }
         private readonly List<EvaluationResult> _evaluationHistory = new List<EvaluationResult>();
         public IReadOnlyList<EvaluationResult> EvaluationHistory => _evaluationHistory;
@@ -38,12 +37,6 @@ namespace Core.Session
         {
             if (classNode == null) return false;
             return _classDiagram.RenameClass(classNode, newName);
-        }
-
-        public bool RemoveClass(ClassNode classNode)
-        {
-            if (classNode == null) return false;
-            return _classDiagram.RemoveClass(classNode);
         }
 
         public void AddRefactorPoints(int points)

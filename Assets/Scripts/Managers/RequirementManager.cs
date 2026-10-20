@@ -46,10 +46,10 @@ namespace Managers
             return _catalog.SelectTrail(theme).Id;
         }
 
-        public IReadOnlyList<Requirement> GetTrailById(string theme, string trailId)
+        public Trail GetTrailById(string theme, string trailId)
         {
             EnsureCatalogLoaded();
-            return _catalog.GetRequirementsForMatch(theme, trailId);
+            return _catalog.GetTrailById(theme, trailId);
         }
 
         public IReadOnlyList<Requirement> SetActiveTrail(string theme, string trailId)
@@ -71,12 +71,6 @@ namespace Managers
         {
             EnsureCatalogLoaded();
             return _catalog.GetRequirementsForMatch(theme, trailId);
-        }
-
-        Trail IRequirementProvider.GetTrailById(string theme, string trailId)
-        {
-            EnsureCatalogLoaded();
-            return _catalog.GetTrailById(theme, trailId);
         }
         
         private void EnsureCatalogLoaded()
