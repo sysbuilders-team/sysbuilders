@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using Core.Diagram;
 using Core.Requirements;
@@ -42,24 +43,44 @@ namespace UI
         public event Action OnCreateClassClicked;
         public event Action<bool> OnAssociationModeToggled;
         public event Action<MethodData> OnMethodCardSelected;
+        public event Action<bool> OnPendingMethodsChanged;
+
+        private IReadOnlyClassDiagram _diagram;
+        public bool HasPendingMethods => _activeCards.Count > 0;
 
         private void Awake()
         {
+            ResolveMethodsContainer();
             SetupButtons();
         }
 
-        public void Initialize(IRequirementContext requirementContext, IDiagramActions diagramActions, ITurnContext turnContext)
+        private void ResolveMethodsContainer()
+        {
+            if (_methodsContainer != null)
+            {
+                var scrollRect = _methodsContainer.GetComponentInChildren<ScrollRect>();
+                if (scrollRect != null && scrollRect.content != null)
+                {
+                    _methodsContainer = scrollRect.content;
+                }
+            }
+        }
+
+        public void Initialize(IRequirementContext requirementContext, IDiagramActions diagramActions, ITurnContext turnContext, IReadOnlyClassDiagram diagram = null)
         {
             UnsubscribeFromEvents();
+            ResolveMethodsContainer();
             SetupButtons();
 
             _requirementContext = requirementContext ?? throw new ArgumentNullException(nameof(requirementContext));
             _diagramActions = diagramActions ?? throw new ArgumentNullException(nameof(diagramActions));
             _turnContext = turnContext ?? throw new ArgumentNullException(nameof(turnContext));
+            _diagram = diagram;
 
             _requirementContext.OnRequirementChanged += HandleRequirementChanged;
             _turnContext.OnPhaseChange += HandlePhaseChange;
             _diagramActions.OnAssociationModeChanged += HandleAssociationModeChanged;
+            _diagramActions.OnDiagramChanged += HandleDiagramChanged;
 
             _lastTrackedTurn = _turnContext.CurrentTurn;
             _classesCreatedThisTurn = 0;
@@ -100,6 +121,7 @@ namespace UI
             if (_diagramActions != null)
             {
                 _diagramActions.OnAssociationModeChanged -= HandleAssociationModeChanged;
+                _diagramActions.OnDiagramChanged -= HandleDiagramChanged;
             }
         }
 
@@ -126,6 +148,11 @@ namespace UI
                     _associationButtonText = _associationButton.GetComponentInChildren<TMP_Text>();
                 }
             }
+        }
+
+        private void HandleDiagramChanged()
+        {
+            PopulateMethodsList(_requirementContext?.CurrentRequirement);
         }
 
         private void HandleRequirementChanged(Requirement newRequirement)
@@ -214,10 +241,23 @@ namespace UI
         {
             ClearMethodsList();
 
-            if (requirement == null || requirement.RequirementMethods == null || _methodsContainer == null) return;
+            if (requirement == null || requirement.RequirementMethods == null || _methodsContainer == null)
+            {
+                OnPendingMethodsChanged?.Invoke(false);
+                return;
+            }
+
+            var assignedMethodNames = _diagram != null
+                ? new HashSet<string>(_diagram.Classes.SelectMany(c => c.Methods).Select(m => m.Name), StringComparer.Ordinal)
+                : new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var method in requirement.RequirementMethods)
             {
+                if (assignedMethodNames.Contains(method.Name))
+                {
+                    continue;
+                }
+
                 GameObject cardGo;
                 if (_methodCardPrefab != null)
                 {
@@ -225,8 +265,7 @@ namespace UI
                 }
                 else
                 {
-                    cardGo = new GameObject($"MethodCard_{method.Name}", typeof(RectTransform));
-                    cardGo.transform.SetParent(_methodsContainer, false);
+                    cardGo = CreateDefaultMethodCard(method);
                 }
 
                 var cardUI = cardGo.GetComponent<MethodCardUI>() ?? cardGo.AddComponent<MethodCardUI>();
@@ -234,6 +273,52 @@ namespace UI
                 cardUI.OnCardClicked += HandleCardClicked;
                 _activeCards.Add(cardUI);
             }
+
+            OnPendingMethodsChanged?.Invoke(HasPendingMethods);
+        }
+
+        // metodo fallback(ou usado sempre, xd) pra criar o cartao de metodo
+        // pode ser melhor explorado, pra ficar mais agradavel como UI
+        private GameObject CreateDefaultMethodCard(MethodData method)
+        {
+            var cardGo = new GameObject($"MethodCard_{method.Name}", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button), typeof(LayoutElement));
+            cardGo.transform.SetParent(_methodsContainer, false);
+
+            var rt = cardGo.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(220f, 36f);
+
+            var layout = cardGo.GetComponent<LayoutElement>();
+            layout.minHeight = 36f;
+            layout.preferredHeight = 36f;
+            layout.preferredWidth = 220f;
+            layout.flexibleWidth = 1f;
+
+            var image = cardGo.GetComponent<Image>();
+            image.color = new Color(0.92f, 0.94f, 0.98f, 1f);
+
+            var btn = cardGo.GetComponent<Button>();
+            var colors = btn.colors;
+            colors.normalColor = new Color(0.92f, 0.94f, 0.98f, 1f);
+            colors.highlightedColor = new Color(0.82f, 0.88f, 1f, 1f);
+            colors.pressedColor = new Color(0.72f, 0.80f, 0.95f, 1f);
+            btn.colors = colors;
+
+            var textGo = new GameObject("Text_MethodName", typeof(RectTransform), typeof(TextMeshProUGUI));
+            textGo.transform.SetParent(cardGo.transform, false);
+
+            var textRt = textGo.GetComponent<RectTransform>();
+            textRt.anchorMin = Vector2.zero;
+            textRt.anchorMax = Vector2.one;
+            textRt.offsetMin = new Vector2(10f, 0f);
+            textRt.offsetMax = new Vector2(-10f, 0f);
+
+            var tmp = textGo.GetComponent<TextMeshProUGUI>();
+            tmp.text = $"+ {method.Name}()";
+            tmp.fontSize = 14;
+            tmp.color = new Color(0.12f, 0.12f, 0.18f, 1f);
+            tmp.alignment = TextAlignmentOptions.MidlineLeft;
+
+            return cardGo;
         }
 
         private void HandleCardClicked(MethodData method)

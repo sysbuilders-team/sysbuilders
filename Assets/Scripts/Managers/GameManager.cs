@@ -97,7 +97,8 @@ namespace Managers
             _toolBox.Initialize(
                 requirementContext: Session.RequirementContext,
                 diagramActions: Session.DiagramActions,
-                turnContext: Session.TurnContext
+                turnContext: Session.TurnContext,
+                diagram: Session.LocalPlayer.Diagram
             );
 
             _diagram.Initialize(
@@ -122,8 +123,14 @@ namespace Managers
 
         private void WireUI()
         {
-            if (_rightBar != null) _rightBar.OnEndTurnTriggered += HandleLocalReady;
-            if (_evaluationModal != null) _evaluationModal.OnAdvanceClicked += HandleLocalReady;
+            if (_rightBar != null) _rightBar.OnEndTurnTriggered += HandleEndTurnTriggered;
+            if (_evaluationModal != null) _evaluationModal.OnAdvanceClicked += HandleAdvanceClicked;
+
+            if (_rightBar != null && _toolBox != null)
+            {
+                _rightBar.SetCanEndTurnPredicate(() => !_toolBox.HasPendingMethods);
+                _toolBox.OnPendingMethodsChanged += HandlePendingMethodsChanged;
+            }
 
             if (_toolBox != null && _diagram != null)
             {
@@ -139,11 +146,12 @@ namespace Managers
 
         private void UnwireUI()
         {
-            if (_rightBar != null) _rightBar.OnEndTurnTriggered -= HandleLocalReady;
-            if (_evaluationModal != null) _evaluationModal.OnAdvanceClicked -= HandleLocalReady;
+            if (_rightBar != null) _rightBar.OnEndTurnTriggered -= HandleEndTurnTriggered;
+            if (_evaluationModal != null) _evaluationModal.OnAdvanceClicked -= HandleAdvanceClicked;
 
             if (_toolBox != null)
             {
+                _toolBox.OnPendingMethodsChanged -= HandlePendingMethodsChanged;
                 _toolBox.OnMethodCardSelected -= HandleMethodCardSelected;
                 if (_diagram != null)
                 {
@@ -157,7 +165,24 @@ namespace Managers
             }
         }
 
-        private void HandleLocalReady()
+        private void HandlePendingMethodsChanged(bool hasPending)
+        {
+            if (_rightBar != null)
+            {
+                _rightBar.RefreshEndTurnButton();
+            }
+        }
+
+        private void HandleEndTurnTriggered()
+        {
+            if (_toolBox != null && _toolBox.HasPendingMethods)
+            {
+                return;
+            }
+            OnLocalPlayerReady?.Invoke();
+        }
+
+        private void HandleAdvanceClicked()
         {
             OnLocalPlayerReady?.Invoke();
         }

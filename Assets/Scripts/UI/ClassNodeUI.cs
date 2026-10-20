@@ -7,7 +7,7 @@ using UnityEngine.UI;
 
 namespace UI
 {
-    public class ClassNodeUI : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerClickHandler
+    public class ClassNodeUI : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerClickHandler, IDropHandler
     {
         [Header("UI References")]
         [SerializeField] private TMP_Text _classNameText;
@@ -32,6 +32,7 @@ namespace UI
         public event Action<ClassNodeUI> OnNodeClicked;
         public event Action<ClassNodeUI, string> OnRenameRequested;
         public event Action<ClassNodeUI, MethodData> OnRemoveMethodRequested;
+        public event Action<ClassNodeUI, MethodData> OnMethodDropped;
 
         public bool CanRename => Node != null && !Node.IsLocked;
 
@@ -67,6 +68,12 @@ namespace UI
             if (_backgroundImage == null)
             {
                 _backgroundImage = GetComponent<Image>();
+            }
+
+            if (_lockIndicator == null)
+            {
+                var lockObj = transform.Find("Header_DragArea/Lock_Indicator");
+                if (lockObj != null) _lockIndicator = lockObj.GetComponent<Image>();
             }
         }
 
@@ -151,12 +158,23 @@ namespace UI
 
             foreach (var method in Node.Methods)
             {
-                var methodGo = new GameObject($"Method_{method.Name}", typeof(RectTransform), typeof(TextMeshProUGUI));
+                var methodGo = new GameObject($"Method_{method.Name}", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI), typeof(Button));
                 methodGo.transform.SetParent(_methodsContainer, false);
                 var text = methodGo.GetComponent<TextMeshProUGUI>();
                 text.text = $"+ {method.Name}()";
                 text.fontSize = 14;
                 text.color = Node.IsLocked ? Color.gray : Color.black;
+
+                var btn = methodGo.GetComponent<Button>();
+                btn.interactable = !Node.IsLocked;
+                var capturedMethod = method;
+                btn.onClick.AddListener(() =>
+                {
+                    if (Node != null && !Node.IsLocked)
+                    {
+                        OnRemoveMethodRequested?.Invoke(this, capturedMethod);
+                    }
+                });
             }
         }
 
@@ -228,6 +246,16 @@ namespace UI
 
         public void OnEndDrag(PointerEventData eventData)
         {
+        }
+
+        public void OnDrop(PointerEventData eventData)
+        {
+            if (eventData == null || Node == null) return;
+            var card = eventData.pointerDrag != null ? eventData.pointerDrag.GetComponent<MethodCardUI>() : null;
+            if (card != null && card.Method != null)
+            {
+                OnMethodDropped?.Invoke(this, card.Method);
+            }
         }
     }
 }
