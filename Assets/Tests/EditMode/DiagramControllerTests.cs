@@ -53,6 +53,7 @@ namespace Tests.EditMode
             public bool AddRelation(ClassNode origin, ClassNode destination, RelationType type = RelationType.Association)
             {
                 CreatedRelations.Add(new Relation(origin, destination, type));
+                SetAssociationMode(false);
                 OnDiagramChanged?.Invoke();
                 return true;
             }

@@ -51,15 +51,16 @@ namespace UI
             if (_origin == null || _destination == null) return;
             if (_rectTransform == null) _rectTransform = GetComponent<RectTransform>();
 
-            Vector3 startPos = _origin.position;
-            Vector3 endPos = _destination.position;
-            Vector3 diff = endPos - startPos;
+            var parent = _rectTransform.parent;
+            Vector3 startLocal = parent != null ? parent.InverseTransformPoint(_origin.position) : _origin.localPosition;
+            Vector3 endLocal = parent != null ? parent.InverseTransformPoint(_destination.position) : _destination.localPosition;
+            Vector3 diff = endLocal - startLocal;
 
             float distance = diff.magnitude;
             float angle = Mathf.Atan2(diff.y, diff.x) * Mathf.Rad2Deg;
 
-            _rectTransform.position = startPos;
-            _rectTransform.rotation = Quaternion.Euler(0, 0, angle);
+            _rectTransform.localPosition = startLocal;
+            _rectTransform.localRotation = Quaternion.Euler(0, 0, angle);
             _rectTransform.sizeDelta = new Vector2(distance, _thickness);
         }
     }

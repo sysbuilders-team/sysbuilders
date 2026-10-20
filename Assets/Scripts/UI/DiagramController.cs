@@ -293,8 +293,6 @@ namespace UI
                         OnAssociationCreated?.Invoke(new Relation(origin, destination, RelationType.Association));
                     }
 
-                    _selectedNodeUI.SetSelected(false);
-                    _selectedNodeUI = null;
                     SetAssociationMode(false);
                 }
             }
