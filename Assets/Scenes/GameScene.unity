@@ -3341,7 +3341,7 @@ MonoBehaviour:
   _createClassButtonText: {fileID: 826461029}
   _classNameInputField: {fileID: 0}
   _maxClassesPerTurn: 2
-  _methodsContainer: {fileID: 1448917511}
+  _methodsContainer: {fileID: 514805094}
   _methodCardPrefab: {fileID: 0}
   _associationButton: {fileID: 1946861822}
   _associationButtonText: {fileID: 0}

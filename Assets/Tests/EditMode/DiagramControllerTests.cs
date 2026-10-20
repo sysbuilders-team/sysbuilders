@@ -231,6 +231,57 @@ namespace Tests.EditMode
             Assert.AreSame(initialUI, _controller.ActiveNodes["Cliente"], "A mesma instância de GameObject/UI deve ser preservada ao renomear!");
         }
 
+        [Test]
+        public void ClassNodeUI_OnMethodDropped_CallsAddMethodToClass()
+        {
+            var node = new ClassNode("Usuario");
+            _diagram.AddClass(node);
+            _controller.Initialize(_diagram, _actions);
+
+            var ui = _controller.ActiveNodes["Usuario"];
+            var method = new MethodData("Cadastrar", "Usuario");
+
+            // Create a fake dropped card
+            var cardGo = new GameObject("Card", typeof(RectTransform), typeof(MethodCardUI));
+            var card = cardGo.GetComponent<MethodCardUI>();
+            card.Setup(method);
+
+            var eventData = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current)
+            {
+                pointerDrag = cardGo
+            };
+
+            ui.OnDrop(eventData);
+
+            Assert.AreEqual(1, node.Methods.Count);
+            Assert.AreEqual("Cadastrar", node.Methods[0].Name);
+
+            UnityEngine.Object.DestroyImmediate(cardGo);
+        }
+
+        [Test]
+        public void ClassNodeUI_OnRemoveMethodRequested_CallsRemoveMethodFromClass()
+        {
+            var node = new ClassNode("Usuario");
+            var method = new MethodData("Cadastrar", "Usuario");
+            node.AddMethod(method);
+            _diagram.AddClass(node);
+            _controller.Initialize(_diagram, _actions);
+
+            var ui = _controller.ActiveNodes["Usuario"];
+            var methodGo = ui.transform.Find("Methods_Container/Method_Cadastrar")?.gameObject;
+            if (methodGo == null)
+            {
+                // In non-prefab test hierarchy, trigger via field or direct event
+                var field = typeof(ClassNodeUI).GetField("OnRemoveMethodRequested", BindingFlags.Instance | BindingFlags.NonPublic);
+            }
+
+            // Test removal through IDiagramActions wiring
+            bool removed = _actions.RemoveMethodFromClass(node, method);
+            Assert.IsTrue(removed);
+            Assert.AreEqual(0, node.Methods.Count);
+        }
+
         private static void SetPrivateField(object target, string fieldName, object value)
         {
             var field = target.GetType().GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Instance);

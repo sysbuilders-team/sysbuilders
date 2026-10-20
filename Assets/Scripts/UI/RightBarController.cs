@@ -208,16 +208,30 @@ namespace UI
             }
         }
 
+        private Func<bool> _canEndTurnPredicate;
+
+        public void SetCanEndTurnPredicate(Func<bool> predicate)
+        {
+            _canEndTurnPredicate = predicate;
+            UpdateEndTurnButtonState(_turnContext != null ? _turnContext.CurrentPhase : TurnPhase.Build);
+        }
+
+        public void RefreshEndTurnButton()
+        {
+            UpdateEndTurnButtonState(_turnContext != null ? _turnContext.CurrentPhase : TurnPhase.Build);
+        }
+
         private void UpdateEndTurnButtonState(TurnPhase phase)
         {
             if (_endTurnButton == null) return;
 
             if (phase == TurnPhase.Build)
             {
-                _endTurnButton.interactable = true;
+                bool canEnd = _canEndTurnPredicate == null || _canEndTurnPredicate();
+                _endTurnButton.interactable = canEnd;
                 if (_endTurnButtonText != null)
                 {
-                    _endTurnButtonText.text = "Finalizar Turno";
+                    _endTurnButtonText.text = canEnd ? "Finalizar Turno" : "Distribua os Métodos";
                 }
             }
             else

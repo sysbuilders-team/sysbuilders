@@ -209,6 +209,8 @@ namespace UI
 
             nodeUI.OnNodeClicked += HandleNodeClicked;
             nodeUI.OnRenameRequested += HandleRenameRequested;
+            nodeUI.OnMethodDropped += HandleMethodDropped;
+            nodeUI.OnRemoveMethodRequested += HandleRemoveMethodRequested;
             return nodeUI;
         }
 
@@ -254,6 +256,18 @@ namespace UI
             }
 
             return lineGo.GetComponent<AssociationLineUI>() ?? lineGo.AddComponent<AssociationLineUI>();
+        }
+
+        private void HandleMethodDropped(ClassNodeUI nodeUI, MethodData method)
+        {
+            if (_diagramActions == null || nodeUI == null || nodeUI.Node == null || method == null) return;
+            _diagramActions.AddMethodToClass(nodeUI.Node, method);
+        }
+
+        private void HandleRemoveMethodRequested(ClassNodeUI nodeUI, MethodData method)
+        {
+            if (_diagramActions == null || nodeUI == null || nodeUI.Node == null || method == null) return;
+            _diagramActions.RemoveMethodFromClass(nodeUI.Node, method);
         }
 
         private void HandleRenameRequested(ClassNodeUI nodeUI, string newName)
@@ -317,6 +331,8 @@ namespace UI
                 {
                     nodeUI.OnNodeClicked -= HandleNodeClicked;
                     nodeUI.OnRenameRequested -= HandleRenameRequested;
+                    nodeUI.OnMethodDropped -= HandleMethodDropped;
+                    nodeUI.OnRemoveMethodRequested -= HandleRemoveMethodRequested;
                     DestroyNodeGameObject(nodeUI.gameObject);
                 }
             }

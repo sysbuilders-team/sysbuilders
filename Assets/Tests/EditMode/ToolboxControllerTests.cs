@@ -219,6 +219,48 @@ namespace Tests.EditMode
             Assert.AreEqual("Cadastrar", selectedNode.Methods[0].Name);
         }
 
+        [Test]
+        public void PopulateMethods_FiltersOutMethodsAlreadyAssignedToDiagram()
+        {
+            var diagram = new ClassDiagram();
+            var node = new ClassNode("Usuario");
+            node.AddMethod(new MethodData("Cadastrar", "Usuario"));
+            diagram.AddClass(node);
+
+            _controller.Initialize(_requirementContext, _diagramActions, _turnManager, diagram);
+
+            var req = new Requirement("req_1", "Desc", new List<MethodData>
+            {
+                new MethodData("Cadastrar", "Usuario"),
+                new MethodData("Buscar", "Usuario")
+            });
+            _requirementContext.TriggerRequirementChanged(req);
+
+            Assert.AreEqual(1, _controller.ActiveCards.Count);
+            Assert.AreEqual("Buscar", _controller.ActiveCards[0].Method.Name);
+            Assert.IsTrue(_controller.HasPendingMethods);
+        }
+
+        [Test]
+        public void HasPendingMethods_ReturnsFalse_WhenAllMethodsAssigned()
+        {
+            var diagram = new ClassDiagram();
+            var node = new ClassNode("Usuario");
+            node.AddMethod(new MethodData("Cadastrar", "Usuario"));
+            diagram.AddClass(node);
+
+            _controller.Initialize(_requirementContext, _diagramActions, _turnManager, diagram);
+
+            var req = new Requirement("req_1", "Desc", new List<MethodData>
+            {
+                new MethodData("Cadastrar", "Usuario")
+            });
+            _requirementContext.TriggerRequirementChanged(req);
+
+            Assert.AreEqual(0, _controller.ActiveCards.Count);
+            Assert.IsFalse(_controller.HasPendingMethods);
+        }
+
         private static void SetPrivateField(object target, string fieldName, object value)
         {
             var field = target.GetType().GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Instance);
