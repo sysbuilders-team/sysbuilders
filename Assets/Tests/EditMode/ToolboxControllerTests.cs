@@ -16,13 +16,16 @@ namespace Tests.EditMode
     {
         private class FakeRequirementContext : IRequirementContext
         {
-            public Requirement CurrentRequirement { get; set; }
-            public IReadOnlyList<Requirement> RequirementsHistory => new List<Requirement>();
+            private readonly List<Requirement> _history = new List<Requirement>();
+
+            public Requirement CurrentRequirement { get; private set; }
+            public IReadOnlyList<Requirement> RequirementsHistory => _history;
             public event Action<Requirement> OnRequirementChanged;
 
             public void TriggerRequirementChanged(Requirement req)
             {
                 CurrentRequirement = req;
+                _history.Add(req);
                 OnRequirementChanged?.Invoke(req);
             }
         }
