@@ -46,7 +46,7 @@ namespace UI
         public event Action<bool> OnPendingMethodsChanged;
 
         private IReadOnlyClassDiagram _diagram;
-        public bool HasPendingMethods => _activeCards.Count > 0;
+        public bool HasPendingMethods => _activeCards.Any(c => c.IsCurrentTurn);
 
         private void Awake()
         {
@@ -152,12 +152,12 @@ namespace UI
 
         private void HandleDiagramChanged()
         {
-            PopulateMethodsList(_requirementContext?.CurrentRequirement);
+            PopulateMethodsList();
         }
 
         private void HandleRequirementChanged(Requirement newRequirement)
         {
-            PopulateMethodsList(newRequirement);
+            PopulateMethodsList();
         }
 
         private void HandlePhaseChange(TurnPhase newPhase)
@@ -237,41 +237,50 @@ namespace UI
             OnAssociationModeToggled?.Invoke(_isAssociationModeActive);
         }
 
-        private void PopulateMethodsList(Requirement requirement)
+        private void PopulateMethodsList()
         {
             ClearMethodsList();
 
-            if (requirement == null || requirement.RequirementMethods == null || _methodsContainer == null)
+            if (_requirementContext == null || _methodsContainer == null)
             {
                 OnPendingMethodsChanged?.Invoke(false);
                 return;
             }
 
-            var assignedMethodNames = _diagram != null
-                ? new HashSet<string>(_diagram.Classes.SelectMany(c => c.Methods).Select(m => m.Name), StringComparer.Ordinal)
-                : new HashSet<string>(StringComparer.Ordinal);
+            var assignedMethods = _diagram != null
+                ? new HashSet<(string Name, string Category)>(
+                    _diagram.Classes.SelectMany(c => c.Methods)
+                           .Select(m => (m.Name, m.Category ?? string.Empty)))
+                : new HashSet<(string, string)>();
 
-            foreach (var method in requirement.RequirementMethods)
+            var history = _requirementContext.RequirementsHistory;
+            int currentTurn = _turnContext?.CurrentTurn ?? history.Count;
+
+            for (int turnIndex = 0; turnIndex < history.Count; turnIndex++)
             {
-                if (assignedMethodNames.Contains(method.Name))
-                {
-                    continue;
-                }
+                var requirement = history[turnIndex];
+                if (requirement?.RequirementMethods == null) continue;
 
-                GameObject cardGo;
-                if (_methodCardPrefab != null)
+                bool isCurrentTurn = (turnIndex + 1) == currentTurn;
+                foreach (var method in requirement.RequirementMethods)
                 {
-                    cardGo = Instantiate(_methodCardPrefab, _methodsContainer);
-                }
-                else
-                {
-                    cardGo = CreateDefaultMethodCard(method);
-                }
+                    if (assignedMethods.Contains((method.Name, method.Category ?? string.Empty))) continue;
 
-                var cardUI = cardGo.GetComponent<MethodCardUI>() ?? cardGo.AddComponent<MethodCardUI>();
-                cardUI.Setup(method);
-                cardUI.OnCardClicked += HandleCardClicked;
-                _activeCards.Add(cardUI);
+                    GameObject cardGo;
+                    if (_methodCardPrefab != null)
+                    {
+                        cardGo = Instantiate(_methodCardPrefab, _methodsContainer);
+                    }
+                    else
+                    {
+                        cardGo = CreateDefaultMethodCard(method);
+                    }
+
+                    var cardUI = cardGo.GetComponent<MethodCardUI>() ?? cardGo.AddComponent<MethodCardUI>();
+                    cardUI.Setup(method, isCurrentTurn);
+                    cardUI.OnCardClicked += HandleCardClicked;
+                    _activeCards.Add(cardUI);
+                }
             }
 
             OnPendingMethodsChanged?.Invoke(HasPendingMethods);
@@ -356,7 +365,7 @@ namespace UI
             UpdateCreateClassButtonDisplay();
             UpdateAssociationButtonDisplay();
             UpdateButtonsInteractable(_turnContext != null ? _turnContext.CurrentPhase : TurnPhase.Build);
-            PopulateMethodsList(_requirementContext?.CurrentRequirement);
+            PopulateMethodsList();
         }
 
         private void UpdateCreateClassButtonDisplay()

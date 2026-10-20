@@ -1,4 +1,5 @@
 using System;
+using Core.Diagram;
 using Core.Session;
 using TMPro;
 using UnityEngine;
@@ -25,6 +26,7 @@ namespace UI
         private ITurnPlayerActions _turnPlayerActions;
         private ITurnContext _turnContext;
         private PlayerSlot _localSlot;
+        private IDiagramActions _diagramActions;
 
         public event Action OnRefactorButtonClicked;
         public event Action OnEndTurnTriggered;
@@ -39,7 +41,8 @@ namespace UI
             IRefactorContext refactorContext,
             ITurnPlayerActions turnPlayerActions,
             PlayerSlot localSlot,
-            ITurnContext turnContext = null)
+            ITurnContext turnContext = null,
+            IDiagramActions diagramActions = null)
         {
             UnsubscribeFromEvents();
             SetupButtons();
@@ -49,6 +52,9 @@ namespace UI
             _turnPlayerActions = turnPlayerActions ?? throw new ArgumentNullException(nameof(turnPlayerActions));
             _localSlot = localSlot;
             _turnContext = turnContext;
+            _diagramActions = diagramActions;
+            if (_diagramActions != null)
+                _diagramActions.OnClassSelected += HandleClassSelectionChanged;
 
             _scoreContext.OnScoreUpdated += HandleScoreUpdated;
             _refactorContext.OnRefactorPointsChanged += HandleRefactorPointsChanged;
@@ -92,6 +98,11 @@ namespace UI
             {
                 _turnContext.OnPhaseChange -= HandlePhaseChange;
             }
+
+            if (_diagramActions != null)
+            {
+                _diagramActions.OnClassSelected -= HandleClassSelectionChanged;
+            }
         }
 
         private void SetupButtons()
@@ -127,6 +138,11 @@ namespace UI
         private void HandlePhaseChange(TurnPhase newPhase)
         {
             UpdateEndTurnButtonState(newPhase);
+        }
+
+        private void HandleClassSelectionChanged(ClassNode selectedNode)
+        {
+            UpdateRefactorDisplay(_refactorContext != null ? _refactorContext.RefactorPoints : 0);
         }
 
         private void HandleRefactorClicked()
@@ -204,7 +220,7 @@ namespace UI
 
             if (_refactorClassButton != null)
             {
-                _refactorClassButton.interactable = currentPoints >= cost;
+                _refactorClassButton.interactable = _refactorContext != null && _refactorContext.CanRefactorSelected();
             }
         }
 

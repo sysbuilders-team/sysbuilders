@@ -957,6 +957,7 @@ GameObject:
   - component: {fileID: 309630011}
   - component: {fileID: 309630013}
   - component: {fileID: 309630014}
+  - component: {fileID: 309630015}
   m_Layer: 5
   m_Name: Diagram
   m_TagString: Untagged
@@ -1054,6 +1055,18 @@ MonoBehaviour:
   _associationLinePrefab: {fileID: 0}
   _feedbackText: {fileID: 0}
   _feedbackContainer: {fileID: 0}
+--- !u!114 &309630015
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 309630009}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8b9925d7bbcabad44870801e4c0be014, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sys.UI::UI.DiagramBackgroundClick
 --- !u!1 &366906062
 GameObject:
   m_ObjectHideFlags: 0

@@ -27,6 +27,7 @@ namespace UI
         private bool _isDragging;
 
         public MethodData Method { get; private set; }
+        public bool IsCurrentTurn { get; private set; }
         public RectTransform RectTransform => _rectTransform != null ? _rectTransform : (_rectTransform = GetComponent<RectTransform>());
         public event Action<MethodData> OnCardClicked;
 
@@ -55,9 +56,10 @@ namespace UI
             }
         }
 
-        public void Setup(MethodData method)
+        public void Setup(MethodData method, bool isCurrentTurn = true)
         {
             Method = method;
+            IsCurrentTurn = isCurrentTurn;
 
             if (_methodNameText == null)
             {
@@ -67,6 +69,7 @@ namespace UI
             if (_methodNameText != null)
             {
                 _methodNameText.text = method != null ? $"+ {method.Name}()" : string.Empty;
+                _methodNameText.alpha = isCurrentTurn ? 1f : 0.45f;
             }
         }
 

@@ -49,6 +49,7 @@ namespace Tests.EditMode
             var cardGo = new GameObject("Card", typeof(RectTransform));
             cardGo.transform.SetParent(containerGo.transform);
             var cardUI = cardGo.AddComponent<MethodCardUI>();
+            cardUI.Setup(new MethodData("TestMethod", "TestCategory"), isCurrentTurn: true);
             var activeCards = new List<MethodCardUI> { cardUI };
             SetPrivateField(tb, "_activeCards", activeCards);
 
@@ -84,6 +85,7 @@ namespace Tests.EditMode
             var cardGo = new GameObject("Card", typeof(RectTransform));
             cardGo.transform.SetParent(containerGo.transform);
             var cardUI = cardGo.AddComponent<MethodCardUI>();
+            cardUI.Setup(new MethodData("TestMethod", "TestCategory"), isCurrentTurn: true);
             var activeCards = new List<MethodCardUI> { cardUI };
             SetPrivateField(tb, "_activeCards", activeCards);
 
