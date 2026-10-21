@@ -58,6 +58,22 @@ namespace UI
             EnsureSource();
         }
 
+        private void OnEnable()
+        {
+            EnsureSource();
+
+            if (_source != null && !_subscribed)
+            {
+                _source.OnSlotsChanged += HandleSlotsChanged;
+                _subscribed = true;
+            }
+
+            // Whatever the adapter holds right now is what the player should see. Waiting for a
+            // hash change is not enough: enabling the panel does not change the room state, so
+            // the rows would never be built when the panel starts active.
+            HandleSlotsChanged();
+        }
+
         private void OnDestroy()
         {
 			if(_subscribed && _source != null)
@@ -70,43 +86,39 @@ namespace UI
         }
 
         private void Update()
-		{
-			EnsureSource();
+        {
+            EnsureSource();
 
-			if (_source != null && !_subscribed)
-			{
-				_source.OnSlotsChanged += HandleSlotsChanged;
-				_subscribed = true;
-				// The adapter only fires OnSlotsChanged when its state hash
-				// changes; if we subscribed after a change already happened,
-				// render once to catch the current state. No-ops if the panel
-				// is not yet visible.
-				HandleSlotsChanged();
-			}
+            if (_source != null && !_subscribed)
+            {
+                _source.OnSlotsChanged += HandleSlotsChanged;
+                _subscribed = true;
+                HandleSlotsChanged();
+            }
 
-			bool inRoom = _source != null && _source.IsInRoom;
-			bool lobbyOpen = _lobbyListPanel != null && _lobbyListPanel.activeSelf;
-			bool shouldShow = inRoom && !lobbyOpen;
-			bool wasShowing = _panelRoot != null && _panelRoot.activeSelf;
+            bool inRoom = _source != null && _source.IsInRoom;
+            bool wasShowing = _panelRoot != null && _panelRoot.activeSelf;
 
-			if (_panelRoot != null && wasShowing != shouldShow)
-			{
-				_panelRoot.SetActive(shouldShow);
+            if (inRoom)
+            {
+                // Joining a room takes priority — close the lobby list if it is open.
+                if (_lobbyListPanel != null && _lobbyListPanel.activeSelf)
+                    _lobbyListPanel.SetActive(false);
 
-				// Becoming visible: HandleSlotsChanged skipped renders while
-				// the panel was hidden, so refresh from the current state.
-				if (shouldShow) HandleSlotsChanged();
-			}
+                if (_panelRoot != null && !_panelRoot.activeSelf)
+                {
+                    _panelRoot.SetActive(true);
+                    HandleSlotsChanged();
+                }
 
-			if (shouldShow)
-			{
-				HideMenuPanels();
-			}
-			else if (wasShowing && !inRoom)
-			{
-				RestoreFallbackPanel();
-			}
-		}
+                HideMenuPanels();
+            }
+            else if (wasShowing)
+            {
+                if (_panelRoot != null) _panelRoot.SetActive(false);
+                RestoreFallbackPanel();
+            }
+        }
 
 		private void HandleSlotsChanged()
 		{

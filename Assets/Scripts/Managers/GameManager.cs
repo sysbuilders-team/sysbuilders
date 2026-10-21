@@ -97,7 +97,8 @@ namespace Managers
                 refactorContext: Session.RefactorContext,
                 turnPlayerActions: turnManager,
                 localSlot: localSlot,
-                turnContext: Session.TurnContext
+                turnContext: Session.TurnContext,
+                diagramActions: Session.DiagramActions
             );
 
             _toolBox.Initialize(
@@ -138,12 +139,6 @@ namespace Managers
                 _toolBox.OnPendingMethodsChanged += HandlePendingMethodsChanged;
             }
 
-            if (_toolBox != null && _diagram != null)
-            {
-                _toolBox.OnAssociationModeToggled += _diagram.SetAssociationMode;
-                _toolBox.OnMethodCardSelected += HandleMethodCardSelected;
-            }
-
             if (_diagram != null)
             {
                 _diagram.OnAssociationCreated += HandleAssociationCreated;
@@ -158,11 +153,6 @@ namespace Managers
             if (_toolBox != null)
             {
                 _toolBox.OnPendingMethodsChanged -= HandlePendingMethodsChanged;
-                _toolBox.OnMethodCardSelected -= HandleMethodCardSelected;
-                if (_diagram != null)
-                {
-                    _toolBox.OnAssociationModeToggled -= _diagram.SetAssociationMode;
-                }
             }
 
             if (_diagram != null)
@@ -191,17 +181,6 @@ namespace Managers
         private void HandleAdvanceClicked()
         {
             OnLocalPlayerReady?.Invoke();
-        }
-
-        private void HandleMethodCardSelected(MethodData method)
-        {
-            if (method == null || _diagram.IsAssociationMode) return;
-
-            var selected = _diagram.SelectedNode;
-            if (selected == null || selected.Node == null) return;
-            if (selected.Node.Methods.Contains(method)) return;
-
-            _diagram.TryAddMethodToClass(selected.Node, method);
         }
 
         private void HandleAssociationCreated(Relation relation)

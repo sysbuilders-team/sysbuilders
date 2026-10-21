@@ -70,6 +70,21 @@ namespace Network.Discovery
 		    // Beats the previous behavior — full Rebuild plus allocations every
 		    // frame — while avoiding a hard dependency on Mirror's room
 		    // callbacks, which differ across Mirror versions.
+		    bool disconnected = !NetworkClient.active && !NetworkServer.active;
+
+		    if (disconnected)
+		    {
+		        // The adapter lives on the DontDestroyOnLoad NetworkManager, so none of its
+		        // fields are cleared when the host stops or the client drops. Reset explicitly:
+		        // otherwise an identical 2-player/1-ready state in the next match hashes to the
+		        // same value, Update skips Rebuild and the panel keeps stale RoomSlotInfo that
+		        // point at destroyed player objects.
+		        if (_lastStateHash != 0 || _slots.Count > 0) ResetForDisconnect();
+
+		        if (_disableMirrorRoomGui) ApplyMirrorGuiFlag();
+		        return;
+		    }
+
 		    int hash = ComputeStateHash();
 		    if (hash != _lastStateHash)
 		    {
@@ -79,8 +94,19 @@ namespace Network.Discovery
 		    }
 
 		    if (_disableMirrorRoomGui) ApplyMirrorGuiFlag();
-		}       
- 		
+		}
+
+		public void ResetForDisconnect()
+		{
+		    _lastStateHash = 0;
+		    _cachedLocalPlayer = null;
+		    _lastLocalPlayerObject = null;
+		    _slots.Clear();
+		    _ordered.Clear();
+		    _readyCount = 0;
+		    OnSlotsChanged?.Invoke();
+		}
+
 		private int ComputeStateHash()
 		{
 		    var room = RoomManager();
@@ -88,7 +114,14 @@ namespace Network.Discovery
 
 		    unchecked
 		    {
+		        // The local player object spawns after the room state is synced. If its presence
+		        // is not in the hash, Rebuild can run once while LocalRoomPlayer() is still null
+		        // and never run again, leaving CanSetReady false and the panel stuck on
+		        // "Entrando na sala..." even though the player is fully spawned.
+		        var localPlayer = NetworkClient.localPlayer;
 		        int hash = room.roomSlots.Count;
+		        hash = hash * 31 + (localPlayer != null ? localPlayer.GetInstanceID() : 0);
+
 		        foreach (var slot in room.roomSlots)
 		        {
 		            if (slot == null) continue;

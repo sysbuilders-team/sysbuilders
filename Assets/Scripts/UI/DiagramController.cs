@@ -28,6 +28,7 @@ namespace UI
 
         private ClassNodeUI _selectedNodeUI;
         private bool _isAssociationMode;
+        private DiagramBackgroundClick _backgroundClick;
         private Vector2 _nextSpawnPosition = new Vector2(100f, -100f);
 
         public IReadOnlyDictionary<string, ClassNodeUI> ActiveNodes => 
@@ -39,6 +40,7 @@ namespace UI
         public event Action<ClassNode> OnNodeSelected;
         public event Action<Relation> OnAssociationCreated;
         public event Action<string> OnFeedbackMessage;
+        public event Action<string> OnAssociationModeHint;
 
         public void Initialize(IReadOnlyClassDiagram diagram, IDiagramActions diagramActions)
         {
@@ -52,6 +54,12 @@ namespace UI
             _diagramActions.OnAssociationModeChanged += HandleAssociationModeChanged;
             _diagramActions.OnActionFailed += HandleActionFailed;
 
+            _backgroundClick = GetComponent<DiagramBackgroundClick>();
+            if (_backgroundClick != null)
+            {
+                _backgroundClick.OnClicked += HandleBackgroundClicked;
+            }
+
             _isAssociationMode = _diagramActions.IsAssociationMode;
             _selectedNodeUI = null;
 
@@ -64,6 +72,15 @@ namespace UI
             ClearDiagramUI();
         }
 
+        private void Update()
+        {
+            if (_isAssociationMode && Input.GetKeyDown(KeyCode.Escape))
+            {
+                SetAssociationMode(false);
+                _diagramActions?.ClearSelection();
+            }
+        }
+
         private void UnsubscribeFromEvents()
         {
             if (_diagramActions != null)
@@ -72,6 +89,11 @@ namespace UI
                 _diagramActions.OnClassSelected -= HandleClassSelected;
                 _diagramActions.OnAssociationModeChanged -= HandleAssociationModeChanged;
                 _diagramActions.OnActionFailed -= HandleActionFailed;
+            }
+
+            if (_backgroundClick != null)
+            {
+                _backgroundClick.OnClicked -= HandleBackgroundClicked;
             }
         }
 
@@ -84,14 +106,14 @@ namespace UI
         {
             if (_selectedNodeUI != null)
             {
-                _selectedNodeUI.SetSelected(false);
+                _selectedNodeUI.SetSelectionState(NodeSelectionState.None);
                 _selectedNodeUI = null;
             }
 
             if (selectedNode != null && _activeNodeUIs.TryGetValue(selectedNode, out var nodeUI))
             {
                 _selectedNodeUI = nodeUI;
-                _selectedNodeUI.SetSelected(true);
+                _selectedNodeUI.SetSelectionState(NodeSelectionState.Selected);
             }
 
             OnNodeSelected?.Invoke(selectedNode);
@@ -100,11 +122,28 @@ namespace UI
         private void HandleAssociationModeChanged(bool active)
         {
             _isAssociationMode = active;
-            if (!active && _selectedNodeUI != null)
+            // On entering association mode, clear any normal selection so the player
+            // explicitly picks an origin (Bug 3a).
+            if (active && _selectedNodeUI != null && _selectedNodeUI.SelectionState != NodeSelectionState.AssociationOrigin)
             {
-                _selectedNodeUI.SetSelected(false);
+                _selectedNodeUI.SetSelectionState(NodeSelectionState.None);
                 _selectedNodeUI = null;
             }
+            else if (!active && _selectedNodeUI != null)
+            {
+                _selectedNodeUI.SetSelectionState(NodeSelectionState.None);
+                _selectedNodeUI = null;
+            }
+            OnAssociationModeHint?.Invoke(active ? "Selecione a classe de origem" : null);
+        }
+
+        /// <summary>Clicking the empty diagram area cancels an in-progress association.</summary>
+        private void HandleBackgroundClicked()
+        {
+            if (!_isAssociationMode) return;
+
+            SetAssociationMode(false);
+            _diagramActions?.ClearSelection();
         }
 
         public void SetAssociationMode(bool active)
@@ -115,9 +154,9 @@ namespace UI
                 _diagramActions.SetAssociationMode(active);
             }
 
-            if (!active && _selectedNodeUI != null)
+            if (_selectedNodeUI != null)
             {
-                _selectedNodeUI.SetSelected(false);
+                _selectedNodeUI.SetSelectionState(NodeSelectionState.None);
                 _selectedNodeUI = null;
             }
         }
@@ -166,7 +205,7 @@ namespace UI
                 }
                 nodeUI.Bind(classNode);
                 bool isSelected = _diagramActions != null && _diagramActions.SelectedClass == classNode;
-                nodeUI.SetSelected(isSelected);
+                nodeUI.SetSelectionState(isSelected ? NodeSelectionState.Selected : NodeSelectionState.None);
                 if (isSelected)
                 {
                     _selectedNodeUI = nodeUI;
@@ -284,12 +323,14 @@ namespace UI
                 if (_selectedNodeUI == null)
                 {
                     _selectedNodeUI = clickedNodeUI;
-                    _selectedNodeUI.SetSelected(true);
+                    _selectedNodeUI.SetSelectionState(NodeSelectionState.AssociationOrigin);
+                    OnAssociationModeHint?.Invoke("Selecione a classe de destino");
                 }
                 else if (_selectedNodeUI == clickedNodeUI)
                 {
-                    _selectedNodeUI.SetSelected(false);
+                    _selectedNodeUI.SetSelectionState(NodeSelectionState.None);
                     _selectedNodeUI = null;
+                    OnAssociationModeHint?.Invoke("Selecione a classe de origem");
                 }
                 else
                 {
