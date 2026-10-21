@@ -220,6 +220,7 @@ namespace UI
             {
                 if (line != null)
                 {
+                    line.OnLineClicked -= HandleLineClicked;
                     DestroyNodeGameObject(line.gameObject);
                 }
             }
@@ -235,7 +236,8 @@ namespace UI
                     _activeNodeUIs.TryGetValue(relation.Destination, out var destUI))
                 {
                     var lineUI = CreateLineUI();
-                    lineUI.Connect(originUI.RectTransform, destUI.RectTransform);
+                    lineUI.Connect(originUI.RectTransform, destUI.RectTransform, relation.Origin, relation.Destination);
+                    lineUI.OnLineClicked += HandleLineClicked;
                     _activeLineUIs.Add(lineUI);
                 }
             }
@@ -279,6 +281,13 @@ namespace UI
             {
                 nodeUI.UpdateDisplay();
             }
+        }
+
+        private void HandleLineClicked(AssociationLineUI lineUI)
+        {
+            if (_isAssociationMode) return;
+            if (lineUI == null || lineUI.OriginNode == null || lineUI.DestinationNode == null) return;
+            _diagramActions?.RemoveRelation(lineUI.OriginNode, lineUI.DestinationNode);
         }
 
         private void HandleNodeClicked(ClassNodeUI clickedNodeUI)
@@ -342,6 +351,7 @@ namespace UI
             {
                 if (line != null)
                 {
+                    line.OnLineClicked -= HandleLineClicked;
                     DestroyNodeGameObject(line.gameObject);
                 }
             }

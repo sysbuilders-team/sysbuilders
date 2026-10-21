@@ -20,7 +20,7 @@ namespace UI
         [Header("Timer Visual")]
         [SerializeField] private Color _normalColor   = Color.white;
         [SerializeField] private Color _urgentColor   = Color.red;
-        private const int UrgentThreshold = 100;              
+        private const int UrgentThreshold = 20;              
         private bool  _isUrgent;
         private float _pulseTime;
 
