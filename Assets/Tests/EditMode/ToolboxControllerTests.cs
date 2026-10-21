@@ -82,7 +82,7 @@ namespace Tests.EditMode
             public event Action<bool> OnAssociationModeChanged;
 
             public event Action OnDiagramChanged;
-            public event Action<string> OnActionFailed;
+            public event Action<string> OnActionFailed { add { } remove { } }
         }
 
         private GameObject _go;
@@ -244,7 +244,7 @@ namespace Tests.EditMode
         }
 
         [Test]
-        public void PopulateMethods_FiltersOutMethodsAlreadyAssignedToDiagram()
+        public void PopulateMethods_FiltersOutMethodsAlreadyAssignedToDiagramByIdentity()
         {
             var diagram = new ClassDiagram();
             var node = new ClassNode("Usuario");
@@ -256,12 +256,15 @@ namespace Tests.EditMode
             var req = new Requirement("req_1", "Desc", new List<MethodData>
             {
                 new MethodData("Cadastrar", "Usuario"),
+                new MethodData("Cadastrar", "Livro"), // Mesmo nome, mas outra categoria: deve continuar pendente
                 new MethodData("Buscar", "Usuario")
             });
             _requirementContext.TriggerRequirementChanged(req);
 
-            Assert.AreEqual(1, _controller.ActiveCards.Count);
-            Assert.AreEqual("Buscar", _controller.ActiveCards[0].Method.Name);
+            Assert.AreEqual(2, _controller.ActiveCards.Count);
+            Assert.AreEqual("Cadastrar", _controller.ActiveCards[0].Method.Name);
+            Assert.AreEqual("Livro", _controller.ActiveCards[0].Method.Category);
+            Assert.AreEqual("Buscar", _controller.ActiveCards[1].Method.Name);
             Assert.IsTrue(_controller.HasPendingMethods);
         }
 

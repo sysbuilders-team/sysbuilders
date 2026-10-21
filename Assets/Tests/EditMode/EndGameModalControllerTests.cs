@@ -255,6 +255,15 @@ namespace Tests.EditMode
             StringAssert.Contains("estado final", _playerSmellsText.text);
         }
 
+        [Test]
+        public void SmellReportFormatter_TranslateSmell_MapsAllKnownSmells()
+        {
+            StringAssert.Contains("Large Class", SmellReportFormatter.TranslateSmell(CodeSmellType.LargeClass));
+            StringAssert.Contains("Duplicate Code", SmellReportFormatter.TranslateSmell(CodeSmellType.DuplicateCode));
+            StringAssert.Contains("Baixa Coesão", SmellReportFormatter.TranslateSmell(CodeSmellType.LowCohesion));
+            StringAssert.Contains("Acoplamento", SmellReportFormatter.TranslateSmell(CodeSmellType.LowAffinityCoupling));
+        }
+
         private static int CountOccurrences(string text, string value)
         {
             if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(value)) return 0;

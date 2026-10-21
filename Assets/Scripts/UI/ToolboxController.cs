@@ -230,26 +230,21 @@ namespace UI
                 return;
             }
 
-            var assignedMethodNames = _diagram != null
-                ? new HashSet<string>(_diagram.Classes.SelectMany(c => c.Methods).Select(m => m.Name), StringComparer.Ordinal)
-                : new HashSet<string>(StringComparer.Ordinal);
+            var assignedMethods = _diagram != null
+                ? new HashSet<(string Name, string Category)>(
+                    _diagram.Classes.SelectMany(c => c.Methods).Select(m => (m.Name, m.Category ?? string.Empty)))
+                : new HashSet<(string Name, string Category)>();
 
             foreach (var method in requirement.RequirementMethods)
             {
-                if (assignedMethodNames.Contains(method.Name))
+                if (assignedMethods.Contains((method.Name, method.Category ?? string.Empty)))
                 {
                     continue;
                 }
 
-                GameObject cardGo;
-                if (_methodCardPrefab != null)
-                {
-                    cardGo = Instantiate(_methodCardPrefab, _methodsContainer);
-                }
-                else
-                {
-                    cardGo = CreateDefaultMethodCard(method);
-                }
+                GameObject cardGo = _methodCardPrefab != null
+                    ? Instantiate(_methodCardPrefab, _methodsContainer)
+                    : MethodCardUI.CreateDefault(_methodsContainer, method);
 
                 var cardUI = cardGo.GetComponent<MethodCardUI>() ?? cardGo.AddComponent<MethodCardUI>();
                 cardUI.Setup(method);
@@ -258,50 +253,6 @@ namespace UI
             }
 
             OnPendingMethodsChanged?.Invoke(HasPendingMethods);
-        }
-
-        // metodo fallback(ou usado sempre, xd) pra criar o cartao de metodo
-        // pode ser melhor explorado, pra ficar mais agradavel como UI
-        private GameObject CreateDefaultMethodCard(MethodData method)
-        {
-            var cardGo = new GameObject($"MethodCard_{method.Name}", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button), typeof(LayoutElement));
-            cardGo.transform.SetParent(_methodsContainer, false);
-
-            var rt = cardGo.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(220f, 36f);
-
-            var layout = cardGo.GetComponent<LayoutElement>();
-            layout.minHeight = 36f;
-            layout.preferredHeight = 36f;
-            layout.preferredWidth = 220f;
-            layout.flexibleWidth = 1f;
-
-            var image = cardGo.GetComponent<Image>();
-            image.color = new Color(0.92f, 0.94f, 0.98f, 1f);
-
-            var btn = cardGo.GetComponent<Button>();
-            var colors = btn.colors;
-            colors.normalColor = new Color(0.92f, 0.94f, 0.98f, 1f);
-            colors.highlightedColor = new Color(0.82f, 0.88f, 1f, 1f);
-            colors.pressedColor = new Color(0.72f, 0.80f, 0.95f, 1f);
-            btn.colors = colors;
-
-            var textGo = new GameObject("Text_MethodName", typeof(RectTransform), typeof(TextMeshProUGUI));
-            textGo.transform.SetParent(cardGo.transform, false);
-
-            var textRt = textGo.GetComponent<RectTransform>();
-            textRt.anchorMin = Vector2.zero;
-            textRt.anchorMax = Vector2.one;
-            textRt.offsetMin = new Vector2(10f, 0f);
-            textRt.offsetMax = new Vector2(-10f, 0f);
-
-            var tmp = textGo.GetComponent<TextMeshProUGUI>();
-            tmp.text = $"+ {method.Name}()";
-            tmp.fontSize = 14;
-            tmp.color = new Color(0.12f, 0.12f, 0.18f, 1f);
-            tmp.alignment = TextAlignmentOptions.MidlineLeft;
-
-            return cardGo;
         }
 
         private void HandleCardClicked(MethodData method)

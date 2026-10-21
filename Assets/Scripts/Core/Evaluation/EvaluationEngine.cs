@@ -8,9 +8,19 @@ namespace Core.Evaluation
     {
         private const int ScorePerRequirement = 100;
 
-        private readonly RequirementChecker _requirementChecker = new RequirementChecker();
-        private readonly CodeSmellDetector _smellDetector = new CodeSmellDetector();
-        private readonly SmellPenaltyCalculator _penaltyCalculator = new SmellPenaltyCalculator();
+        private readonly RequirementChecker _requirementChecker;
+        private readonly CodeSmellDetector _smellDetector;
+        private readonly SmellPenaltyCalculator _penaltyCalculator;
+
+        public EvaluationEngine(
+            RequirementChecker requirementChecker = null,
+            CodeSmellDetector smellDetector = null,
+            SmellPenaltyCalculator penaltyCalculator = null)
+        {
+            _requirementChecker = requirementChecker ?? new RequirementChecker();
+            _smellDetector = smellDetector ?? new CodeSmellDetector();
+            _penaltyCalculator = penaltyCalculator ?? new SmellPenaltyCalculator();
+        }
 
         public EvaluationResult Evaluate(IReadOnlyClassDiagram diagram, IReadOnlyList<Requirement> activeRequirements)
         {
