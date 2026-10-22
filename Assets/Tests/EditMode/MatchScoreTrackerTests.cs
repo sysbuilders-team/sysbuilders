@@ -45,5 +45,19 @@ namespace Tests.EditMode
             bool invalidOrder = tracker.ReceiveOpponentResult(3, resP2);
             Assert.IsFalse(invalidOrder);
         }
+
+        [Test]
+        public void Score_WhenPenaltiesExceedRaw_FloorsAtZero()
+        {
+            var p1 = new PlayerState("Alice");
+            var p2 = new PlayerState("Bob");
+            var tracker = new MatchScoreTracker(p1, p2, PlayerSlot.PlayerOne);
+
+            tracker.RecordEvaluation(p1, new EvaluationResult(
+                100, 200, new List<string>(), new List<SmellOccurrence>()));
+
+            Assert.AreEqual(0, tracker.PlayerOneScore,
+                "Score must floor at zero when penalties exceed raw.");
+        }
     }
 }
