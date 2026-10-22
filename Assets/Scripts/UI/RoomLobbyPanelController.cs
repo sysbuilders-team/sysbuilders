@@ -34,9 +34,10 @@ namespace UI
         private const float SlotSpacing = 56f;
 
         private readonly List<SlotRow> _rows = new List<SlotRow>(2);
-
+        
         private IRoomLobbySource _source;
         private bool _subscribed;
+        private float _nextSourceSearch;
 
         private sealed class SlotRow
         {
@@ -156,21 +157,15 @@ namespace UI
         {
             if (_source != null) return;
 
-            _source = _sourceBehaviour as IRoomLobbySource ?? FindPort<IRoomLobbySource>();
-        }
-        
-        private static TPort FindPort<TPort>() where TPort : class
-        {
-            foreach (var behaviour in FindObjectsByType<MonoBehaviour>(
-                         FindObjectsInactive.Include, FindObjectsSortMode.None))
+            if (_sourceBehaviour != null)
             {
-                if (behaviour is TPort port) return port;
+                _source = _sourceBehaviour as IRoomLobbySource;
+                if (_source != null) return;
             }
 
-            return null;
+            SceneServices.TryResolve(ref _source, ref _nextSourceSearch);
         }
-
-       
+        
 
         private void SyncRows(IReadOnlyList<RoomSlotInfo> slots)
         {

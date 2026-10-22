@@ -22,6 +22,9 @@ namespace Network
 
 		public string ChosenTheme { get; private set; }
 		public string ChosenTrailId { get; private set; }
+		private string _pendingHost;
+		private string _pendingFingerprint;
+		public event Action<string, string> OnHostKeyMismatch;
 
 		/// <summary>
 		/// Define o tema da partida antes de StartHost. O MatchSyncBridge exige que este valor
@@ -118,13 +121,22 @@ namespace Network
 			{
 				// The stored key is kept on purpose. Forgetting it here turned the rejection into a
 				// two-click bypass: the next attempt evaluated as first use and accepted the new key
-				// automatically. Trusting a rotated key is an explicit action now, driven by a
-				// confirmation UI that calls KnownHostStore.Forget.
+				// automatically. Trusting a rotated key is an explicit action, driven by the room
+				// list UI that calls TrustPendingKeyAndRetry after the player confirms.
 				Debug.LogError($"[GameRoomManager] {description}");
+
+				_pendingHost = host;
+				_pendingFingerprint = presented;
+				OnHostKeyMismatch?.Invoke(host, presented);
 			}
 			else
 			{
 				Debug.Log($"[GameRoomManager] {description}");
+
+				// Clear any pending mismatch from a previous attempt so a stale button click
+				// cannot overwrite the (now correct) stored fingerprint.
+				_pendingHost = null;
+				_pendingFingerprint = null;
 			}
 
 			// A UI do lobby assina este canal: a decisão do TOFU aparece no status, não só no console.
@@ -133,6 +145,33 @@ namespace Network
 			if (TofuPolicy.ShouldStore(decision)) KnownHostStore.Store(host, presented);
 
 			return TofuPolicy.ShouldAccept(decision, _rejectOnFingerprintMismatch, _acceptHostsWithoutFingerprint);
+		}
+		
+		/// <summary>
+		/// Called by the room list UI after the player explicitly opts to trust the
+		/// new key. Overwrites the stored fingerprint and re-attempts the connection.
+		/// Returns false when there is no pending mismatch or when the player moved
+		/// on to a different host before clicking.
+		/// </summary>
+		public bool TrustPendingKeyAndRetry()
+		{
+			if (string.IsNullOrEmpty(_pendingHost)) return false;
+			if (NetworkManager.singleton == null) return false;
+
+			if (_pendingHost != NetworkManager.singleton.networkAddress)
+			{
+				// Player abandoned the mismatched host and typed a different address.
+				_pendingHost = null;
+				_pendingFingerprint = null;
+				return false;
+			}
+
+			KnownHostStore.Store(_pendingHost, _pendingFingerprint);
+			_pendingHost = null;
+			_pendingFingerprint = null;
+
+			NetworkManager.singleton.StartClient();
+			return true;
 		}
 
 		/// <summary>
