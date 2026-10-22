@@ -59,14 +59,22 @@ namespace Managers
         {
             if (Session != null)
             {
-                Debug.LogWarning("[GameManager] StartMatch ignorado: a partida já foi iniciada.");
-                return;
+                Debug.LogWarning("[GameManager] StartMatch: tearing down stale Session from a previous match.");
+                TearDownSession();
             }
 
-            RequireOpponentResult = isNetworkMatch;
+            if (_requirementManager == null)
+            {
+                throw new InvalidOperationException("[GameManager] _requirementManager is not assigned in the Inspector.");
+            }
 
+            // RequirementManager.GetTrailById returns Trail, not IReadOnlyList<Requirement>.
+            // Extract both the per-turn requirements and the trail-specific class budget in
+            // one call — passing only the list would silently discard Trail.MaxClasses and
+            // fall back to Trail.DefaultMaxClasses in MatchSession.
             var trail = _requirementManager.GetTrailById(theme, trailId);
-            Session = new MatchSession(
+
+            var newSession = new MatchSession(
                 "Jogador 1",
                 "Jogador 2",
                 trail.RequirementByTurn,
@@ -74,13 +82,48 @@ namespace Managers
                 isNetworkMatch: isNetworkMatch,
                 maxClassesPerMatch: trail.MaxClasses);
 
-            Session.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
-            Session.TurnManager.OnPhaseChange += HandlePhaseChange;
+            try
+            {
+                newSession.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
+                newSession.TurnManager.OnPhaseChange += HandlePhaseChange;
 
-            InitializeUI(localSlot);
-            WireUI();
+                // Commit only after the two subscriptions above have succeeded.
+                Session = newSession;
+                RequireOpponentResult = isNetworkMatch;
 
-            Session.TurnManager.ForceAdvancePhase();
+                InitializeUI(localSlot);
+                WireUI();
+
+                Session.TurnManager.ForceAdvancePhase();
+            }
+            catch
+            {
+                UnwireUI();
+
+                newSession.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
+                newSession.TurnManager.OnPhaseChange -= HandlePhaseChange;
+                newSession.Dispose();
+
+                if (Session == newSession) Session = null;
+                RequireOpponentResult = false;
+
+                throw;
+            }
+        }
+
+        private void TearDownSession()
+        {
+            if (Session == null) return;
+
+            UnwireUI();
+            Session.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
+            Session.TurnManager.OnPhaseChange -= HandlePhaseChange;
+            Session.Dispose();
+
+            Session = null;
+            _localEvaluated = false;
+            _advanceScheduled = false;
+            RequireOpponentResult = false;
         }
 
         private void InitializeUI(PlayerSlot localSlot)
@@ -245,15 +288,7 @@ namespace Managers
 
         private void OnDestroy()
         {
-            UnwireUI();
-
-            if (Session != null)
-            {
-                Session.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
-                Session.TurnManager.OnPhaseChange -= HandlePhaseChange;
-                Session.Dispose();
-                Session = null;
-            }
+            TearDownSession();
         }
     }
 }
