@@ -61,11 +61,26 @@ namespace Network
 				return;
 			}
 
+			// Start the host session FIRST. If it throws, abort both sides with a diagnostic.
+			// Only publish the SyncVars after the host has a working session — otherwise the
+			// client advances while the host sits in a half-initialized state and every
+			// CmdSetReady is rejected with "sessão não inicializada".
+			try
+			{
+				StartLocalMatch(plan.Theme, plan.TrailId, PlayerSlot.PlayerOne);
+			}
+			catch (Exception ex)
+			{
+				Debug.LogException(ex, this);
+				string reason = MatchAbortCoordinator.SanitizeReason(ex.Message);
+				NotifyMatchStartFailed(reason);
+				AbortLocalMatch(reason);
+				return;
+			}
+
 			_theme = plan.Theme;
 			_trailId = plan.TrailId;
 			Debug.Log($"[MatchSyncBridge] Server: tema={_theme} | trail={_trailId}");
-
-			StartLocalMatch(_theme, _trailId, PlayerSlot.PlayerOne);
 		}
 
 		public override void OnStopServer()
@@ -172,8 +187,18 @@ namespace Network
 
 		private void StartLocalMatch(string theme, string trailId, PlayerSlot slot)
 		{
-			gameManager.StartMatch(theme, trailId, slot, isNetworkMatch: true);
+			if (gameManager == null)
+			{
+				throw new InvalidOperationException("MatchSyncBridge.gameManager is not assigned in the Inspector.");
+			}
+
+			// Reset before StartMatch so a failure path can still call AbortLocalMatch:
+			// TryBeginAbort returns false if a previous match left the coordinator armed.
 			_abort.Reset();
+
+			gameManager.StartMatch(theme, trailId, slot, isNetworkMatch: true);
+
+			Debug.Log($"[MatchSyncBridge] StartLocalMatch slot={slot}: session={(gameManager.Session != null)}");
 
 			if (gameManager.Session != null && _subscribedSession != gameManager.Session)
 			{
