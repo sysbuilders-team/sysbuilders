@@ -41,8 +41,16 @@ namespace Tests.EditMode
                 createdNode = new ClassNode(className);
                 return true;
             }
+            public int ClassesCreatedThisTurn { get; set; }
+            public int MaxClassesPerTurn => DiagramEditor.DefaultMaxClassesPerTurn;
+            public int TotalClassesCreated { get; set; }
+            public int MaxClassesPerMatch => DiagramEditor.DefaultMaxClassesPerMatch;
+            public bool CanCreateClass =>
+                ClassesCreatedThisTurn < MaxClassesPerTurn &&
+                TotalClassesCreated < MaxClassesPerMatch;
+
             public bool RenameClass(ClassNode node, string newName) => true;
-            public bool RemoveClass(ClassNode node) => true;
+
             public bool AddMethodToClass(ClassNode node, MethodData method) { node.AddMethod(method); OnDiagramChanged?.Invoke(); return true; }
             public bool RemoveMethodFromClass(ClassNode node, MethodData method) => true;
             public bool AddRelation(ClassNode origin, ClassNode destination, RelationType type = RelationType.Association) => true;
