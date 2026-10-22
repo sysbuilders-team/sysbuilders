@@ -80,12 +80,14 @@ namespace Tests.EditMode
 
         #region B2 Tests: Refactor Point Policy and Refactor Execution
         [Test]
-        public void B2_DefaultRefactorPointPolicy_ProvidesTwoInitialPoints()
+        public void B2_DefaultRefactorPointPolicy_ProvidesProgressivePoints()
         {
             var policy = new DefaultRefactorPointPolicy();
-            Assert.AreEqual(2, policy.InitialPoints);
+            Assert.AreEqual(1, policy.InitialPoints);
             Assert.AreEqual(0, policy.GetPointsForTurn(1));
-            Assert.AreEqual(0, policy.GetPointsForTurn(2));
+            Assert.AreEqual(1, policy.GetPointsForTurn(2));
+            Assert.AreEqual(1, policy.GetPointsForTurn(3));
+            Assert.AreEqual(2, policy.MaxStoredPoints);
         }
 
         [Test]
@@ -94,10 +96,23 @@ namespace Tests.EditMode
             var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne);
             var refactor = session.RefactorContext;
 
-            Assert.AreEqual(2, refactor.RefactorPoints);
-            Assert.AreEqual(2, session.LocalPlayer.RefactorPoints);
-            Assert.AreEqual(2, session.OpponentPlayer.RefactorPoints);
+            Assert.AreEqual(1, refactor.RefactorPoints);
+            Assert.AreEqual(1, session.LocalPlayer.RefactorPoints);
+            Assert.AreEqual(1, session.OpponentPlayer.RefactorPoints);
             Assert.AreEqual(1, refactor.RefactorCost);
+        }
+
+        [Test]
+        public void B2_PlayerState_CapsRefactorPointsAtMax()
+        {
+            var player = new PlayerState("Alice");
+            Assert.AreEqual(2, player.MaxRefactorPoints);
+            player.AddRefactorPoints(1);
+            Assert.AreEqual(1, player.RefactorPoints);
+            player.AddRefactorPoints(1);
+            Assert.AreEqual(2, player.RefactorPoints);
+            player.AddRefactorPoints(5);
+            Assert.AreEqual(2, player.RefactorPoints, "Pontos não devem ultrapassar MaxRefactorPoints (2).");
         }
 
         [Test]
@@ -123,8 +138,8 @@ namespace Tests.EditMode
 
             Assert.IsTrue(refactorResult);
             Assert.IsFalse(node.IsLocked, "A classe deve ser destravada após a refatoração.");
-            Assert.AreEqual(1, refactor.RefactorPoints, "Deve ter debitado 1 ponto de refatoração.");
-            Assert.AreEqual(1, reportedPoints, "Evento OnRefactorPointsChanged deve ter sido disparado com o novo valor.");
+            Assert.AreEqual(0, refactor.RefactorPoints, "Deve ter debitado 1 ponto de refatoração.");
+            Assert.AreEqual(0, reportedPoints, "Evento OnRefactorPointsChanged deve ter sido disparado com o novo valor.");
             Assert.IsTrue(diagramChangedFired, "Evento OnDiagramChanged deve ter sido disparado para atualizar a UI.");
         }
 
@@ -155,7 +170,7 @@ namespace Tests.EditMode
             Assert.IsFalse(refactor.CanRefactor(foreignLockedNode));
             Assert.IsFalse(refactor.TryRefactorClass(foreignLockedNode), "Não deve refatorar classe que não pertence ao diagrama local.");
             Assert.IsTrue(foreignLockedNode.IsLocked);
-            Assert.AreEqual(2, refactor.RefactorPoints);
+            Assert.AreEqual(1, refactor.RefactorPoints);
         }
         #endregion
 
