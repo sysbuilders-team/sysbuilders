@@ -40,6 +40,8 @@ namespace UI
 
         private IRoomDirectory _directory;
         private IRoomJoinActions _joinActions;
+        private float _nextDirectorySearch;
+        private float _nextJoinActionsSearch;
 
         public IReadOnlyList<RoomListEntryUI> Entries => _entries;
 
@@ -127,24 +129,21 @@ namespace UI
         {
             if (_directory == null)
             {
-                _directory = _directorySource as IRoomDirectory ?? FindPort<IRoomDirectory>();
+                if (_directorySource != null)
+                    _directory = _directorySource as IRoomDirectory;
+
+                if (_directory == null)
+                    SceneServices.TryResolve(ref _directory, ref _nextDirectorySearch);
             }
 
             if (_joinActions == null)
             {
-                _joinActions = _joinActionsSource as IRoomJoinActions ?? FindPort<IRoomJoinActions>();
-            }
-        }
-        
-        private static TPort FindPort<TPort>() where TPort : class
-        {
-            foreach (var behaviour in FindObjectsByType<MonoBehaviour>(
-                         FindObjectsInactive.Include, FindObjectsSortMode.None))
-            {
-                if (behaviour is TPort port) return port;
-            }
+                if (_joinActionsSource != null)
+                    _joinActions = _joinActionsSource as IRoomJoinActions;
 
-            return null;
+                if (_joinActions == null)
+                    SceneServices.TryResolve(ref _joinActions, ref _nextJoinActionsSearch);
+            }
         }
 
         private void Rebuild()
