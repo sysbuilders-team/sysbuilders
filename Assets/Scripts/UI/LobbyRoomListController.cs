@@ -17,6 +17,12 @@ namespace UI
         [Header("Ações")]
         [SerializeField] private Button _refreshButton;
 
+        [Header("TOFU — chave trocada")]
+        [Tooltip("Exibido quando a chave pública do host não confere com a armazenada. " +
+                 "Clicar confia na nova chave e reconecta.")]
+        [SerializeField] private Button _trustNewKeyButton;
+        [SerializeField] private TMP_Text _trustNewKeyButtonText;
+
         [Header("Portas (opcional: deixe vazio para resolver na cena)")]
         [Tooltip("Componente que implementa IRoomDirectory (ex.: RoomDiscoveryService).")]
         [SerializeField] private MonoBehaviour _directorySource;
@@ -45,13 +51,19 @@ namespace UI
                 _refreshButton.onClick.AddListener(Refresh);
             }
 
+            if (_trustNewKeyButton != null)
+            {
+                _trustNewKeyButton.onClick.RemoveListener(HandleTrustNewKeyClicked);
+                _trustNewKeyButton.onClick.AddListener(HandleTrustNewKeyClicked);
+            }
+
+            HideTrustNewKeyButton();
+
             EnsurePorts();
         }
-
+        
         private void OnEnable()
         {
-            // O serviço de descoberta pode ser criado no Awake do MenuManager, cuja ordem em
-            // relação a este Awake não é garantida: resolve de novo ao habilitar o painel.
             EnsurePorts();
 
             if (_directory != null)
@@ -60,6 +72,12 @@ namespace UI
                 _directory.OnDiagnostic += HandleDiagnostic;
             }
 
+            if (_joinActions != null)
+            {
+                _joinActions.OnHostKeyMismatch += HandleHostKeyMismatch;
+            }
+
+            HideTrustNewKeyButton();
             Rebuild();
         }
 
@@ -70,14 +88,21 @@ namespace UI
                 _directory.OnRoomsChanged -= Rebuild;
                 _directory.OnDiagnostic -= HandleDiagnostic;
             }
+
+            if (_joinActions != null)
+            {
+                _joinActions.OnHostKeyMismatch -= HandleHostKeyMismatch;
+            }
+
+            HideTrustNewKeyButton();
         }
 
         private void OnDestroy()
         {
             if (_refreshButton != null) _refreshButton.onClick.RemoveListener(Refresh);
+            if (_trustNewKeyButton != null) _trustNewKeyButton.onClick.RemoveListener(HandleTrustNewKeyClicked);
             ClearEntries();
         }
-        
         public void Refresh()
         {
             EnsurePorts();
@@ -227,6 +252,37 @@ namespace UI
         private void HandleDiagnostic(string message)
         {
             SetStatus(message);
+        }
+        
+        private void HandleHostKeyMismatch(string host, string presentedFingerprint)
+        {
+            if (_trustNewKeyButtonText != null)
+            {
+                _trustNewKeyButtonText.text =
+                    $"A chave do host em {host} mudou. Confiar na nova chave e reconectar?";
+            }
+
+            if (_trustNewKeyButton != null) _trustNewKeyButton.gameObject.SetActive(true);
+
+            SetStatus($"Falha ao verificar a chave do host {host}. Confirme para tentar novamente.");
+        }
+
+        private void HideTrustNewKeyButton()
+        {
+            if (_trustNewKeyButton != null) _trustNewKeyButton.gameObject.SetActive(false);
+        }
+
+        private void HandleTrustNewKeyClicked()
+        {
+            EnsurePorts();
+            if (_joinActions == null) return;
+
+            HideTrustNewKeyButton();
+
+            if (!_joinActions.TrustPendingKeyAndRetry())
+            {
+                SetStatus("Não foi possível reconectar automaticamente. Tente novamente.");
+            }
         }
 
         private void UpdateEmptyState()

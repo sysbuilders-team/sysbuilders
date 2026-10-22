@@ -59,6 +59,28 @@ namespace Network
 
 			return _discovery;
 		}
+		// IRoomJoinActions: forwarded to GameRoomManager so the room list (in Sys.UI,
+// which cannot reference Sys.Network) can prompt for and apply a fingerprint
+// override without knowing about Mirror or GameRoomManager.
+		public event Action<string, string> OnHostKeyMismatch
+		{
+			add
+			{
+				var rm = NetworkManager.singleton as GameRoomManager;
+				if (rm != null) rm.OnHostKeyMismatch += value;
+			}
+			remove
+			{
+				var rm = NetworkManager.singleton as GameRoomManager;
+				if (rm != null) rm.OnHostKeyMismatch -= value;
+			}
+		}
+
+		public bool TrustPendingKeyAndRetry()
+		{
+			var rm = NetworkManager.singleton as GameRoomManager;
+			return rm != null && rm.TrustPendingKeyAndRetry();
+		}
 
 		private void Start()
 		{
