@@ -20,6 +20,7 @@ namespace Tests.EditMode
 
             public Requirement CurrentRequirement { get; private set; }
             public IReadOnlyList<Requirement> RequirementsHistory => _history;
+            public bool HasPendingMethods { get; set; }
             public event Action<Requirement> OnRequirementChanged;
 
             public void TriggerRequirementChanged(Requirement req)

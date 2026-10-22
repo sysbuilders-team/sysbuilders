@@ -25,6 +25,7 @@ namespace Tests.EditMode
 
             public Requirement CurrentRequirement => _history.Count > 0 ? _history[_history.Count - 1] : null;
             public IReadOnlyList<Requirement> RequirementsHistory => _history;
+            public bool HasPendingMethods { get; set; }
             public event Action<Requirement> OnRequirementChanged;
 
             public void AddRequirement(Requirement req)

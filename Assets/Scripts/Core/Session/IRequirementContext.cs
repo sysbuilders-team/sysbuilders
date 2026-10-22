@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Core.Requirements;
 
@@ -10,6 +10,7 @@ namespace Core.Session
     {
         Requirement CurrentRequirement { get; }
         IReadOnlyList<Requirement> RequirementsHistory { get; }
+        bool HasPendingMethods { get; }
 
         // Passando o novo requirement como payload do evento
         event Action<Requirement> OnRequirementChanged; 

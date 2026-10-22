@@ -52,6 +52,24 @@ namespace Core.Session
         }
 
         public IReadOnlyList<Requirement> RequirementsHistory => GetRequirementsUpToCurrentTurn();
+
+        public bool HasPendingMethods
+        {
+            get
+            {
+                var current = CurrentRequirement;
+                if (current?.RequirementMethods == null || current.RequirementMethods.Count == 0)
+                    return false;
+
+                var assigned = new HashSet<(string Name, string Category)>(
+                    LocalPlayer.Diagram.Classes
+                        .SelectMany(c => c.Methods)
+                        .Select(m => (m.Name, m.Category ?? string.Empty)));
+
+                return current.RequirementMethods.Any(
+                    m => !assigned.Contains((m.Name, m.Category ?? string.Empty)));
+            }
+        }
         #endregion
 
         public MatchSession(
@@ -106,6 +124,7 @@ namespace Core.Session
                     _editor.ResetInteractionState();
                     PlayerOne.LockAllClasses();
                     PlayerTwo.LockAllClasses();
+                    _editor.NotifyDiagramChanged();
                     EvaluateLocalPlayer();
                     break;
                 case TurnPhase.Show:

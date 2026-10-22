@@ -184,5 +184,26 @@ namespace Tests.EditMode
             Assert.IsNotNull(failureMessage);
             Assert.IsTrue(failureMessage.Contains("si mesma"), $"Mensagem de erro esperada, recebido: {failureMessage}");
         }
+
+        [Test]
+        public void MatchSession_HasPendingMethods_TracksUnassignedCurrentRequirementMethods()
+        {
+            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne, isNetworkMatch: false);
+            var editor = session.DiagramActions;
+
+            // Avança de Show para Build
+            session.SetPlayerReady(PlayerSlot.PlayerOne);
+            Assert.AreEqual(TurnPhase.Build, session.TurnManager.CurrentPhase);
+
+            Assert.IsTrue(session.HasPendingMethods, "Deve haver métodos pendentes antes de distribuir os métodos do turno.");
+
+            editor.TryCreateClass("ClasseUnica", out var node);
+            foreach (var method in session.CurrentRequirement.RequirementMethods)
+            {
+                editor.AddMethodToClass(node, method);
+            }
+
+            Assert.IsFalse(session.HasPendingMethods, "Não deve haver métodos pendentes após alocar todos os métodos do requisito atual.");
+        }
     }
 }
