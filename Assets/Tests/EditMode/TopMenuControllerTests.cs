@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Core.Diagram;
@@ -17,6 +17,7 @@ namespace Tests.EditMode
         {
             public Requirement CurrentRequirement { get; set; }
             public IReadOnlyList<Requirement> RequirementsHistory => new List<Requirement>();
+            public bool HasPendingMethods => false;
             public event Action<Requirement> OnRequirementChanged;
 
             public void TriggerRequirementChanged(Requirement req)

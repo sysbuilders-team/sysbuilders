@@ -1,7 +1,5 @@
 using System;
 using System.Collections;
-using System.Linq;
-using Core.Diagram;
 using Core.Evaluation;
 using Core.Session;
 using UI;
@@ -85,23 +83,20 @@ namespace Managers
             try
             {
                 newSession.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
-                newSession.TurnManager.OnPhaseChange += HandlePhaseChange;
+                newSession.TurnManager.OnPlayerReady += HandlePlayerReady;
 
-                // Commit only after the two subscriptions above have succeeded.
+                // Commit only after the subscriptions above have succeeded.
                 Session = newSession;
                 RequireOpponentResult = isNetworkMatch;
 
                 InitializeUI(localSlot);
-                WireUI();
 
                 Session.TurnManager.ForceAdvancePhase();
             }
             catch
             {
-                UnwireUI();
-
                 newSession.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
-                newSession.TurnManager.OnPhaseChange -= HandlePhaseChange;
+                newSession.TurnManager.OnPlayerReady -= HandlePlayerReady;
                 newSession.Dispose();
 
                 if (Session == newSession) Session = null;
@@ -115,9 +110,8 @@ namespace Managers
         {
             if (Session == null) return;
 
-            UnwireUI();
             Session.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
-            Session.TurnManager.OnPhaseChange -= HandlePhaseChange;
+            Session.TurnManager.OnPlayerReady -= HandlePlayerReady;
             Session.Dispose();
 
             Session = null;
@@ -141,7 +135,8 @@ namespace Managers
                 turnPlayerActions: turnManager,
                 localSlot: localSlot,
                 turnContext: Session.TurnContext,
-                diagramActions: Session.DiagramActions
+                diagramActions: Session.DiagramActions,
+                requirementContext: Session.RequirementContext
             );
 
             _toolBox.Initialize(
@@ -171,74 +166,11 @@ namespace Managers
             );
         }
 
-        private void WireUI()
+        private void HandlePlayerReady(PlayerSlot slot)
         {
-            if (_rightBar != null) _rightBar.OnEndTurnTriggered += HandleEndTurnTriggered;
-            if (_evaluationModal != null) _evaluationModal.OnAdvanceClicked += HandleAdvanceClicked;
-
-            if (_rightBar != null && _toolBox != null)
+            if (Session != null && slot == Session.LocalSlot)
             {
-                _rightBar.SetCanEndTurnPredicate(() => !_toolBox.HasPendingMethods);
-                _toolBox.OnPendingMethodsChanged += HandlePendingMethodsChanged;
-            }
-
-            if (_diagram != null)
-            {
-                _diagram.OnAssociationCreated += HandleAssociationCreated;
-            }
-        }
-
-        private void UnwireUI()
-        {
-            if (_rightBar != null) _rightBar.OnEndTurnTriggered -= HandleEndTurnTriggered;
-            if (_evaluationModal != null) _evaluationModal.OnAdvanceClicked -= HandleAdvanceClicked;
-
-            if (_toolBox != null)
-            {
-                _toolBox.OnPendingMethodsChanged -= HandlePendingMethodsChanged;
-            }
-
-            if (_diagram != null)
-            {
-                _diagram.OnAssociationCreated -= HandleAssociationCreated;
-            }
-        }
-
-        private void HandlePendingMethodsChanged(bool hasPending)
-        {
-            if (_rightBar != null)
-            {
-                _rightBar.RefreshEndTurnButton();
-            }
-        }
-
-        private void HandleEndTurnTriggered()
-        {
-            if (_toolBox != null && _toolBox.HasPendingMethods)
-            {
-                return;
-            }
-            OnLocalPlayerReady?.Invoke();
-        }
-
-        private void HandleAdvanceClicked()
-        {
-            OnLocalPlayerReady?.Invoke();
-        }
-
-        private void HandleAssociationCreated(Relation relation)
-        {
-            if (_toolBox != null)
-            {
-                _toolBox.SetAssociationMode(false);
-            }
-        }
-
-        private void HandlePhaseChange(TurnPhase phase)
-        {
-            if (phase == TurnPhase.Evaluate && _diagram != null)
-            {
-                _diagram.RenderDiagram();
+                OnLocalPlayerReady?.Invoke();
             }
         }
 

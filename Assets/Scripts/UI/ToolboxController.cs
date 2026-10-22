@@ -28,6 +28,7 @@ namespace UI
         private IRequirementContext _requirementContext;
         private IDiagramActions _diagramActions;
         private ITurnContext _turnContext;
+        private IReadOnlyClassDiagram _diagram;
 
         private bool _isAssociationModeActive;
         private readonly List<MethodCardUI> _activeCards = new List<MethodCardUI>();
@@ -38,14 +39,7 @@ namespace UI
         public int MaxClassesPerMatch => _diagramActions?.MaxClassesPerMatch ?? DiagramEditor.DefaultMaxClassesPerMatch;
         public bool IsAssociationModeActive => _isAssociationModeActive;
         public IReadOnlyList<MethodCardUI> ActiveCards => _activeCards;
-
-        public event Action OnCreateClassClicked;
-        public event Action<bool> OnAssociationModeToggled;
-        public event Action<MethodData> OnMethodCardSelected;
-        public event Action<bool> OnPendingMethodsChanged;
-
-        private IReadOnlyClassDiagram _diagram;
-        public bool HasPendingMethods => _activeCards.Count > 0;
+        public bool HasPendingMethods => _activeCards.Any(c => c != null && c.IsCurrentTurn);
 
         private void Awake()
         {
@@ -150,12 +144,12 @@ namespace UI
         private void HandleDiagramChanged()
         {
             UpdateCreateClassButtonDisplay();
-            PopulateMethodsList(_requirementContext?.CurrentRequirement);
+            PopulateMethodsList();
         }
 
         private void HandleRequirementChanged(Requirement newRequirement)
         {
-            PopulateMethodsList(newRequirement);
+            PopulateMethodsList();
         }
 
         private void HandlePhaseChange(TurnPhase newPhase)
@@ -172,7 +166,6 @@ namespace UI
         {
             _isAssociationModeActive = active;
             UpdateAssociationButtonDisplay();
-            OnAssociationModeToggled?.Invoke(_isAssociationModeActive);
         }
 
         private void HandleCreateClassClicked()
@@ -191,8 +184,6 @@ namespace UI
                     UpdateCreateClassButtonDisplay();
                 }
             }
-
-            OnCreateClassClicked?.Invoke();
         }
 
         public bool CanCreateClass()
@@ -217,42 +208,59 @@ namespace UI
             }
 
             UpdateAssociationButtonDisplay();
-            OnAssociationModeToggled?.Invoke(_isAssociationModeActive);
         }
 
-        private void PopulateMethodsList(Requirement requirement)
+        private void PopulateMethodsList()
         {
             ClearMethodsList();
 
-            if (requirement == null || requirement.RequirementMethods == null || _methodsContainer == null)
+            if (_requirementContext == null || _methodsContainer == null)
             {
-                OnPendingMethodsChanged?.Invoke(false);
                 return;
             }
 
-            var assignedMethods = _diagram != null
+            var assignedOrSeenMethods = _diagram != null
                 ? new HashSet<(string Name, string Category)>(
-                    _diagram.Classes.SelectMany(c => c.Methods).Select(m => (m.Name, m.Category ?? string.Empty)))
+                    _diagram.Classes.SelectMany(c => c.Methods)
+                           .Select(m => (m.Name, m.Category ?? string.Empty)))
                 : new HashSet<(string Name, string Category)>();
 
-            foreach (var method in requirement.RequirementMethods)
+            var history = _requirementContext.RequirementsHistory;
+            if (history == null || history.Count == 0)
             {
-                if (assignedMethods.Contains((method.Name, method.Category ?? string.Empty)))
+                if (_requirementContext.CurrentRequirement != null)
                 {
-                    continue;
+                    history = new[] { _requirementContext.CurrentRequirement };
                 }
-
-                GameObject cardGo = _methodCardPrefab != null
-                    ? Instantiate(_methodCardPrefab, _methodsContainer)
-                    : MethodCardUI.CreateDefault(_methodsContainer, method);
-
-                var cardUI = cardGo.GetComponent<MethodCardUI>() ?? cardGo.AddComponent<MethodCardUI>();
-                cardUI.Setup(method);
-                cardUI.OnCardClicked += HandleCardClicked;
-                _activeCards.Add(cardUI);
+                else
+                {
+                    return;
+                }
             }
 
-            OnPendingMethodsChanged?.Invoke(HasPendingMethods);
+            for (int turnIndex = 0; turnIndex < history.Count; turnIndex++)
+            {
+                var requirement = history[turnIndex];
+                if (requirement?.RequirementMethods == null) continue;
+
+                bool isCurrentTurn = turnIndex == history.Count - 1;
+                foreach (var method in requirement.RequirementMethods)
+                {
+                    if (!assignedOrSeenMethods.Add((method.Name, method.Category ?? string.Empty)))
+                    {
+                        continue;
+                    }
+
+                    GameObject cardGo = _methodCardPrefab != null
+                        ? Instantiate(_methodCardPrefab, _methodsContainer)
+                        : MethodCardUI.CreateDefault(_methodsContainer, method);
+
+                    var cardUI = cardGo.GetComponent<MethodCardUI>() ?? cardGo.AddComponent<MethodCardUI>();
+                    cardUI.Setup(method, isCurrentTurn);
+                    cardUI.OnCardClicked += HandleCardClicked;
+                    _activeCards.Add(cardUI);
+                }
+            }
         }
 
         private void HandleCardClicked(MethodData method)
@@ -261,8 +269,6 @@ namespace UI
             {
                 _diagramActions.AddMethodToClass(_diagramActions.SelectedClass, method);
             }
-
-            OnMethodCardSelected?.Invoke(method);
         }
 
         private void ClearMethodsList()
@@ -290,7 +296,7 @@ namespace UI
             UpdateCreateClassButtonDisplay();
             UpdateAssociationButtonDisplay();
             UpdateButtonsInteractable(_turnContext != null ? _turnContext.CurrentPhase : TurnPhase.Build);
-            PopulateMethodsList(_requirementContext?.CurrentRequirement);
+            PopulateMethodsList();
         }
 
         private void UpdateCreateClassButtonDisplay()
