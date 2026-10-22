@@ -35,7 +35,6 @@ namespace UI
         private TurnPhase _previousPhase = TurnPhase.Show;
 
         public bool IsModalOpen => _modalRoot != null && _modalRoot.activeSelf;
-        public event Action OnAdvanceClicked;
 
         private void Awake()
         {
@@ -157,8 +156,6 @@ namespace UI
                 {
                     _advanceButtonText.text = "Aguardando adversário...";
                 }
-
-                OnAdvanceClicked?.Invoke();
             }
         }
 

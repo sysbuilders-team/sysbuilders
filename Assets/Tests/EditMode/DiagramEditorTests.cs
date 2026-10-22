@@ -30,6 +30,8 @@ namespace Tests.EditMode
             Assert.AreEqual("Pedido", node.Name);
             Assert.AreEqual(node, _editor.SelectedClass);
             Assert.AreEqual(1, _player.Diagram.Classes.Count);
+            Assert.AreEqual(1, _editor.ClassesCreatedThisTurn);
+            Assert.AreEqual(1, _editor.TotalClassesCreated);
         }
 
         [Test]
@@ -40,15 +42,53 @@ namespace Tests.EditMode
 
             Assert.IsFalse(created);
             Assert.IsNull(node);
+            Assert.IsFalse(_editor.CanCreateClass);
         }
 
         [Test]
-        public void RemoveClass_WhenNodeBelongsToOtherDiagram_ReturnsFalse()
+        public void TryCreateClass_EnforcesTurnLimitAndResetsOnNewTurn()
         {
-            var otherNode = new ClassNode("Alien");
-            bool removed = _editor.RemoveClass(otherNode);
+            Assert.AreEqual(2, _editor.MaxClassesPerTurn);
+            Assert.IsTrue(_editor.CanCreateClass);
 
-            Assert.IsFalse(removed);
+            Assert.IsTrue(_editor.TryCreateClass("ClasseA", out _));
+            Assert.IsTrue(_editor.TryCreateClass("ClasseB", out _));
+            Assert.AreEqual(2, _editor.ClassesCreatedThisTurn);
+            Assert.IsFalse(_editor.CanCreateClass);
+
+            string failure = null;
+            _editor.OnActionFailed += msg => failure = msg;
+
+            Assert.IsFalse(_editor.TryCreateClass("ClasseC", out var blockedNode));
+            Assert.IsNull(blockedNode);
+            Assert.IsNotNull(failure);
+
+            _editor.ResetTurnQuota();
+            Assert.AreEqual(0, _editor.ClassesCreatedThisTurn);
+            Assert.AreEqual(2, _editor.TotalClassesCreated);
+            Assert.IsTrue(_editor.CanCreateClass);
+            Assert.IsTrue(_editor.TryCreateClass("ClasseC", out _));
+        }
+
+        [Test]
+        public void TryCreateClass_EnforcesMatchLimitAcrossTurns()
+        {
+            var customEditor = new DiagramEditor(() => _player, () => _canModify, maxClassesPerTurn: 2, maxClassesPerMatch: 3);
+
+            Assert.IsTrue(customEditor.TryCreateClass("C1", out _));
+            Assert.IsTrue(customEditor.TryCreateClass("C2", out _));
+            customEditor.ResetTurnQuota();
+
+            Assert.IsTrue(customEditor.TryCreateClass("C3", out _));
+            Assert.AreEqual(3, customEditor.TotalClassesCreated);
+            Assert.IsFalse(customEditor.CanCreateClass);
+
+            string failure = null;
+            customEditor.OnActionFailed += msg => failure = msg;
+
+            Assert.IsFalse(customEditor.TryCreateClass("C4", out var blockedNode));
+            Assert.IsNull(blockedNode);
+            Assert.IsNotNull(failure);
         }
 
         [Test]

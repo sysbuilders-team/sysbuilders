@@ -2,6 +2,7 @@
   "Biblioteca": [
     {
       "Id": "trail_biblioteca_01",
+      "MaxClasses": 7,
       "RequirementsByTurn": [
         {
           "Id": "req_turno_1",

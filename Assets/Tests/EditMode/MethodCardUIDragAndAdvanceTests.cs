@@ -17,6 +17,44 @@ namespace Tests.EditMode
     [TestFixture]
     public class MethodCardUIDragAndAdvanceTests
     {
+        private class FakeScoreContext : IScoreContext
+        {
+            public string PlayerOneName => "P1";
+            public string PlayerTwoName => "P2";
+            public int PlayerOneScore => 0;
+            public int PlayerTwoScore => 0;
+            public event Action OnScoreUpdated { add { } remove { } }
+        }
+
+        private class FakeRefactorContext : IRefactorContext
+        {
+            public int RefactorPoints => 0;
+            public int RefactorCost => 1;
+            public bool CanRefactor(ClassNode classNode) => false;
+            public bool TryRefactorClass(ClassNode classNode) => false;
+            public bool CanRefactorSelected() => false;
+            public bool TryRefactorSelectedClass() => false;
+            public event Action<int> OnRefactorPointsChanged { add { } remove { } }
+        }
+
+        private class FakeTurnSummaryContext : ITurnSummaryContext
+        {
+            public int RoundPointsEarned => 10;
+            public int RoundPenaltyPoints => 0;
+            public int RoundOpponentPointsEarned => 5;
+            public int RoundOpponentPenaltyPoints => 0;
+        }
+
+        private class FakeRequirementContext : IRequirementContext
+        {
+            public Requirement CurrentRequirement { get; set; }
+            public IReadOnlyList<Requirement> RequirementsHistory => Array.Empty<Requirement>();
+            public bool HasPendingMethods { get; set; }
+            public event Action<Requirement> OnRequirementChanged;
+
+            public void NotifyRequirementChanged() => OnRequirementChanged?.Invoke(CurrentRequirement);
+        }
+
         private static void SetPrivateField(object target, string fieldName, object value)
         {
             var field = target.GetType().GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Instance);
@@ -24,83 +62,87 @@ namespace Tests.EditMode
             field.SetValue(target, value);
         }
 
-        private static object InvokePrivateMethod(object target, string methodName, params object[] parameters)
-        {
-            var method = target.GetType().GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance);
-            Assert.IsNotNull(method, $"Method '{methodName}' not found on {target.GetType().Name}");
-            return method.Invoke(target, parameters);
-        }
-
-        #region GameManager Advance Modal Tests
+        #region End-Turn Pending Methods Gating & Modal Advance Tests
         [Test]
-        public void HandleAdvanceClicked_InvokesOnLocalPlayerReady_EvenWhenToolboxHasPendingMethods()
+        public void EvaluationModalAdvance_FiresTurnManagerOnPlayerReady_EvenWhenRequirementHasPendingMethods()
         {
-            var gmGo = new GameObject("GameManagerTest");
-            var gm = gmGo.AddComponent<GameManager>();
+            var modalGo = new GameObject("EvalModalTest");
+            var modal = modalGo.AddComponent<EvaluationEndTurnController>();
 
-            var tbGo = new GameObject("Toolbox");
-            var tb = tbGo.AddComponent<ToolboxController>();
+            var btnGo = new GameObject("AdvanceBtn");
+            btnGo.transform.SetParent(modalGo.transform);
+            var advanceBtn = btnGo.AddComponent<Button>();
+            SetPrivateField(modal, "_advanceButton", advanceBtn);
 
-            var containerGo = new GameObject("MethodsContainer", typeof(RectTransform));
-            containerGo.transform.SetParent(tbGo.transform);
-            SetPrivateField(tb, "_methodsContainer", containerGo.transform);
+            var turnManager = new TurnManager(requiredPlayers: 2);
+            var summaryContext = new FakeTurnSummaryContext();
 
-            // Add a pending card to toolbox to simulate pending methods
-            var cardGo = new GameObject("Card", typeof(RectTransform));
-            cardGo.transform.SetParent(containerGo.transform);
-            var cardUI = cardGo.AddComponent<MethodCardUI>();
-            cardUI.Setup(new MethodData("TestMethod", "TestCategory"), isCurrentTurn: true);
-            var activeCards = new List<MethodCardUI> { cardUI };
-            SetPrivateField(tb, "_activeCards", activeCards);
-
-            Assert.IsTrue(tb.HasPendingMethods, "Toolbox should report pending methods.");
-
-            SetPrivateField(gm, "_toolBox", tb);
+            modal.Initialize(summaryContext, turnManager, turnManager, PlayerSlot.PlayerOne);
+            modal.ShowModal();
 
             bool localReadyFired = false;
-            gm.OnLocalPlayerReady += () => localReadyFired = true;
+            turnManager.OnPlayerReady += slot =>
+            {
+                if (slot == PlayerSlot.PlayerOne) localReadyFired = true;
+            };
 
-            // Invoking HandleAdvanceClicked (modal advance) must NOT be blocked by pending methods
-            InvokePrivateMethod(gm, "HandleAdvanceClicked");
+            advanceBtn.onClick.Invoke();
 
-            Assert.IsTrue(localReadyFired, "HandleAdvanceClicked must fire OnLocalPlayerReady regardless of pending methods.");
+            Assert.IsTrue(localReadyFired, "Advancing from the evaluation modal must mark the player ready regardless of pending methods.");
 
-            UnityEngine.Object.DestroyImmediate(gmGo);
-            UnityEngine.Object.DestroyImmediate(tbGo);
+            UnityEngine.Object.DestroyImmediate(modalGo);
         }
 
         [Test]
-        public void HandleEndTurnTriggered_BlocksOnLocalPlayerReady_WhenToolboxHasPendingMethods()
+        public void RightBarEndTurn_BlocksSetPlayerReady_WhenRequirementContextHasPendingMethods()
         {
-            var gmGo = new GameObject("GameManagerTest");
-            var gm = gmGo.AddComponent<GameManager>();
+            var rbGo = new GameObject("RightBarTest");
+            var rb = rbGo.AddComponent<RightBarController>();
 
-            var tbGo = new GameObject("Toolbox");
-            var tb = tbGo.AddComponent<ToolboxController>();
+            var endBtnGo = new GameObject("EndTurnBtn");
+            endBtnGo.transform.SetParent(rbGo.transform);
+            var endBtn = endBtnGo.AddComponent<Button>();
+            var endBtnTextGo = new GameObject("EndTurnText");
+            endBtnTextGo.transform.SetParent(endBtnGo.transform);
+            var endBtnText = endBtnTextGo.AddComponent<TextMeshProUGUI>();
 
-            var containerGo = new GameObject("MethodsContainer", typeof(RectTransform));
-            containerGo.transform.SetParent(tbGo.transform);
-            SetPrivateField(tb, "_methodsContainer", containerGo.transform);
+            SetPrivateField(rb, "_endTurnButton", endBtn);
+            SetPrivateField(rb, "_endTurnButtonText", endBtnText);
 
-            var cardGo = new GameObject("Card", typeof(RectTransform));
-            cardGo.transform.SetParent(containerGo.transform);
-            var cardUI = cardGo.AddComponent<MethodCardUI>();
-            cardUI.Setup(new MethodData("TestMethod", "TestCategory"), isCurrentTurn: true);
-            var activeCards = new List<MethodCardUI> { cardUI };
-            SetPrivateField(tb, "_activeCards", activeCards);
+            var turnManager = new TurnManager(requiredPlayers: 2);
+            // Advance to Build phase
+            turnManager.ForceAdvancePhase();
+            Assert.AreEqual(TurnPhase.Build, turnManager.CurrentPhase);
 
-            SetPrivateField(gm, "_toolBox", tb);
+            var reqContext = new FakeRequirementContext { HasPendingMethods = true };
+
+            rb.Initialize(
+                scoreContext: new FakeScoreContext(),
+                refactorContext: new FakeRefactorContext(),
+                turnPlayerActions: turnManager,
+                localSlot: PlayerSlot.PlayerOne,
+                turnContext: turnManager,
+                requirementContext: reqContext
+            );
 
             bool localReadyFired = false;
-            gm.OnLocalPlayerReady += () => localReadyFired = true;
+            turnManager.OnPlayerReady += _ => localReadyFired = true;
 
-            // Invoking HandleEndTurnTriggered (right bar during build) MUST be blocked
-            InvokePrivateMethod(gm, "HandleEndTurnTriggered");
+            Assert.IsFalse(endBtn.interactable, "End turn button must be non-interactable while HasPendingMethods is true.");
+            StringAssert.Contains("Distribua os Métodos", endBtnText.text);
 
-            Assert.IsFalse(localReadyFired, "HandleEndTurnTriggered must not fire OnLocalPlayerReady when there are pending methods.");
+            endBtn.onClick.Invoke();
+            Assert.IsFalse(localReadyFired, "Clicking end turn must not mark player ready while HasPendingMethods is true.");
 
-            UnityEngine.Object.DestroyImmediate(gmGo);
-            UnityEngine.Object.DestroyImmediate(tbGo);
+            // Once all methods are distributed, End Turn becomes enabled and marks player ready
+            reqContext.HasPendingMethods = false;
+            reqContext.NotifyRequirementChanged();
+
+            Assert.IsTrue(endBtn.interactable, "End turn button must be interactable when HasPendingMethods becomes false.");
+            endBtn.onClick.Invoke();
+            Assert.IsTrue(localReadyFired, "Clicking end turn when HasPendingMethods is false must mark player ready.");
+
+            UnityEngine.Object.DestroyImmediate(rbGo);
         }
         #endregion
 

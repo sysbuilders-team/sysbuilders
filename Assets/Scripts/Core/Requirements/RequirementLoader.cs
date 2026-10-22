@@ -78,7 +78,8 @@ namespace Core.Requirements
                         }
                     }
 
-                    trails.Add(new Trail(dto.Id, theme, requirements));
+                    int maxClasses = dto.MaxClasses ?? Trail.DefaultMaxClasses;
+                    trails.Add(new Trail(dto.Id, theme, requirements, maxClasses));
                 }
                 result[theme] = trails;
             }
@@ -98,6 +99,11 @@ namespace Core.Requirements
             if(dto.RequirementsByTurn == null)
             {
                 throw new FormatException($"A trilha '{dto.Id}' no tema '{theme}' não contém a lista de requisitos.");
+            }
+            if (dto.MaxClasses.HasValue && dto.MaxClasses.Value < 1)
+            {
+                throw new FormatException(
+                    $"A trilha '{dto.Id}' no tema '{theme}' define um MaxClasses inválido ({dto.MaxClasses.Value}). O valor deve ser pelo menos 1.");
             }
         }
 
@@ -127,6 +133,7 @@ namespace Core.Requirements
         private class TrailDto
         {
             public string Id { get; set; }
+            public int? MaxClasses { get; set; }
             public List<RequirementDto> RequirementsByTurn { get; set; }
         }
 

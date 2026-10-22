@@ -65,20 +65,6 @@ namespace Core.Diagram
             return true;
         }
 
-        public bool RemoveClass(ClassNode classNode)
-        {
-            if (classNode == null) return false;
-            
-            bool removed = _classes.Remove(classNode);
-            if (removed)
-            {
-                if (classNode.Name != null) _classesByName.Remove(classNode.Name);
-                _relations.RemoveAll(x => x.Origin == classNode || x.Destination == classNode);
-            }
-            
-            return removed;
-        }
-
         public ClassNode FindClassByName(string name)
         {
             if (name == null) return null;

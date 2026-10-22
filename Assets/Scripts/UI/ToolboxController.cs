@@ -16,7 +16,6 @@ namespace UI
         [SerializeField] private Button _createClassButton;
         [SerializeField] private TMP_Text _createClassButtonText;
         [SerializeField] private TMP_InputField _classNameInputField;
-        [SerializeField] private int _maxClassesPerTurn = 2; // TODO: ver isso conforme novas regras ou de acordo com os requirements designados
 
         [Header("Lista de Métodos")]
         [SerializeField] private Transform _methodsContainer;
@@ -29,24 +28,18 @@ namespace UI
         private IRequirementContext _requirementContext;
         private IDiagramActions _diagramActions;
         private ITurnContext _turnContext;
+        private IReadOnlyClassDiagram _diagram;
 
-        private int _classesCreatedThisTurn;
-        private int _lastTrackedTurn = -1;
         private bool _isAssociationModeActive;
         private readonly List<MethodCardUI> _activeCards = new List<MethodCardUI>();
 
-        public int ClassesCreatedThisTurn => _classesCreatedThisTurn;
-        public int MaxClassesPerTurn => _maxClassesPerTurn;
+        public int ClassesCreatedThisTurn => _diagramActions?.ClassesCreatedThisTurn ?? 0;
+        public int MaxClassesPerTurn => _diagramActions?.MaxClassesPerTurn ?? DiagramEditor.DefaultMaxClassesPerTurn;
+        public int TotalClassesCreated => _diagramActions?.TotalClassesCreated ?? 0;
+        public int MaxClassesPerMatch => _diagramActions?.MaxClassesPerMatch ?? DiagramEditor.DefaultMaxClassesPerMatch;
         public bool IsAssociationModeActive => _isAssociationModeActive;
         public IReadOnlyList<MethodCardUI> ActiveCards => _activeCards;
-
-        public event Action OnCreateClassClicked;
-        public event Action<bool> OnAssociationModeToggled;
-        public event Action<MethodData> OnMethodCardSelected;
-        public event Action<bool> OnPendingMethodsChanged;
-
-        private IReadOnlyClassDiagram _diagram;
-        public bool HasPendingMethods => _activeCards.Any(c => c.IsCurrentTurn);
+        public bool HasPendingMethods => _activeCards.Any(c => c != null && c.IsCurrentTurn);
 
         private void Awake()
         {
@@ -82,8 +75,6 @@ namespace UI
             _diagramActions.OnAssociationModeChanged += HandleAssociationModeChanged;
             _diagramActions.OnDiagramChanged += HandleDiagramChanged;
 
-            _lastTrackedTurn = _turnContext.CurrentTurn;
-            _classesCreatedThisTurn = 0;
             _isAssociationModeActive = _diagramActions.IsAssociationMode;
 
             UpdateAllDisplays();
@@ -152,6 +143,7 @@ namespace UI
 
         private void HandleDiagramChanged()
         {
+            UpdateCreateClassButtonDisplay();
             PopulateMethodsList();
         }
 
@@ -162,12 +154,6 @@ namespace UI
 
         private void HandlePhaseChange(TurnPhase newPhase)
         {
-            if (_turnContext != null && _turnContext.CurrentTurn != _lastTrackedTurn)
-            {
-                _lastTrackedTurn = _turnContext.CurrentTurn;
-                _classesCreatedThisTurn = 0;
-            }
-
             if (newPhase != TurnPhase.Build)
             {
                 SetAssociationMode(false);
@@ -180,7 +166,6 @@ namespace UI
         {
             _isAssociationModeActive = active;
             UpdateAssociationButtonDisplay();
-            OnAssociationModeToggled?.Invoke(_isAssociationModeActive);
         }
 
         private void HandleCreateClassClicked()
@@ -195,27 +180,16 @@ namespace UI
 
                 if (_diagramActions.TryCreateClass(className, out _))
                 {
-                    NotifyClassCreated();
                     if (_classNameInputField != null) _classNameInputField.text = string.Empty;
+                    UpdateCreateClassButtonDisplay();
                 }
             }
-
-            OnCreateClassClicked?.Invoke();
-        }
-
-        public bool NotifyClassCreated()
-        {
-            if (!CanCreateClass()) return false;
-
-            _classesCreatedThisTurn++;
-            UpdateCreateClassButtonDisplay();
-            return true;
         }
 
         public bool CanCreateClass()
         {
-            if (_turnContext == null) return false;
-            return _turnContext.CurrentPhase == TurnPhase.Build && _classesCreatedThisTurn < _maxClassesPerTurn;
+            if (_turnContext == null || _turnContext.CurrentPhase != TurnPhase.Build) return false;
+            return _diagramActions != null && _diagramActions.CanCreateClass;
         }
 
         private void HandleAssociationButtonClicked()
@@ -234,7 +208,6 @@ namespace UI
             }
 
             UpdateAssociationButtonDisplay();
-            OnAssociationModeToggled?.Invoke(_isAssociationModeActive);
         }
 
         private void PopulateMethodsList()
@@ -243,38 +216,44 @@ namespace UI
 
             if (_requirementContext == null || _methodsContainer == null)
             {
-                OnPendingMethodsChanged?.Invoke(false);
                 return;
             }
 
-            var assignedMethods = _diagram != null
+            var assignedOrSeenMethods = _diagram != null
                 ? new HashSet<(string Name, string Category)>(
                     _diagram.Classes.SelectMany(c => c.Methods)
                            .Select(m => (m.Name, m.Category ?? string.Empty)))
-                : new HashSet<(string, string)>();
+                : new HashSet<(string Name, string Category)>();
 
             var history = _requirementContext.RequirementsHistory;
-            int currentTurn = _turnContext?.CurrentTurn ?? history.Count;
+            if (history == null || history.Count == 0)
+            {
+                if (_requirementContext.CurrentRequirement != null)
+                {
+                    history = new[] { _requirementContext.CurrentRequirement };
+                }
+                else
+                {
+                    return;
+                }
+            }
 
             for (int turnIndex = 0; turnIndex < history.Count; turnIndex++)
             {
                 var requirement = history[turnIndex];
                 if (requirement?.RequirementMethods == null) continue;
 
-                bool isCurrentTurn = (turnIndex + 1) == currentTurn;
+                bool isCurrentTurn = turnIndex == history.Count - 1;
                 foreach (var method in requirement.RequirementMethods)
                 {
-                    if (assignedMethods.Contains((method.Name, method.Category ?? string.Empty))) continue;
+                    if (!assignedOrSeenMethods.Add((method.Name, method.Category ?? string.Empty)))
+                    {
+                        continue;
+                    }
 
-                    GameObject cardGo;
-                    if (_methodCardPrefab != null)
-                    {
-                        cardGo = Instantiate(_methodCardPrefab, _methodsContainer);
-                    }
-                    else
-                    {
-                        cardGo = CreateDefaultMethodCard(method);
-                    }
+                    GameObject cardGo = _methodCardPrefab != null
+                        ? Instantiate(_methodCardPrefab, _methodsContainer)
+                        : MethodCardUI.CreateDefault(_methodsContainer, method);
 
                     var cardUI = cardGo.GetComponent<MethodCardUI>() ?? cardGo.AddComponent<MethodCardUI>();
                     cardUI.Setup(method, isCurrentTurn);
@@ -282,52 +261,6 @@ namespace UI
                     _activeCards.Add(cardUI);
                 }
             }
-
-            OnPendingMethodsChanged?.Invoke(HasPendingMethods);
-        }
-
-        // metodo fallback(ou usado sempre, xd) pra criar o cartao de metodo
-        // pode ser melhor explorado, pra ficar mais agradavel como UI
-        private GameObject CreateDefaultMethodCard(MethodData method)
-        {
-            var cardGo = new GameObject($"MethodCard_{method.Name}", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button), typeof(LayoutElement));
-            cardGo.transform.SetParent(_methodsContainer, false);
-
-            var rt = cardGo.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(220f, 36f);
-
-            var layout = cardGo.GetComponent<LayoutElement>();
-            layout.minHeight = 36f;
-            layout.preferredHeight = 36f;
-            layout.preferredWidth = 220f;
-            layout.flexibleWidth = 1f;
-
-            var image = cardGo.GetComponent<Image>();
-            image.color = new Color(0.92f, 0.94f, 0.98f, 1f);
-
-            var btn = cardGo.GetComponent<Button>();
-            var colors = btn.colors;
-            colors.normalColor = new Color(0.92f, 0.94f, 0.98f, 1f);
-            colors.highlightedColor = new Color(0.82f, 0.88f, 1f, 1f);
-            colors.pressedColor = new Color(0.72f, 0.80f, 0.95f, 1f);
-            btn.colors = colors;
-
-            var textGo = new GameObject("Text_MethodName", typeof(RectTransform), typeof(TextMeshProUGUI));
-            textGo.transform.SetParent(cardGo.transform, false);
-
-            var textRt = textGo.GetComponent<RectTransform>();
-            textRt.anchorMin = Vector2.zero;
-            textRt.anchorMax = Vector2.one;
-            textRt.offsetMin = new Vector2(10f, 0f);
-            textRt.offsetMax = new Vector2(-10f, 0f);
-
-            var tmp = textGo.GetComponent<TextMeshProUGUI>();
-            tmp.text = $"+ {method.Name}()";
-            tmp.fontSize = 14;
-            tmp.color = new Color(0.12f, 0.12f, 0.18f, 1f);
-            tmp.alignment = TextAlignmentOptions.MidlineLeft;
-
-            return cardGo;
         }
 
         private void HandleCardClicked(MethodData method)
@@ -336,8 +269,6 @@ namespace UI
             {
                 _diagramActions.AddMethodToClass(_diagramActions.SelectedClass, method);
             }
-
-            OnMethodCardSelected?.Invoke(method);
         }
 
         private void ClearMethodsList()
@@ -372,7 +303,7 @@ namespace UI
         {
             if (_createClassButtonText != null)
             {
-                _createClassButtonText.text = $"Criar Classe ({_classesCreatedThisTurn}/{_maxClassesPerTurn})";
+                _createClassButtonText.text = $"Criar Classe (Turno: {ClassesCreatedThisTurn}/{MaxClassesPerTurn} | Total: {TotalClassesCreated}/{MaxClassesPerMatch})";
             }
 
             if (_createClassButton != null)
@@ -393,10 +324,7 @@ namespace UI
         {
             bool isBuildPhase = phase == TurnPhase.Build;
 
-            if (_createClassButton != null)
-            {
-                _createClassButton.interactable = isBuildPhase && _classesCreatedThisTurn < _maxClassesPerTurn;
-            }
+            UpdateCreateClassButtonDisplay();
 
             if (_associationButton != null)
             {

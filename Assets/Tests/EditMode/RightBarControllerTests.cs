@@ -153,8 +153,11 @@ namespace Tests.EditMode
         }
 
         [Test]
-        public void EndTurnClicked_CallsSetPlayerReadyAndSetsWaitingState()
+        public void EndTurnClicked_InBuildPhase_CallsSetPlayerReadyAndSetsWaitingState()
         {
+            _turnManager.ForceAdvancePhase();
+            Assert.AreEqual(TurnPhase.Build, _turnManager.CurrentPhase);
+
             _controller.Initialize(_scoreContext, _refactorContext, _turnManager, PlayerSlot.PlayerOne, _turnManager);
                 
             var awakeMethod = typeof(RightBarController).GetMethod("Awake", BindingFlags.NonPublic | BindingFlags.Instance);

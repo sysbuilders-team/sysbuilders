@@ -1,5 +1,6 @@
 using System;
 using Core.Diagram;
+using Core.Requirements;
 using Core.Session;
 using TMPro;
 using UnityEngine;
@@ -27,9 +28,7 @@ namespace UI
         private ITurnContext _turnContext;
         private PlayerSlot _localSlot;
         private IDiagramActions _diagramActions;
-
-        public event Action OnRefactorButtonClicked;
-        public event Action OnEndTurnTriggered;
+        private IRequirementContext _requirementContext;
 
         private void Awake()
         {
@@ -42,7 +41,8 @@ namespace UI
             ITurnPlayerActions turnPlayerActions,
             PlayerSlot localSlot,
             ITurnContext turnContext = null,
-            IDiagramActions diagramActions = null)
+            IDiagramActions diagramActions = null,
+            IRequirementContext requirementContext = null)
         {
             UnsubscribeFromEvents();
             SetupButtons();
@@ -53,8 +53,18 @@ namespace UI
             _localSlot = localSlot;
             _turnContext = turnContext;
             _diagramActions = diagramActions;
+            _requirementContext = requirementContext;
+
             if (_diagramActions != null)
+            {
                 _diagramActions.OnClassSelected += HandleClassSelectionChanged;
+                _diagramActions.OnDiagramChanged += HandleDiagramChanged;
+            }
+
+            if (_requirementContext != null)
+            {
+                _requirementContext.OnRequirementChanged += HandleRequirementChanged;
+            }
 
             _scoreContext.OnScoreUpdated += HandleScoreUpdated;
             _refactorContext.OnRefactorPointsChanged += HandleRefactorPointsChanged;
@@ -102,6 +112,12 @@ namespace UI
             if (_diagramActions != null)
             {
                 _diagramActions.OnClassSelected -= HandleClassSelectionChanged;
+                _diagramActions.OnDiagramChanged -= HandleDiagramChanged;
+            }
+
+            if (_requirementContext != null)
+            {
+                _requirementContext.OnRequirementChanged -= HandleRequirementChanged;
             }
         }
 
@@ -145,26 +161,40 @@ namespace UI
             UpdateRefactorDisplay(_refactorContext != null ? _refactorContext.RefactorPoints : 0);
         }
 
+        private void HandleDiagramChanged()
+        {
+            UpdateEndTurnButtonState(_turnContext != null ? _turnContext.CurrentPhase : TurnPhase.Build);
+        }
+
+        private void HandleRequirementChanged(Requirement newRequirement)
+        {
+            UpdateEndTurnButtonState(_turnContext != null ? _turnContext.CurrentPhase : TurnPhase.Build);
+        }
+
         private void HandleRefactorClicked()
         {
             if (_refactorContext != null)
             {
                 _refactorContext.TryRefactorSelectedClass();
             }
-
-            OnRefactorButtonClicked?.Invoke();
         }
 
         private void HandleEndTurnClicked()
         {
             if (_turnPlayerActions == null) return;
+            if (!CanEndTurn()) return;
 
             var result = _turnPlayerActions.SetPlayerReady(_localSlot);
             if (result == SetPlayerReadyResult.Success || result == SetPlayerReadyResult.AlreadyReady)
             {
                 SetEndTurnWaitingState();
-                OnEndTurnTriggered?.Invoke();
             }
+        }
+
+        public bool CanEndTurn()
+        {
+            if (_turnContext != null && _turnContext.CurrentPhase != TurnPhase.Build) return false;
+            return _requirementContext == null || !_requirementContext.HasPendingMethods;
         }
 
         private void SetEndTurnWaitingState()
@@ -224,26 +254,13 @@ namespace UI
             }
         }
 
-        private Func<bool> _canEndTurnPredicate;
-
-        public void SetCanEndTurnPredicate(Func<bool> predicate)
-        {
-            _canEndTurnPredicate = predicate;
-            UpdateEndTurnButtonState(_turnContext != null ? _turnContext.CurrentPhase : TurnPhase.Build);
-        }
-
-        public void RefreshEndTurnButton()
-        {
-            UpdateEndTurnButtonState(_turnContext != null ? _turnContext.CurrentPhase : TurnPhase.Build);
-        }
-
         private void UpdateEndTurnButtonState(TurnPhase phase)
         {
             if (_endTurnButton == null) return;
 
             if (phase == TurnPhase.Build)
             {
-                bool canEnd = _canEndTurnPredicate == null || _canEndTurnPredicate();
+                bool canEnd = _requirementContext == null || !_requirementContext.HasPendingMethods;
                 _endTurnButton.interactable = canEnd;
                 if (_endTurnButtonText != null)
                 {

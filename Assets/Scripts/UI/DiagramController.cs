@@ -38,7 +38,6 @@ namespace UI
         public bool IsAssociationMode => _isAssociationMode;
 
         public event Action<ClassNode> OnNodeSelected;
-        public event Action<Relation> OnAssociationCreated;
         public event Action<string> OnFeedbackMessage;
         public event Action<string> OnAssociationModeHint;
 
@@ -178,12 +177,6 @@ namespace UI
         {
             if (_diagramActions == null || node == null || method == null) return false;
             return _diagramActions.AddMethodToClass(node, method);
-        }
-
-        public bool TryRemoveClass(ClassNode node)
-        {
-            if (_diagramActions == null || node == null) return false;
-            return _diagramActions.RemoveClass(node);
         }
 
         public void RenderDiagram()
@@ -343,11 +336,7 @@ namespace UI
                     var origin = _selectedNodeUI.Node;
                     var destination = clickedNodeUI.Node;
 
-                    if (_diagramActions.AddRelation(origin, destination, RelationType.Association))
-                    {
-                        OnAssociationCreated?.Invoke(new Relation(origin, destination, RelationType.Association));
-                    }
-
+                    _diagramActions.AddRelation(origin, destination, RelationType.Association);
                     SetAssociationMode(false);
                 }
             }

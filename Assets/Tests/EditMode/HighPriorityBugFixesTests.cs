@@ -26,23 +26,29 @@ namespace Tests.EditMode
         [Test]
         public void B1_TryCreateClass_WithNullOrEmptyName_GeneratesUniqueSequentialNames()
         {
-            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne);
+            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne, isNetworkMatch: true);
+            var editor = session.DiagramActions;
             session.SetPlayerReady(PlayerSlot.PlayerOne);
             session.SetPlayerReady(PlayerSlot.PlayerTwo); // Now in Build phase
 
-            bool firstCreated = session.TryCreateClass(null, out var firstNode);
+            bool firstCreated = editor.TryCreateClass(null, out var firstNode);
             Assert.IsTrue(firstCreated);
             Assert.IsNotNull(firstNode);
             Assert.AreEqual("Classe1", firstNode.Name);
-            Assert.AreEqual(firstNode, session.SelectedClass, "Nova classe criada deve ser auto-selecionada.");
+            Assert.AreEqual(firstNode, editor.SelectedClass, "Nova classe criada deve ser auto-selecionada.");
 
-            bool secondCreated = session.TryCreateClass(string.Empty, out var secondNode);
+            bool secondCreated = editor.TryCreateClass(string.Empty, out var secondNode);
             Assert.IsTrue(secondCreated);
             Assert.IsNotNull(secondNode);
             Assert.AreEqual("Classe2", secondNode.Name);
-            Assert.AreEqual(secondNode, session.SelectedClass);
+            Assert.AreEqual(secondNode, editor.SelectedClass);
 
-            bool thirdCreated = session.TryCreateClass("   ", out var thirdNode);
+            // Avança para o Turno 2 para liberar a cota de criação por turno (2 por turno)
+            session.TurnManager.ForceAdvancePhase(); // Build -> Evaluate
+            session.TurnManager.ForceAdvancePhase(); // Evaluate -> Show (Turno 2)
+            session.TurnManager.ForceAdvancePhase(); // Show -> Build (Turno 2)
+
+            bool thirdCreated = editor.TryCreateClass("   ", out var thirdNode);
             Assert.IsTrue(thirdCreated);
             Assert.IsNotNull(thirdNode);
             Assert.AreEqual("Classe3", thirdNode.Name);
@@ -51,19 +57,20 @@ namespace Tests.EditMode
         [Test]
         public void B1_TryCreateClass_WithExplicitName_UsesGivenNameAndRejectsDuplicate()
         {
-            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne);
+            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne, isNetworkMatch: true);
+            var editor = session.DiagramActions;
             session.SetPlayerReady(PlayerSlot.PlayerOne);
             session.SetPlayerReady(PlayerSlot.PlayerTwo);
 
             string failureMessage = null;
-            session.OnActionFailed += msg => failureMessage = msg;
+            editor.OnActionFailed += msg => failureMessage = msg;
 
-            bool firstCreated = session.TryCreateClass("Usuario", out var firstNode);
+            bool firstCreated = editor.TryCreateClass("Usuario", out var firstNode);
             Assert.IsTrue(firstCreated);
             Assert.AreEqual("Usuario", firstNode.Name);
             Assert.IsNull(failureMessage);
 
-            bool duplicateCreated = session.TryCreateClass("Usuario", out var duplicateNode);
+            bool duplicateCreated = editor.TryCreateClass("Usuario", out var duplicateNode);
             Assert.IsFalse(duplicateCreated);
             Assert.IsNull(duplicateNode);
             Assert.IsNotNull(failureMessage);
@@ -85,77 +92,106 @@ namespace Tests.EditMode
         public void B2_MatchSession_AwardsInitialRefactorPointsFromPolicy()
         {
             var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne);
+            var refactor = session.RefactorContext;
 
-            Assert.AreEqual(2, session.RefactorPoints);
+            Assert.AreEqual(2, refactor.RefactorPoints);
             Assert.AreEqual(2, session.LocalPlayer.RefactorPoints);
             Assert.AreEqual(2, session.OpponentPlayer.RefactorPoints);
-            Assert.AreEqual(1, session.RefactorCost);
+            Assert.AreEqual(1, refactor.RefactorCost);
         }
 
         [Test]
         public void B2_TryRefactorClass_ConsumesPointUnlocksClassAndRaisesEvents()
         {
-            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne);
+            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne, isNetworkMatch: true);
+            var editor = session.DiagramActions;
+            var refactor = session.RefactorContext;
             session.SetPlayerReady(PlayerSlot.PlayerOne);
             session.SetPlayerReady(PlayerSlot.PlayerTwo); // Build Turn 1
 
-            session.TryCreateClass("Servico", out var node);
+            editor.TryCreateClass("Servico", out var node);
             node.Lock(); // Simula bloqueio de turno anterior
             Assert.IsTrue(node.IsLocked);
 
             int reportedPoints = -1;
             bool diagramChangedFired = false;
-            session.OnRefactorPointsChanged += pts => reportedPoints = pts;
-            session.OnDiagramChanged += () => diagramChangedFired = true;
+            refactor.OnRefactorPointsChanged += pts => reportedPoints = pts;
+            editor.OnDiagramChanged += () => diagramChangedFired = true;
 
-            Assert.IsTrue(session.CanRefactor(node));
-            bool refactorResult = session.TryRefactorClass(node);
+            Assert.IsTrue(refactor.CanRefactor(node));
+            bool refactorResult = refactor.TryRefactorClass(node);
 
             Assert.IsTrue(refactorResult);
             Assert.IsFalse(node.IsLocked, "A classe deve ser destravada após a refatoração.");
-            Assert.AreEqual(1, session.RefactorPoints, "Deve ter debitado 1 ponto de refatoração.");
+            Assert.AreEqual(1, refactor.RefactorPoints, "Deve ter debitado 1 ponto de refatoração.");
             Assert.AreEqual(1, reportedPoints, "Evento OnRefactorPointsChanged deve ter sido disparado com o novo valor.");
             Assert.IsTrue(diagramChangedFired, "Evento OnDiagramChanged deve ter sido disparado para atualizar a UI.");
         }
+
+        [Test]
+        public void B2_TryRefactorClass_RejectsUnlockedOrForeignClassWithoutFiringEvents()
+        {
+            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne, isNetworkMatch: true);
+            var editor = session.DiagramActions;
+            var refactor = session.RefactorContext;
+            session.SetPlayerReady(PlayerSlot.PlayerOne);
+            session.SetPlayerReady(PlayerSlot.PlayerTwo); // Build Turn 1
+
+            editor.TryCreateClass("Desbloqueada", out var unlockedNode);
+
+            bool pointsEventFired = false;
+            bool diagramEventFired = false;
+            refactor.OnRefactorPointsChanged += _ => pointsEventFired = true;
+            editor.OnDiagramChanged += () => diagramEventFired = true;
+
+            Assert.IsFalse(refactor.CanRefactor(unlockedNode));
+            Assert.IsFalse(refactor.TryRefactorClass(unlockedNode), "Não deve refatorar classe já desbloqueada.");
+            Assert.IsFalse(pointsEventFired);
+            Assert.IsFalse(diagramEventFired);
+
+            var foreignLockedNode = new ClassNode("Externa");
+            foreignLockedNode.Lock();
+
+            Assert.IsFalse(refactor.CanRefactor(foreignLockedNode));
+            Assert.IsFalse(refactor.TryRefactorClass(foreignLockedNode), "Não deve refatorar classe que não pertence ao diagrama local.");
+            Assert.IsTrue(foreignLockedNode.IsLocked);
+            Assert.AreEqual(2, refactor.RefactorPoints);
+        }
         #endregion
 
-        #region B3 Tests: RemoveClass Behavior
+        #region B3 Tests: Class Creation Quotas (Turn and Match Limits)
         [Test]
-        public void B3_RemoveClass_SuccessfullyRemovesClassAndRaisesDiagramChanged()
+        public void B3_TryCreateClass_EnforcesTurnAndMatchQuotasAcrossSession()
         {
-            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne);
+            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne, isNetworkMatch: true, maxClassesPerMatch: 3);
+            var editor = session.DiagramActions;
             session.SetPlayerReady(PlayerSlot.PlayerOne);
-            session.SetPlayerReady(PlayerSlot.PlayerTwo);
+            session.SetPlayerReady(PlayerSlot.PlayerTwo); // Build Turn 1
 
-            session.TryCreateClass("Temporaria", out var node);
-            Assert.AreEqual(node, session.SelectedClass);
-            Assert.AreEqual(1, session.LocalPlayer.Diagram.Classes.Count);
+            Assert.AreEqual(2, editor.MaxClassesPerTurn);
+            Assert.AreEqual(3, editor.MaxClassesPerMatch);
 
-            bool diagramChangedFired = false;
-            session.OnDiagramChanged += () => diagramChangedFired = true;
+            Assert.IsTrue(editor.TryCreateClass("C1", out _));
+            Assert.IsTrue(editor.TryCreateClass("C2", out _));
+            Assert.AreEqual(2, editor.ClassesCreatedThisTurn);
+            Assert.AreEqual(2, editor.TotalClassesCreated);
+            Assert.IsFalse(editor.CanCreateClass);
+            Assert.IsFalse(editor.TryCreateClass("C3_BloqueadaNoTurno1", out _));
 
-            bool removed = session.RemoveClass(node);
+            // Avança para Turno 2 (Evaluate -> Show -> Build)
+            session.TurnManager.ForceAdvancePhase();
+            session.TurnManager.ForceAdvancePhase();
+            session.TurnManager.ForceAdvancePhase();
 
-            Assert.IsTrue(removed, "RemoveClass deve retornar true quando a classe for removida com sucesso.");
-            Assert.AreEqual(0, session.LocalPlayer.Diagram.Classes.Count);
-            Assert.IsNull(session.SelectedClass, "Seleção deve ser limpa se a classe selecionada foi removida.");
-            Assert.IsTrue(diagramChangedFired, "OnDiagramChanged deve ser invocado após a remoção da classe.");
-        }
+            Assert.AreEqual(0, editor.ClassesCreatedThisTurn, "Cota do turno deve resetar no novo turno.");
+            Assert.AreEqual(2, editor.TotalClassesCreated, "Total da partida deve persistir entre turnos.");
+            Assert.IsTrue(editor.CanCreateClass);
 
-        [Test]
-        public void B3_RemoveClass_WhenClassIsLocked_ReturnsFalse()
-        {
-            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne);
-            session.SetPlayerReady(PlayerSlot.PlayerOne);
-            session.SetPlayerReady(PlayerSlot.PlayerTwo);
-
-            session.TryCreateClass("Fixa", out var node);
-            node.Lock();
-
-            bool removed = session.RemoveClass(node);
-
-            Assert.IsFalse(removed, "Não deve remover classe bloqueada sem refatorá-la antes.");
-            Assert.AreEqual(1, session.LocalPlayer.Diagram.Classes.Count);
+            Assert.IsTrue(editor.TryCreateClass("C3", out _));
+            Assert.AreEqual(1, editor.ClassesCreatedThisTurn);
+            Assert.AreEqual(3, editor.TotalClassesCreated);
+            Assert.IsFalse(editor.CanCreateClass, "Limite máximo da partida (3) foi atingido.");
+            Assert.IsFalse(editor.TryCreateClass("C4_BloqueadaNaPartida", out _));
         }
         #endregion
     }

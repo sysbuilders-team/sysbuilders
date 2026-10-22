@@ -227,23 +227,6 @@ namespace Tests.EditMode
         }
 
         [Test]
-        public void ClassDiagram_RemoveClass_DropsRelationsAndFreesName()
-        {
-            var diagram = new ClassDiagram();
-            var classA = new ClassNode("A");
-            var classB = new ClassNode("B");
-            diagram.AddClass(classA);
-            diagram.AddClass(classB);
-            diagram.AddRelation(new Relation(classA, classB, RelationType.Association));
-
-            Assert.IsTrue(diagram.RemoveClass(classA));
-            Assert.IsFalse(diagram.RemoveClass(classA));
-            Assert.AreEqual(0, diagram.Relations.Count);
-            Assert.IsNull(diagram.FindClassByName("A"));
-            Assert.IsTrue(diagram.AddClass(new ClassNode("A")));
-        }
-
-        [Test]
         public void GetConnectedComponents_ChainOfClasses_ReturnsSingleComponent()
         {
             var diagram = new ClassDiagram();
@@ -333,8 +316,8 @@ namespace Tests.EditMode
             var session = new MatchSession("A", "B", requirements, PlayerSlot.PlayerOne);
             session.TurnManager.ForceAdvancePhase();   // Show -> Build (fase em que o diagrama aceita edicao)
 
-            Assert.IsTrue(session.TryCreateClass("Aluno", out var first));
-            Assert.IsFalse(session.TryCreateClass("Aluno", out var second));
+            Assert.IsTrue(session.DiagramActions.TryCreateClass("Aluno", out var first));
+            Assert.IsFalse(session.DiagramActions.TryCreateClass("Aluno", out var second));
             Assert.IsNull(second);
             Assert.AreEqual(1, session.LocalPlayer.Diagram.Classes.Count);
             Assert.AreEqual(first, session.LocalPlayer.Diagram.FindClassByName("Aluno"));

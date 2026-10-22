@@ -4,9 +4,14 @@ namespace Core.Diagram
 {
     public interface IDiagramActions
     {
+        int ClassesCreatedThisTurn { get; }
+        int MaxClassesPerTurn { get; }
+        int TotalClassesCreated { get; }
+        int MaxClassesPerMatch { get; }
+        bool CanCreateClass { get; }
+
         bool TryCreateClass(string className, out ClassNode createdNode);
         bool RenameClass(ClassNode node, string newName);
-        bool RemoveClass(ClassNode node);
 
         bool AddMethodToClass(ClassNode node, MethodData method);
         bool RemoveMethodFromClass(ClassNode node, MethodData method);

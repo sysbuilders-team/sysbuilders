@@ -15,8 +15,18 @@ namespace Tests.EditMode
             public readonly List<Relation> CreatedRelations = new List<Relation>();
             public event Action OnDiagramChanged;
 
+            public int ClassesCreatedThisTurn { get; private set; }
+            public int MaxClassesPerTurn => DiagramEditor.DefaultMaxClassesPerTurn;
+            public int TotalClassesCreated { get; private set; }
+            public int MaxClassesPerMatch => DiagramEditor.DefaultMaxClassesPerMatch;
+            public bool CanCreateClass =>
+                ClassesCreatedThisTurn < MaxClassesPerTurn &&
+                TotalClassesCreated < MaxClassesPerMatch;
+
             public bool TryCreateClass(string className, out ClassNode createdNode)
             {
+                ClassesCreatedThisTurn++;
+                TotalClassesCreated++;
                 createdNode = new ClassNode(className);
                 OnDiagramChanged?.Invoke();
                 return true;
@@ -26,12 +36,6 @@ namespace Tests.EditMode
             {
                 if (node == null || string.IsNullOrWhiteSpace(newName)) return false;
                 node.Rename(newName);
-                OnDiagramChanged?.Invoke();
-                return true;
-            }
-
-            public bool RemoveClass(ClassNode node)
-            {
                 OnDiagramChanged?.Invoke();
                 return true;
             }
