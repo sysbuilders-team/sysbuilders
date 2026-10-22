@@ -6,16 +6,19 @@ namespace Managers
 {
     public class SceneNavigator : ISceneNavigationActions
     {
+        public const string DefaultMenuSceneName = "Menu";
+        public const string DefaultGameSceneName = "GameScene";
+
         private readonly string _menuSceneName;
         private readonly Func<bool> _isNetworkMatchProvider;
         private readonly Action _onReturnToMenuRequested;
 
         public SceneNavigator(
-            string menuSceneName = "Menu",
+            string menuSceneName = DefaultMenuSceneName,
             Func<bool> isNetworkMatchProvider = null,
             Action onReturnToMenuRequested = null)
         {
-            _menuSceneName = string.IsNullOrWhiteSpace(menuSceneName) ? "Menu" : menuSceneName;
+            _menuSceneName = string.IsNullOrWhiteSpace(menuSceneName) ? DefaultMenuSceneName : menuSceneName;
             _isNetworkMatchProvider = isNetworkMatchProvider ?? (() => false);
             _onReturnToMenuRequested = onReturnToMenuRequested;
         }
@@ -33,13 +36,13 @@ namespace Managers
 
         public void ReturnToMainMenu()
         {
-			// Fire the event first so handlers (e.g. MatchSyncBridge) can tear
+            // Fire the event first so handlers (e.g. MatchSyncBridge) can tear
             // down a running network before the scene is destroyed. Navigation
             // happens unconditionally after: Mirror's StopHost/StopClient do
             // not load a scene, and the previous fallback only ran when the
             // callback was null — which it never is from GameManager.Awake.
             _onReturnToMenuRequested?.Invoke();
             SceneManager.LoadScene(_menuSceneName);
-         }
         }
     }
+}

@@ -1,0 +1,123 @@
+using System;
+using Core.Discovery;
+using UnityEngine;
+
+namespace UI
+{
+    /// <summary>
+    /// Centralizador único de navegação entre os painéis da MenuScene.
+    /// Nenhuma controller ou serviço de rede manipula SetActive de painéis diretamente;
+    /// todas as intenções de transição passam por ShowScreen.
+    /// </summary>
+    [DisallowMultipleComponent]
+    public class MenuNavigator : MonoBehaviour, IMenuNavigationActions
+    {
+        [Header("Painéis do Menu")]
+        [SerializeField] private GameObject _mainPanel;
+        [SerializeField] private GameObject _lobbyBrowserPanel;
+        [SerializeField] private GameObject _roomWaitPanel;
+        [SerializeField] private GameObject _settingsPanel;
+        [SerializeField] private GameObject _tutorialPanel;
+
+        [Header("Fonte de Estado da Sala (Opcional)")]
+        [Tooltip("Deixe vazio para resolver automaticamente o IRoomLobbySource na cena.")]
+        [SerializeField] private MonoBehaviour _lobbySourceBehaviour;
+
+        private IRoomLobbySource _lobbySource;
+        private bool _wasInRoom;
+
+        public MenuScreen CurrentScreen { get; private set; } = MenuScreen.Main;
+
+        public event Action<MenuScreen> OnScreenChanged;
+
+        public void ConfigurePanels(
+            GameObject mainPanel,
+            GameObject lobbyBrowserPanel,
+            GameObject roomWaitPanel,
+            GameObject settingsPanel = null,
+            GameObject tutorialPanel = null)
+        {
+            _mainPanel = mainPanel;
+            _lobbyBrowserPanel = lobbyBrowserPanel;
+            _roomWaitPanel = roomWaitPanel;
+            _settingsPanel = settingsPanel;
+            _tutorialPanel = tutorialPanel;
+        }
+
+        public void SetLobbySource(IRoomLobbySource lobbySource)
+        {
+            _lobbySource = lobbySource;
+            _wasInRoom = _lobbySource != null && _lobbySource.IsInRoom;
+        }
+
+        private void Awake()
+        {
+            EnsureLobbySource();
+            _wasInRoom = _lobbySource != null && _lobbySource.IsInRoom;
+
+            ShowScreen(_wasInRoom ? MenuScreen.RoomWait : MenuScreen.Main);
+        }
+
+        private void Update()
+        {
+            EnsureLobbySource();
+            if (_lobbySource == null) return;
+
+            bool inRoom = _lobbySource.IsInRoom;
+
+            if (!_wasInRoom && inRoom)
+            {
+                _wasInRoom = true;
+                if (CurrentScreen != MenuScreen.RoomWait)
+                {
+                    ShowScreen(MenuScreen.RoomWait);
+                }
+            }
+            else if (_wasInRoom && !inRoom)
+            {
+                _wasInRoom = false;
+                if (CurrentScreen == MenuScreen.RoomWait)
+                {
+                    ShowScreen(MenuScreen.Main);
+                }
+            }
+        }
+
+        public void ShowScreen(MenuScreen screen)
+        {
+            CurrentScreen = screen;
+
+            if (_mainPanel != null) _mainPanel.SetActive(screen == MenuScreen.Main);
+            if (_lobbyBrowserPanel != null) _lobbyBrowserPanel.SetActive(screen == MenuScreen.LobbyBrowser);
+            if (_roomWaitPanel != null) _roomWaitPanel.SetActive(screen == MenuScreen.RoomWait);
+            if (_settingsPanel != null) _settingsPanel.SetActive(screen == MenuScreen.Settings);
+            if (_tutorialPanel != null) _tutorialPanel.SetActive(screen == MenuScreen.Tutorial);
+
+            OnScreenChanged?.Invoke(screen);
+        }
+
+        public void ShowMain() => ShowScreen(MenuScreen.Main);
+        public void ShowLobbyBrowser() => ShowScreen(MenuScreen.LobbyBrowser);
+        public void ShowRoomWait() => ShowScreen(MenuScreen.RoomWait);
+        public void ShowSettings() => ShowScreen(MenuScreen.Settings);
+        public void ShowTutorial() => ShowScreen(MenuScreen.Tutorial);
+
+        private void EnsureLobbySource()
+        {
+            if (_lobbySource != null) return;
+
+            _lobbySource = _lobbySourceBehaviour as IRoomLobbySource ?? FindPort<IRoomLobbySource>();
+        }
+
+        private static TPort FindPort<TPort>() where TPort : class
+        {
+            foreach (var behaviour in FindObjectsByType<MonoBehaviour>(
+                         FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (behaviour is TPort port) return port;
+            }
+
+            return null;
+        }
+    }
+}

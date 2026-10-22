@@ -3,17 +3,16 @@ using Core.Discovery;
 using Mirror;
 using Network.Discovery;
 using TMPro;
+using UI;
 using UnityEngine;
 
 namespace Network
 {
 	public class MenuManager : MonoBehaviour, IRoomJoinActions
 	{
-		[Header("Painéis de Navegação")]
-		[SerializeField] private GameObject _startPanel;
-		[SerializeField] private GameObject _lobbyPanel;
-		[SerializeField] private GameObject _settingsPanel;
-		[SerializeField] private GameObject _tutorialPanel;
+		[Header("Navegação")]
+		[Tooltip("Centralizador de telas do menu (MenuNavigator). Se vazio, é resolvido na cena.")]
+		[SerializeField] private MonoBehaviour _navigatorBehaviour;
 
 		[Header("Referências de Rede")]
 		[Tooltip("Deixe vazio: o serviço é criado/obtido no mesmo GameObject do NetworkManager.")]
@@ -23,30 +22,53 @@ namespace Network
 		[SerializeField] private TMP_Text _localIpText;
 		[SerializeField] private TMP_Text _discoveryStatusText;
 
+		private IMenuNavigationActions _navigator;
 		private string _sessionId;
 		private RoomAdvertisement _advertisement;
 
 		public RoomDiscoveryService Discovery => _discovery;
 
+		public void SetNavigator(IMenuNavigationActions navigator)
+		{
+			_navigator = navigator;
+		}
+
 		private void Awake()
 		{
 			_sessionId = Guid.NewGuid().ToString("N");
+			ResolveNavigator();
+		}
+
+		private IMenuNavigationActions ResolveNavigator()
+		{
+			if (_navigator != null) return _navigator;
+
+			if (_navigatorBehaviour is IMenuNavigationActions assigned)
+			{
+				_navigator = assigned;
+				return _navigator;
+			}
+
+			foreach (var behaviour in FindObjectsByType<MonoBehaviour>(
+						FindObjectsInactive.Include, FindObjectsSortMode.None))
+			{
+				if (behaviour is not IMenuNavigationActions nav) continue;
+
+				_navigator = nav;
+				break;
+			}
+
+			return _navigator;
 		}
 
 		/// <summary>
 		/// Resolve o serviço de descoberta sob demanda.
-		///
-		/// Ele NÃO pode ser criado neste GameObject: o MenuManager vive no MenuPanel, que fica
-		/// INATIVO quando o lobby (ou a sala) está aberto — e um serviço em objeto inativo não roda
-		/// Update, ou seja, para de processar os datagramas recebidos e de fundir a lista. Era por
-		/// isso que a lista de salas só se atualizava ao sair e voltar do painel.
 		/// Quem cria é o GameRoomManager, no GameObject do NetworkManager, que fica sempre ativo.
 		/// </summary>
 		private RoomDiscoveryService ResolveDiscovery()
 		{
 			if (_discovery != null) return _discovery;
 
-			// Inclui inativos: o serviço pode estar num objeto pai inativo em algum momento.
 			foreach (var behaviour in FindObjectsByType<MonoBehaviour>(
 						FindObjectsInactive.Include, FindObjectsSortMode.None))
 			{
@@ -93,12 +115,22 @@ namespace Network
 			}
 		}
 
+		public void SelectTheme(string themeName)
+		{
+			if (string.IsNullOrWhiteSpace(themeName)) return;
+
+			string sanitized = themeName.Trim();
+			PlayerPrefs.SetString("SelectedTheme", sanitized);
+			PlayerPrefs.Save();
+			Debug.Log($"[MenuManager] Tema selecionado: {sanitized}");
+		}
 
 		public void HostGame()
 		{
-			if (NetworkManager.singleton == null) return;
-
 			SaveCurrentPlayerName();
+			ResolveNavigator()?.ShowScreen(MenuScreen.RoomWait);
+
+			if (NetworkManager.singleton == null) return;
 
 			// Grava o tema antes de StartHost: o MatchSyncBridge exige ChosenTheme definido,
 			// para os dois peers não divergirem por PlayerPrefs local.
@@ -117,23 +149,23 @@ namespace Network
 
 		/// <summary>
 		/// Sai da sala de espera e volta ao menu inicial. O host encerra a sessão (o cliente cai
-		/// junto); o cliente apenas desconecta. O painel da sala se esconde sozinho, porque
-		/// IRoomLobbySource.IsInRoom deixa de ser verdadeiro.
+		/// junto); o cliente apenas desconecta.
 		/// </summary>
 		public void SairDaSala()
 		{
-			if (NetworkManager.singleton == null) return;
-
-			if (NetworkServer.active)
+			if (NetworkManager.singleton != null)
 			{
-				NetworkManager.singleton.StopHost();
-			}
-			else if (NetworkClient.active)
-			{
-				NetworkManager.singleton.StopClient();
+				if (NetworkServer.active)
+				{
+					NetworkManager.singleton.StopHost();
+				}
+				else if (NetworkClient.active)
+				{
+					NetworkManager.singleton.StopClient();
+				}
 			}
 
-			AbrirStart();
+			ResolveNavigator()?.ShowScreen(MenuScreen.Main);
 
 			Debug.Log("[MenuManager] Saída da sala de espera solicitada.");
 		}
@@ -146,11 +178,6 @@ namespace Network
 			_advertisement = BuildAdvertisement(CountPlayersInRoom());
 			discovery.StartAdvertising(_advertisement);
 		}
-
-		// A contagem de jogadores do anúncio (1/2 -> 2/2) NÃO é publicada daqui: este componente vive
-		// no MenuPanel, que é desligado quando a sala ou a lista de partidas aparece — e objeto
-		// inativo não roda Update, então o anúncio congelava em 1/2. Quem cuida disso agora é o
-		// GameRoomManager, no objeto do NetworkManager (sempre ativo).
 
 		private RoomAdvertisement BuildAdvertisement(int players)
 		{
@@ -176,11 +203,10 @@ namespace Network
 			return Mathf.Max(1, NetworkServer.connections.Count);
 		}
 
-
 		/// <summary>Botão "Buscar Partidas": abre o lobby e começa a escutar mDNS/multicast.</summary>
 		public void BuscarPartidas()
 		{
-			AbrirLobby();
+			ResolveNavigator()?.ShowScreen(MenuScreen.LobbyBrowser);
 
 			var discovery = ResolveDiscovery();
 			if (discovery == null) return;
@@ -214,10 +240,14 @@ namespace Network
 
 		private void JoinAddress(string address, int port, string description)
 		{
-			if (NetworkManager.singleton == null) return;
-
 			SaveCurrentPlayerName();
 			ResolveDiscovery()?.StopBrowsing();
+
+			// Transiciona imediatamente para a tela da sala de espera (que exibe "Entrando na sala…"
+			// enquanto o handshake do Mirror conclui), eliminando a necessidade de clicar em "Voltar".
+			ResolveNavigator()?.ShowScreen(MenuScreen.RoomWait);
+
+			if (NetworkManager.singleton == null) return;
 
 			// A sala descoberta pode anunciar porta diferente da configurada localmente.
 			if (port > 0) TransportPortAdapter.TryApplyPort(port);
@@ -231,20 +261,15 @@ namespace Network
 					$"{NetworkManager.singleton.networkAddress}:{TransportPortAdapter.ResolvePort()}");
 		}
 
-
-		public void AbrirStart() => TrocarPainel(_startPanel);
-		public void AbrirLobby() => TrocarPainel(_lobbyPanel);
-		public void AbrirTutorial() => TrocarPainel(_tutorialPanel);
-		public void AbrirSettings() => TrocarPainel(_settingsPanel);
-
-		private void TrocarPainel(GameObject painelAtivo)
+		public void AbrirStart()
 		{
-			if (_startPanel != null) _startPanel.SetActive(_startPanel == painelAtivo);
-			if (_lobbyPanel != null) _lobbyPanel.SetActive(_lobbyPanel == painelAtivo);
-			if (_tutorialPanel != null) _tutorialPanel.SetActive(_tutorialPanel == painelAtivo);
-			if (_settingsPanel != null) _settingsPanel.SetActive(_settingsPanel == painelAtivo);
+			bool alreadyInRoom = NetworkServer.active || (NetworkClient.active && NetworkClient.isConnected);
+			ResolveNavigator()?.ShowScreen(alreadyInRoom ? MenuScreen.RoomWait : MenuScreen.Main);
 		}
 
+		public void AbrirLobby() => ResolveNavigator()?.ShowScreen(MenuScreen.LobbyBrowser);
+		public void AbrirTutorial() => ResolveNavigator()?.ShowScreen(MenuScreen.Tutorial);
+		public void AbrirSettings() => ResolveNavigator()?.ShowScreen(MenuScreen.Settings);
 
 		private void SaveCurrentPlayerName()
 		{

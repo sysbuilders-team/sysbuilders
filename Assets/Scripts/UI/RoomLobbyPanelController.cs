@@ -15,14 +15,6 @@ namespace UI
         [SerializeField] private TMP_Text _titleText;
         [SerializeField] private string _roomTitle = "SALA DE ESPERA";
 
-        [Header("Painéis do menu que a sala substitui")]
-        [Tooltip("Desligados enquanto a sala está na frente (não dependemos de ordem de renderização).")]
-        [SerializeField] private GameObject[] _panelsToHide;
-        [Tooltip("Volta a aparecer quando o jogador sai da sala, senão a tela ficaria vazia.")]
-        [SerializeField] private GameObject _fallbackPanel;
-        [Tooltip("Se este painel estiver aberto (lista de salas), a sala sai da frente em vez de cobri-lo.")]
-        [SerializeField] private GameObject _lobbyListPanel;
-
         [Header("Ações")]
         [SerializeField] private Button _readyButton;
         [SerializeField] private TMP_Text _readyButtonText;
@@ -68,25 +60,24 @@ namespace UI
                 _subscribed = true;
             }
 
-            // Whatever the adapter holds right now is what the player should see. Waiting for a
-            // hash change is not enough: enabling the panel does not change the room state, so
-            // the rows would never be built when the panel starts active.
             HandleSlotsChanged();
         }
 
         private void OnDestroy()
         {
-			if(_subscribed && _source != null)
-			{
-				_source.OnSlotsChanged -= HandleSlotsChanged;
-			}
-			
+            if (_subscribed && _source != null)
+            {
+                _source.OnSlotsChanged -= HandleSlotsChanged;
+            }
+
             if (_readyButton != null) _readyButton.onClick.RemoveListener(ToggleReady);
             ClearRows();
         }
 
         private void Update()
         {
+            if (_source != null && _subscribed) return;
+
             EnsureSource();
 
             if (_source != null && !_subscribed)
@@ -95,53 +86,32 @@ namespace UI
                 _subscribed = true;
                 HandleSlotsChanged();
             }
+        }
 
-            bool inRoom = _source != null && _source.IsInRoom;
-            bool wasShowing = _panelRoot != null && _panelRoot.activeSelf;
-
-            if (inRoom)
+        public void SetSource(IRoomLobbySource source)
+        {
+            if (_subscribed && _source != null)
             {
-                // Joining a room takes priority — close the lobby list if it is open.
-                if (_lobbyListPanel != null && _lobbyListPanel.activeSelf)
-                    _lobbyListPanel.SetActive(false);
-
-                if (_panelRoot != null && !_panelRoot.activeSelf)
-                {
-                    _panelRoot.SetActive(true);
-                    HandleSlotsChanged();
-                }
-
-                HideMenuPanels();
+                _source.OnSlotsChanged -= HandleSlotsChanged;
+                _subscribed = false;
             }
-            else if (wasShowing)
+
+            _source = source;
+
+            if (_source != null && isActiveAndEnabled)
             {
-                if (_panelRoot != null) _panelRoot.SetActive(false);
-                RestoreFallbackPanel();
+                _source.OnSlotsChanged += HandleSlotsChanged;
+                _subscribed = true;
+                HandleSlotsChanged();
             }
         }
 
-		private void HandleSlotsChanged()
-		{
-		    if (_panelRoot == null || !_panelRoot.activeSelf) return;
-		    if (_source == null) return;
-
-		    SyncRows(_source.Slots);
-		    UpdateControls();
-		} 
-        
-        private void HideMenuPanels()
+        private void HandleSlotsChanged()
         {
-            if (_panelsToHide == null) return;
+            if (_source == null) return;
 
-            foreach (var panel in _panelsToHide)
-            {
-                if (panel != null && panel.activeSelf) panel.SetActive(false);
-            }
-        }
-
-        private void RestoreFallbackPanel()
-        {
-            if (_fallbackPanel != null && !_fallbackPanel.activeSelf) _fallbackPanel.SetActive(true);
+            SyncRows(_source.Slots);
+            UpdateControls();
         }
 
         private void ToggleReady()
@@ -158,7 +128,7 @@ namespace UI
 
             _source = _sourceBehaviour as IRoomLobbySource ?? FindPort<IRoomLobbySource>();
         }
-        
+
         private static TPort FindPort<TPort>() where TPort : class
         {
             foreach (var behaviour in FindObjectsByType<MonoBehaviour>(
@@ -169,8 +139,6 @@ namespace UI
 
             return null;
         }
-
-       
 
         private void SyncRows(IReadOnlyList<RoomSlotInfo> slots)
         {

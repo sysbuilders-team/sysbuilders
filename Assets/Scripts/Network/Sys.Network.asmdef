@@ -3,6 +3,7 @@
     "rootNamespace": "",
     "references": [
         "Sys.Core",
+        "Sys.UI",
         "Mirror",
         "Mirror.Authenticators",
         "Mirror.CompilerSymbols",
