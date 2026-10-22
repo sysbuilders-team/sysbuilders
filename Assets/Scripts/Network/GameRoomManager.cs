@@ -36,6 +36,8 @@ namespace Network
 		{
 			base.Start();
 
+			maxConnections = 2;
+			
 			if (_discovery == null)
 			{
 				_discovery = GetComponent<RoomDiscoveryService>();
