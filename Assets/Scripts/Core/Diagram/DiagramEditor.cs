@@ -118,7 +118,7 @@ namespace Core.Diagram
                 return false;
             }
 
-            string finalName = string.IsNullOrWhiteSpace(className) ? GenerateDefaultClassName() : className.Trim();
+            string finalName = ClassNameRules.Sanitize(className) ?? GenerateDefaultClassName();
             var newClass = new ClassNode(finalName);
 
             if (!LocalPlayer.AddClass(newClass))
@@ -169,21 +169,21 @@ namespace Core.Diagram
                 return false;
             }
 
-            if (string.IsNullOrWhiteSpace(newName))
+            string sanitized = ClassNameRules.Sanitize(newName);
+            if (sanitized == null)
             {
                 OnActionFailed?.Invoke("O nome da classe não pode ser vazio.");
                 return false;
             }
 
-            string trimmed = newName.Trim();
-            if (string.Equals(node.Name, trimmed, StringComparison.Ordinal))
+            if (string.Equals(node.Name, sanitized, StringComparison.Ordinal))
             {
                 return true;
             }
 
-            if (!LocalPlayer.RenameClass(node, trimmed))
+            if (!LocalPlayer.RenameClass(node, sanitized))
             {
-                OnActionFailed?.Invoke($"Já existe uma classe chamada '{trimmed}' no diagrama.");
+                OnActionFailed?.Invoke($"Já existe uma classe chamada '{sanitized}' no diagrama.");
                 return false;
             }
 

@@ -7,6 +7,12 @@ namespace Core.Evaluation
     {
         public int RawScore { get; }
         public int PenaltyScore { get; }
+        /// <summary>
+        /// Net score of this single evaluation: raw minus penalty, floored at zero.
+        /// NOT the match score. The match score is <see cref="ScoreRules.Score"/>,
+        /// because RawScore is cumulative across turns while penalties are per-turn;
+        /// summing TotalScore over a match's history double-counts earlier turns.
+        /// </summary>
         public int TotalScore { get; }
         public int CleanBonus { get; }
         public int UnallocatedPenalty { get; }

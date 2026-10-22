@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Core.Diagram;
 using Core.Evaluation;
 
 namespace Network
@@ -33,7 +34,7 @@ namespace Network
             out int[] severities,
             out string[] classes)
         {
-            if (smells == null)
+            if (smells == null || smells.Count == 0)
             {
                 types = Array.Empty<int>();
                 severities = Array.Empty<int>();
@@ -41,11 +42,12 @@ namespace Network
                 return;
             }
 
-            types = new int[smells.Count];
-            severities = new int[smells.Count];
-            classes = new string[smells.Count];
+            int count = Math.Min(smells.Count, MaxSmellsPerResult);
+            types = new int[count];
+            severities = new int[count];
+            classes = new string[count];
 
-            for (int i = 0; i < smells.Count; i++)
+            for (int i = 0; i < count; i++)
             {
                 types[i] = (int)smells[i].Type;
                 severities[i] = smells[i].Severity;
@@ -67,13 +69,26 @@ namespace Network
 
             for (int i = 0; i < count; i++)
             {
+                if (!Enum.IsDefined(typeof(CodeSmellType), types[i])) continue;
+
+                var names = new List<string>();
+                if (!string.IsNullOrEmpty(classes[i]))
+                {
+                    foreach (var raw in classes[i].Split(ClassSeparator))
+                    {
+                        var clean = ClassNameRules.Sanitize(raw);
+                        if (clean != null) names.Add(clean);
+                    }
+                }
+
                 try
                 {
-                    var names = string.IsNullOrEmpty(classes[i])
-                        ? Array.Empty<string>()
-                        : classes[i].Split(ClassSeparator);
+                    IReadOnlyList<string> affected = names.Count > 0 ? names : Array.Empty<string>();
 
-                    smells.Add(new SmellOccurrence((CodeSmellType)types[i], names, Math.Max(1, severities[i])));
+                    smells.Add(new SmellOccurrence(
+                        (CodeSmellType)types[i],
+                        affected,
+                        Math.Max(1, severities[i])));
                 }
                 catch (ArgumentException)
                 {

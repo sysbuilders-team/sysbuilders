@@ -30,11 +30,13 @@ namespace Network
 		private readonly ReadyQuorum _quorum = new ReadyQuorum(RequiredPlayers);	
         private MatchSession _subscribedSession;
 		private readonly MatchAbortCoordinator _abort = new MatchAbortCoordinator();
+		private NetworkConnectionToClient _guest;
 
 		public override void OnStartServer()
 		{
 			base.OnStartServer();
 			_quorum.ClearAll();
+			_guest = null;
 
 			NetworkServer.OnDisconnectedEvent += HandleServerDisconnect;
 
@@ -61,17 +63,33 @@ namespace Network
 				return;
 			}
 
+			// Start the host session FIRST. If it throws, abort both sides with a diagnostic.
+			// Only publish the SyncVars after the host has a working session — otherwise the
+			// client advances while the host sits in a half-initialized state and every
+			// CmdSetReady is rejected with "sessão não inicializada".
+			try
+			{
+				StartLocalMatch(plan.Theme, plan.TrailId, PlayerSlot.PlayerOne);
+			}
+			catch (Exception ex)
+			{
+				Debug.LogException(ex, this);
+				string reason = MatchAbortCoordinator.SanitizeReason(ex.Message);
+				NotifyMatchStartFailed(reason);
+				AbortLocalMatch(reason);
+				return;
+			}
+
 			_theme = plan.Theme;
 			_trailId = plan.TrailId;
 			Debug.Log($"[MatchSyncBridge] Server: tema={_theme} | trail={_trailId}");
-
-			StartLocalMatch(_theme, _trailId, PlayerSlot.PlayerOne);
 		}
 
 		public override void OnStopServer()
 		{
 			NetworkServer.OnDisconnectedEvent -= HandleServerDisconnect;
 			_quorum.ClearAll();
+			_guest = null;
 			base.OnStopServer();
 		}
 
@@ -124,6 +142,8 @@ namespace Network
 
 		private void HandleServerDisconnect(NetworkConnectionToClient conn)
 		{
+			if (_guest == conn) _guest = null;
+			
 			if (_abort.HasAborted) return;
 			if (gameManager == null || gameManager.Session == null) return;
 
@@ -172,8 +192,18 @@ namespace Network
 
 		private void StartLocalMatch(string theme, string trailId, PlayerSlot slot)
 		{
-			gameManager.StartMatch(theme, trailId, slot, isNetworkMatch: true);
+			if (gameManager == null)
+			{
+				throw new InvalidOperationException("MatchSyncBridge.gameManager is not assigned in the Inspector.");
+			}
+
+			// Reset before StartMatch so a failure path can still call AbortLocalMatch:
+			// TryBeginAbort returns false if a previous match left the coordinator armed.
 			_abort.Reset();
+
+			gameManager.StartMatch(theme, trailId, slot, isNetworkMatch: true);
+
+			Debug.Log($"[MatchSyncBridge] StartLocalMatch slot={slot}: session={(gameManager.Session != null)}");
 
 			if (gameManager.Session != null && _subscribedSession != gameManager.Session)
 			{
@@ -193,20 +223,25 @@ namespace Network
 		{
 			bool isHost = sender == null || sender == NetworkServer.localConnection;
 			if (slot == PlayerSlot.PlayerOne) return isHost;
-			if (slot == PlayerSlot.PlayerTwo) return !isHost;
+			if (slot == PlayerSlot.PlayerTwo) return EnsureGuestCaptured(sender);
 			return false;
 		}
 
-		private static bool IsKnownMatchParticipant(NetworkConnectionToClient sender)
+		// Returns true only when sender is the connection bound as the guest. The first
+		// non-host connection to reach this method claims the slot; every other
+		// connection is rejected. Cleared by OnStopServer and HandleServerDisconnect so
+		// the next match rebinds.
+		private bool EnsureGuestCaptured(NetworkConnectionToClient sender)
 		{
-			if (sender == null) return true;
-			if (sender == NetworkServer.localConnection) return true;
+			if (sender == null || sender == NetworkServer.localConnection) return false;
+			if (_guest == null) _guest = sender;
+			return sender == _guest;
+		}
 
-			foreach (var conn in NetworkServer.connections.Values)
-			{
-				if (ReferenceEquals(conn, sender)) return true;
-			}
-			return false;
+		private bool IsKnownMatchParticipant(NetworkConnectionToClient sender)
+		{
+			if (sender == null || sender == NetworkServer.localConnection) return true;
+			return EnsureGuestCaptured(sender);
 		}
 
 		[Command(requiresAuthority = false)]
@@ -391,7 +426,7 @@ namespace Network
 				SmellWireCodec.Decode(payload.SmellTypes, payload.SmellSeverities, payload.SmellClasses)
 			);
 
-			Debug.Log($"[MatchSyncBridge] Slot rival {payload.SlotIndex} (turno {payload.TurnNumber}) | raw:{payload.RawScore} penalty:{payload.PenaltyScore} total:{rivalResult.TotalScore}");
+			Debug.Log($"[MatchSyncBridge] Slot rival {payload.SlotIndex} (turno {payload.TurnNumber}) | raw:{payload.RawScore} penalty:{payload.PenaltyScore}");
 			gameManager.ReceiveOpponentEvaluation(payload.TurnNumber, rivalResult);
 		}
 	}
