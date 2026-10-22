@@ -17,10 +17,10 @@ namespace Network
     {
         /// <summary>
         /// Per-turn raw score ceiling. Each revealed requirement awards 100,
-        /// and at most one requirement is revealed per turn, so rawScore
-        /// cannot legitimately exceed 100 * turnNumber.
+        /// plus up to 50 for clean architecture bonus, so rawScore
+        /// cannot legitimately exceed 150 * turnNumber.
         /// </summary>
-        public const int MaxRawScorePerTurn = 100;
+        public const int MaxRawScorePerTurn = 150;
 
         /// <summary>
         /// Per-turn penalty ceiling. Penalties scale with diagram size and

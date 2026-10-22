@@ -692,6 +692,7 @@ GameObject:
   - component: {fileID: 415384573}
   - component: {fileID: 415384572}
   - component: {fileID: 920000005}
+  - component: {fileID: 920000099}
   m_Layer: 5
   m_Name: Canvas
   m_TagString: Untagged
@@ -1288,11 +1289,8 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4fee34e1ed2b0364699db54253f9cb43, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Managers.MenuManager
-  _startPanel: {fileID: 453653009}
-  _lobbyPanel: {fileID: 910000000}
-  _settingsPanel: {fileID: 0}
-  _tutorialPanel: {fileID: 0}
+  m_EditorClassIdentifier: Sys.Network::Network.MenuManager
+  _navigatorBehaviour: {fileID: 920000099}
   _discovery: {fileID: 0}
   _playerNameInputField: {fileID: 0}
   _ipInputField: {fileID: 1314907432}
@@ -1795,7 +1793,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Managers.MenuManager, Assembly-CSharp
+        m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
         m_MethodName: AbrirTutorial
         m_Mode: 1
         m_Arguments:
@@ -1928,7 +1926,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Managers.MenuManager, Assembly-CSharp
+        m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
         m_MethodName: AbrirSettings
         m_Mode: 1
         m_Arguments:
@@ -2273,7 +2271,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Managers.MenuManager, Assembly-CSharp
+        m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
         m_MethodName: SelectTheme
         m_Mode: 5
         m_Arguments:
@@ -4093,14 +4091,27 @@ MonoBehaviour:
   _statusText: {fileID: 920000013}
   _titleText: {fileID: 920000009}
   _roomTitle: SALA DE ESPERA
-  _panelsToHide:
-  - {fileID: 453653009}
-  - {fileID: 910000000}
-  _fallbackPanel: {fileID: 453653009}
-  _lobbyListPanel: {fileID: 910000000}
   _readyButton: {fileID: 920000016}
   _readyButtonText: {fileID: 920000015}
   _sourceBehaviour: {fileID: 920000000}
+--- !u!114 &920000099
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 415384571}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b52c9f32d8134e908b42f88d23e95a12, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sys.UI::UI.MenuNavigator
+  _mainPanel: {fileID: 453653009}
+  _lobbyBrowserPanel: {fileID: 910000000}
+  _roomWaitPanel: {fileID: 920000001}
+  _settingsPanel: {fileID: 0}
+  _tutorialPanel: {fileID: 0}
+  _lobbySourceBehaviour: {fileID: 920000000}
 --- !u!1 &920000006
 GameObject:
   m_ObjectHideFlags: 0
@@ -6737,7 +6748,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Managers.MenuManager, Assembly-CSharp
+        m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
         m_MethodName: SelectTheme
         m_Mode: 5
         m_Arguments:
@@ -6870,7 +6881,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Managers.MenuManager, Assembly-CSharp
+        m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
         m_MethodName: SelectTheme
         m_Mode: 5
         m_Arguments:
@@ -7044,18 +7055,6 @@ MonoBehaviour:
       - m_Target: {fileID: 453653013}
         m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
         m_MethodName: HostGame
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
-      - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Managers.MenuManager, Assembly-CSharp
-        m_MethodName: AbrirStart
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}

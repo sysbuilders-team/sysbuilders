@@ -69,7 +69,7 @@ namespace Network
 
 		/// <summary>
 		/// TOFU só faz sentido com identidade estável. Por padrão o EncryptionTransport gera um par
-		/// de chaves NOVO a cada execução — ou seja, todo host era "uma chave diferente" e o cliente
+		/// de chaves NOVO a cada execução — ou seja, cada host era "uma chave diferente" e o cliente
 		/// recusava toda reconexão ("Remote public key failed validation. This is fine.").
 		/// Aqui o par é criado uma vez e guardado em disco, então a chave só muda se for outra
 		/// máquina ou se o arquivo for apagado — e aí o aviso de chave trocada passa a significar

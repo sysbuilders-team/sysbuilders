@@ -14,6 +14,8 @@ namespace Core.Evaluation
         /// summing TotalScore over a match's history double-counts earlier turns.
         /// </summary>
         public int TotalScore { get; }
+        public int CleanBonus { get; }
+        public int UnallocatedPenalty { get; }
 
         public IReadOnlyList<string> FulfilledRequirementIds { get; }
         public IReadOnlyList<SmellOccurrence> DetectedSmells { get; }
@@ -22,10 +24,14 @@ namespace Core.Evaluation
             int rawScore,
             int penaltyScore,
             IReadOnlyList<string> fulfilledRequirementIds,
-            IReadOnlyList<SmellOccurrence> detectedSmells)
+            IReadOnlyList<SmellOccurrence> detectedSmells,
+            int cleanBonus = 0,
+            int unallocatedPenalty = 0)
         {
             RawScore = rawScore;
             PenaltyScore = penaltyScore;
+            CleanBonus = cleanBonus;
+            UnallocatedPenalty = unallocatedPenalty;
             TotalScore = Math.Max(0, rawScore - penaltyScore);
             // Copias defensivas: o resultado fica no historico do jogador (e cruza a rede), entao nao pode
             // compartilhar as colecoes que o produtor ainda pode mutar.
