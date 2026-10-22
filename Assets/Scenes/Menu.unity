@@ -1009,7 +1009,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
+        m_TargetAssemblyTypeName: UI.MenuUIController, Sys.UI
         m_MethodName: JoinByIP
         m_Mode: 1
         m_Arguments:
@@ -1209,6 +1209,7 @@ GameObject:
   - component: {fileID: 453653012}
   - component: {fileID: 453653011}
   - component: {fileID: 453653013}
+  - component: {fileID: 453653014}
   m_Layer: 5
   m_Name: MenuPanel
   m_TagString: Untagged
@@ -1287,15 +1288,28 @@ MonoBehaviour:
   m_GameObject: {fileID: 453653009}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4fee34e1ed2b0364699db54253f9cb43, type: 3}
+  m_Script: {fileID: 11500000, guid: 9f3c1a7d5e2b4c6f8a0d1e3b5c7f9a2d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Sys.Network::Network.MenuManager
+  m_EditorClassIdentifier: Sys.UI::UI.MenuUIController
   _navigatorBehaviour: {fileID: 920000099}
-  _discovery: {fileID: 0}
   _playerNameInputField: {fileID: 0}
   _ipInputField: {fileID: 1314907432}
   _localIpText: {fileID: 0}
   _discoveryStatusText: {fileID: 0}
+  _networkBehaviour: {fileID: 453653014}
+--- !u!114 &453653014
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 453653009}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b7e4d2c9a1f3486e8c0b2d4f6a8e1c3b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sys.Network::Network.MenuNetworkController
+  _discovery: {fileID: 0}
 --- !u!1 &515962795
 GameObject:
   m_ObjectHideFlags: 0
@@ -1793,7 +1807,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
+        m_TargetAssemblyTypeName: UI.MenuUIController, Sys.UI
         m_MethodName: AbrirTutorial
         m_Mode: 1
         m_Arguments:
@@ -1926,7 +1940,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
+        m_TargetAssemblyTypeName: UI.MenuUIController, Sys.UI
         m_MethodName: AbrirSettings
         m_Mode: 1
         m_Arguments:
@@ -2271,7 +2285,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
+        m_TargetAssemblyTypeName: UI.MenuUIController, Sys.UI
         m_MethodName: SelectTheme
         m_Mode: 5
         m_Arguments:
@@ -3584,7 +3598,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
+        m_TargetAssemblyTypeName: UI.MenuUIController, Sys.UI
         m_MethodName: AbrirStart
         m_Mode: 1
         m_Arguments:
@@ -3854,7 +3868,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
+        m_TargetAssemblyTypeName: UI.MenuUIController, Sys.UI
         m_MethodName: BuscarPartidas
         m_Mode: 1
         m_Arguments:
@@ -4789,7 +4803,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
+        m_TargetAssemblyTypeName: UI.MenuUIController, Sys.UI
         m_MethodName: BuscarPartidas
         m_Mode: 1
         m_Arguments:
@@ -5059,7 +5073,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
+        m_TargetAssemblyTypeName: UI.MenuUIController, Sys.UI
         m_MethodName: SairDaSala
         m_Mode: 1
         m_Arguments:
@@ -6748,7 +6762,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
+        m_TargetAssemblyTypeName: UI.MenuUIController, Sys.UI
         m_MethodName: SelectTheme
         m_Mode: 5
         m_Arguments:
@@ -6881,7 +6895,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
+        m_TargetAssemblyTypeName: UI.MenuUIController, Sys.UI
         m_MethodName: SelectTheme
         m_Mode: 5
         m_Arguments:
@@ -7053,7 +7067,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 453653013}
-        m_TargetAssemblyTypeName: Network.MenuManager, Sys.Network
+        m_TargetAssemblyTypeName: UI.MenuUIController, Sys.UI
         m_MethodName: HostGame
         m_Mode: 1
         m_Arguments:

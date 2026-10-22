@@ -99,7 +99,7 @@ namespace Tests.EditMode
         }
 
         [Test]
-        public void MenuManager_JoinRoom_ImmediatelyNavigatesToRoomWaitWithoutNeedingBackButton()
+        public void MenuUIController_JoinRoom_ImmediatelyNavigatesToRoomWaitWithoutNeedingBackButton()
         {
             var root = TrackedObject("Canvas");
             var mainPanel = TrackedObject("MainPanel");
@@ -109,20 +109,21 @@ namespace Tests.EditMode
             var navigator = root.AddComponent<MenuNavigator>();
             navigator.ConfigurePanels(mainPanel, lobbyPanel, roomPanel);
 
-            var menuManager = root.AddComponent<MenuManager>();
-            menuManager.SetNavigator(navigator);
+            root.AddComponent<MenuNetworkController>();
+            var menuUi = root.AddComponent<MenuUIController>();
+            menuUi.SetNavigator(navigator);
 
             // Jogador abre o navegador de salas
-            menuManager.BuscarPartidas();
+            menuUi.BuscarPartidas();
             Assert.AreEqual(MenuScreen.LobbyBrowser, navigator.CurrentScreen);
             Assert.IsTrue(lobbyPanel.activeSelf);
             Assert.IsFalse(roomPanel.activeSelf);
 
             // Jogador clica em uma sala descoberta para entrar: deve ir direto para RoomWait
             var ad = new RoomAdvertisement("sess-1", "Sala Teste", "Host", "Biblioteca", 7777, 1, 2);
-            var discovered = new DiscoveredRoom(ad, IPAddress.Loopback, DiscoveryTier.Mdns ,DateTime.UtcNow);
+            var discovered = new DiscoveredRoom(ad, IPAddress.Loopback, DiscoveryTier.Mdns, DateTime.UtcNow);
 
-            menuManager.JoinRoom(discovered);
+            menuUi.JoinRoom(discovered);
 
             Assert.AreEqual(MenuScreen.RoomWait, navigator.CurrentScreen);
             Assert.IsFalse(lobbyPanel.activeSelf, "O painel de lista de salas deve fechar imediatamente ao entrar na sala.");
