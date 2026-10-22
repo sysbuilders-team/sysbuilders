@@ -75,10 +75,7 @@ namespace Core.Session
         public static int CalculateScore(PlayerState player)
         {
             if (player == null) return 0;
-            var history = player.EvaluationHistory;
-            if (history.Count == 0) return 0;
-
-            return history[history.Count - 1].RawScore - history.Sum(e => e.PenaltyScore);
+            return ScoreRules.Score(player.EvaluationHistory);
         }
     }
 }

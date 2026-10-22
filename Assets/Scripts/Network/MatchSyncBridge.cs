@@ -391,7 +391,7 @@ namespace Network
 				SmellWireCodec.Decode(payload.SmellTypes, payload.SmellSeverities, payload.SmellClasses)
 			);
 
-			Debug.Log($"[MatchSyncBridge] Slot rival {payload.SlotIndex} (turno {payload.TurnNumber}) | raw:{payload.RawScore} penalty:{payload.PenaltyScore} total:{rivalResult.TotalScore}");
+			Debug.Log($"[MatchSyncBridge] Slot rival {payload.SlotIndex} (turno {payload.TurnNumber}) | raw:{payload.RawScore} penalty:{payload.PenaltyScore}");
 			gameManager.ReceiveOpponentEvaluation(payload.TurnNumber, rivalResult);
 		}
 	}
