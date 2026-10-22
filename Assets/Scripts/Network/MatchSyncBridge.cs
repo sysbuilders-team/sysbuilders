@@ -8,15 +8,6 @@ using Managers;
 
 namespace Network
 {
-	/// <summary>
-	/// Client/server sync bridge for a running match.
-	///
-	/// Trust model: the server validates shape (authorization, bounds, sequence),
-	/// not values. Evaluation scores are computed client-side and relayed; a
-	/// malicious client can still send any in-bound score and win. Closing that
-	/// gap requires the server to recompute from the received diagram, tracked
-	/// as future work.
-	/// </summary>
 	public class MatchSyncBridge : NetworkBehaviour
 	{
 		private const int RequiredPlayers = 2;
@@ -63,10 +54,6 @@ namespace Network
 				return;
 			}
 
-			// Start the host session FIRST. If it throws, abort both sides with a diagnostic.
-			// Only publish the SyncVars after the host has a working session — otherwise the
-			// client advances while the host sits in a half-initialized state and every
-			// CmdSetReady is rejected with "sessão não inicializada".
 			try
 			{
 				StartLocalMatch(plan.Theme, plan.TrailId, PlayerSlot.PlayerOne);
@@ -93,7 +80,6 @@ namespace Network
 			base.OnStopServer();
 		}
 
-		/// <summary>Tells every client why the match could not start. Best effort: never throws.</summary>
 		private void NotifyMatchStartFailed(string reason)
 		{
 			if (!NetworkServer.active) return;
@@ -147,6 +133,9 @@ namespace Network
 			if (_abort.HasAborted) return;
 			if (gameManager == null || gameManager.Session == null) return;
 
+            
+            if (gameManager.Session.TurnManager.CurrentPhase == TurnPhase.Completed) return;
+
 			_quorum.ClearAll();
 
 			AbortLocalMatch("O adversário desconectou.");
@@ -197,8 +186,6 @@ namespace Network
 				throw new InvalidOperationException("MatchSyncBridge.gameManager is not assigned in the Inspector.");
 			}
 
-			// Reset before StartMatch so a failure path can still call AbortLocalMatch:
-			// TryBeginAbort returns false if a previous match left the coordinator armed.
 			_abort.Reset();
 
 			gameManager.StartMatch(theme, trailId, slot, isNetworkMatch: true);
@@ -227,10 +214,6 @@ namespace Network
 			return false;
 		}
 
-		// Returns true only when sender is the connection bound as the guest. The first
-		// non-host connection to reach this method claims the slot; every other
-		// connection is rejected. Cleared by OnStopServer and HandleServerDisconnect so
-		// the next match rebinds.
 		private bool EnsureGuestCaptured(NetworkConnectionToClient sender)
 		{
 			if (sender == null || sender == NetworkServer.localConnection) return false;
@@ -279,9 +262,6 @@ namespace Network
 
 			if (_quorum.IsReadyQuorumMet)
 			{
-				// Clear only the quorum this path owns. Evaluations are cleared by
-				// CmdSendEvaluationResult; wiping them here would erase a late result
-				// instead of letting the evaluation path decide.
 				_quorum.ClearReady();
 				RpcAdvancePhase();
 			}
@@ -333,6 +313,8 @@ namespace Network
 
 		private void HandleReturnToMenu()
 		{
+			if (NetworkManager.singleton == null) return;
+
 			if (NetworkServer.active)
 			{
 				NetworkManager.singleton.StopHost();
@@ -341,6 +323,9 @@ namespace Network
 			{
 				NetworkManager.singleton.StopClient();
 			}
+
+            // FIX: Destrói o NetworkManager para garantir que o Menu carregue um limpo
+            Destroy(NetworkManager.singleton.gameObject);
 		}
 
 		private void HandleLocalEvaluationCompleted(EvaluationResult localResult)

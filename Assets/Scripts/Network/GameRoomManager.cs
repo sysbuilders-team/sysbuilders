@@ -177,7 +177,7 @@ namespace Network
 		/// <summary>
 		/// Mantém o anúncio mDNS com a contagem de jogadores em dia (1/2 -> 2/2).
 		///
-		/// Fica AQUI, e não no MenuManager: aquele componente vive no MenuPanel, que é desligado
+		/// Fica AQUI, e não no MenuUIController: aquele componente vive no MenuPanel, que é desligado
 		/// quando a sala de espera ou a lista de partidas abre — e objeto inativo não roda Update,
 		/// então o anúncio congelava em 1/2 justamente quando havia dois jogadores na sala.
 		/// </summary>
