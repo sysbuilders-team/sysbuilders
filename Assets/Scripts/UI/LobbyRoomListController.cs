@@ -27,7 +27,7 @@ namespace UI
         [Tooltip("Componente que implementa IRoomDirectory (ex.: RoomDiscoveryService).")]
         [SerializeField] private MonoBehaviour _directorySource;
 
-        [Tooltip("Componente que implementa IRoomJoinActions (ex.: MenuManager).")]
+        [Tooltip("Componente que implementa IRoomJoinActions (ex.: MenuUIController).")]
         [SerializeField] private MonoBehaviour _joinActionsSource;
 
         [SerializeField] private TMP_Text _statusText;
