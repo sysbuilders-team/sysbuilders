@@ -7,6 +7,8 @@ using UnityEngine.UI;
 
 namespace UI
 {
+    public enum NodeSelectionState { None, Selected, AssociationOrigin }
+
     public class ClassNodeUI : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerClickHandler, IDropHandler
     {
         [Header("UI References")]
@@ -27,6 +29,10 @@ namespace UI
         private Canvas _canvas;
         private bool _isSelected;
         private Outline _outline;
+        [SerializeField] private Color _associationOriginColor = new Color(1f, 0.85f, 0.2f, 1f); // gold
+        
+        private NodeSelectionState _selectionState;
+
         public ClassNode Node { get; private set; }
         public RectTransform RectTransform => _rectTransform != null ? _rectTransform : (_rectTransform = GetComponent<RectTransform>());
 
@@ -36,6 +42,7 @@ namespace UI
         public event Action<ClassNodeUI, MethodData> OnMethodDropped;
 
         public bool CanRename => Node != null && !Node.IsLocked;
+        public NodeSelectionState SelectionState => _selectionState;
 
         private void Awake()
         {
@@ -119,9 +126,9 @@ namespace UI
             UpdateMethodsDisplay();
         }
 
-        public void SetSelected(bool selected)
+        public void SetSelectionState(NodeSelectionState state)
         {
-            _isSelected = selected;
+            _selectionState = state;
             UpdateLockVisuals();
         }
 
@@ -140,7 +147,15 @@ namespace UI
             }
             else
             {
-                _backgroundImage.color = _normalColor;
+                case NodeSelectionState.AssociationOrigin:
+                    _backgroundImage.color = _associationOriginColor;
+                    break;
+                case NodeSelectionState.Selected:
+                    _backgroundImage.color = _selectedColor;
+                    break;
+                default:
+                    _backgroundImage.color = (Node != null && Node.IsLocked) ? _lockedColor : _normalColor;
+                    break;
             }
 
             if (_lockIndicator != null)
@@ -162,14 +177,7 @@ namespace UI
             for (int i = _methodsContainer.childCount - 1; i >= 0; i--)
             {
                 var child = _methodsContainer.GetChild(i);
-                if (Application.isPlaying)
-                {
-                    Destroy(child.gameObject);
-                }
-                else
-                {
-                    DestroyImmediate(child.gameObject);
-                }
+                DestroyImmediate(child.gameObject);
             }
 
             foreach (var method in Node.Methods)
@@ -239,7 +247,7 @@ namespace UI
 
         public void OnPointerClick(PointerEventData eventData)
         {
-            if (eventData != null && eventData.clickCount == 2 && CanRename)
+            if (eventData != null && eventData.clickCount == 2 && CanRename && _selectionState != NodeSelectionState.AssociationOrigin)
             {
                 BeginEditName();
                 return;

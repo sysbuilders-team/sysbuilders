@@ -73,6 +73,7 @@ namespace Core.Session
         
         // some requirementmanager will subscribe to this, maybe also pass turn number, see this
         public event Action<TurnPhase> OnPhaseChange;
+        public event Action<PlayerSlot> OnPlayerReady;
 
         // requiredPlayers: 2 numa partida de rede, 1 numa partida solo/local (o unico jogador avanca sozinho).
         // maxTurns: por padrao o tamanho de uma trilha, para nao existir uma segunda fonte de verdade para "5 turnos".
@@ -146,7 +147,8 @@ namespace Core.Session
             }
 
             _playerReadinessTracker.SetPlayerReady(player);
-            
+            OnPlayerReady?.Invoke(player);
+
             AdvancePhase();
 
             return SetPlayerReadyResult.Success;
@@ -160,4 +162,3 @@ namespace Core.Session
         
     }
 }
-	

@@ -27,8 +27,56 @@ namespace UI
         private bool _isDragging;
 
         public MethodData Method { get; private set; }
+        public bool IsCurrentTurn { get; private set; }
         public RectTransform RectTransform => _rectTransform != null ? _rectTransform : (_rectTransform = GetComponent<RectTransform>());
         public event Action<MethodData> OnCardClicked;
+
+        /// <summary>
+        /// Fallback factory used when no prefab is assigned in the Inspector.
+        /// Keeps procedural UI hierarchy construction inside MethodCardUI rather than ToolboxController.
+        /// </summary>
+        public static GameObject CreateDefault(Transform parent, MethodData method)
+        {
+            string cardName = method != null ? $"MethodCard_{method.Name}" : "MethodCard";
+            var cardGo = new GameObject(cardName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button), typeof(LayoutElement));
+            cardGo.transform.SetParent(parent, false);
+
+            var rt = cardGo.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(220f, 36f);
+
+            var layout = cardGo.GetComponent<LayoutElement>();
+            layout.minHeight = 36f;
+            layout.preferredHeight = 36f;
+            layout.preferredWidth = 220f;
+            layout.flexibleWidth = 1f;
+
+            var image = cardGo.GetComponent<Image>();
+            image.color = new Color(0.92f, 0.94f, 0.98f, 1f);
+
+            var btn = cardGo.GetComponent<Button>();
+            var colors = btn.colors;
+            colors.normalColor = new Color(0.92f, 0.94f, 0.98f, 1f);
+            colors.highlightedColor = new Color(0.82f, 0.88f, 1f, 1f);
+            colors.pressedColor = new Color(0.72f, 0.80f, 0.95f, 1f);
+            btn.colors = colors;
+
+            var textGo = new GameObject("Text_MethodName", typeof(RectTransform), typeof(TextMeshProUGUI));
+            textGo.transform.SetParent(cardGo.transform, false);
+
+            var textRt = textGo.GetComponent<RectTransform>();
+            textRt.anchorMin = Vector2.zero;
+            textRt.anchorMax = Vector2.one;
+            textRt.offsetMin = new Vector2(10f, 0f);
+            textRt.offsetMax = new Vector2(-10f, 0f);
+
+            var tmp = textGo.GetComponent<TextMeshProUGUI>();
+            tmp.text = method != null ? $"+ {method.Name}()" : string.Empty;
+            tmp.fontSize = 14;
+            tmp.color = new Color(0.12f, 0.12f, 0.18f, 1f);
+            tmp.alignment = TextAlignmentOptions.MidlineLeft;
+
+            return cardGo;
+        }
 
         private void Awake()
         {
@@ -55,9 +103,10 @@ namespace UI
             }
         }
 
-        public void Setup(MethodData method)
+        public void Setup(MethodData method, bool isCurrentTurn = true)
         {
             Method = method;
+            IsCurrentTurn = isCurrentTurn;
 
             if (_methodNameText == null)
             {
@@ -67,6 +116,7 @@ namespace UI
             if (_methodNameText != null)
             {
                 _methodNameText.text = method != null ? $"+ {method.Name}()" : string.Empty;
+                _methodNameText.alpha = isCurrentTurn ? 1f : 0.45f;
             }
         }
 

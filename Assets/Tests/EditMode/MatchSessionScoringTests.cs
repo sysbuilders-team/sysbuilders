@@ -64,8 +64,8 @@ namespace Tests.EditMode
         {
             var session = NewSession();
 
-            Assert.AreEqual(0, session.PlayerOneScore);
-            Assert.AreEqual(0, session.RoundPointsEarned);
+            Assert.AreEqual(0, session.ScoreContext.PlayerOneScore);
+            Assert.AreEqual(0, session.TurnSummaryContext.RoundPointsEarned);
         }
 
         [Test]
@@ -78,7 +78,7 @@ namespace Tests.EditMode
             PlayTurn(session); NextTurn(session);
             PlayTurn(session);
 
-            Assert.AreEqual(300, session.PlayerOneScore); // e não 100+200+300
+            Assert.AreEqual(300, session.ScoreContext.PlayerOneScore); // e não 100+200+300
         }
 
         [Test]
@@ -90,7 +90,7 @@ namespace Tests.EditMode
             PlayTurn(session); NextTurn(session);
             PlayTurn(session);
 
-            Assert.AreEqual(200, session.PlayerOneScore); // 300 - (0 + 50 + 50)
+            Assert.AreEqual(200, session.ScoreContext.PlayerOneScore); // 300 - (0 + 50 + 50)
         }
 
         [Test]
@@ -99,11 +99,11 @@ namespace Tests.EditMode
             var session = NewSession(Result(100, 0), Result(200, 0));
 
             PlayTurn(session);
-            Assert.AreEqual(100, session.RoundPointsEarned);
+            Assert.AreEqual(100, session.TurnSummaryContext.RoundPointsEarned);
 
             NextTurn(session);
             PlayTurn(session);
-            Assert.AreEqual(100, session.RoundPointsEarned); // 200 - 100, não 200
+            Assert.AreEqual(100, session.TurnSummaryContext.RoundPointsEarned); // 200 - 100, não 200
         }
 
         [Test]
@@ -114,7 +114,7 @@ namespace Tests.EditMode
             PlayTurn(session); NextTurn(session);
             PlayTurn(session);
 
-            Assert.AreEqual(10, session.RoundPenaltyPoints);
+            Assert.AreEqual(10, session.TurnSummaryContext.RoundPenaltyPoints);
         }
 
         [Test]
@@ -124,8 +124,8 @@ namespace Tests.EditMode
 
             PlayTurn(session);
 
-            Assert.AreEqual(1, session.PlayerOneHistory.Count);
-            Assert.AreEqual(0, session.PlayerTwoHistory.Count);
+            Assert.AreEqual(1, session.MatchEndContext.PlayerOneHistory.Count);
+            Assert.AreEqual(0, session.MatchEndContext.PlayerTwoHistory.Count);
         }
 
         [Test]
@@ -133,14 +133,14 @@ namespace Tests.EditMode
         {
             var session = NewSession();
             int scoreUpdatedCount = 0;
-            session.OnScoreUpdated += () => scoreUpdatedCount++;
+            session.ScoreContext.OnScoreUpdated += () => scoreUpdatedCount++;
 
             session.ReceiveOpponentResult(1, Result(100, 20));
 
-            Assert.AreEqual(1, session.PlayerTwoHistory.Count);
+            Assert.AreEqual(1, session.MatchEndContext.PlayerTwoHistory.Count);
             Assert.AreEqual(1, scoreUpdatedCount);
-            Assert.AreEqual(100, session.RoundOpponentPointsEarned);
-            Assert.AreEqual(20, session.RoundOpponentPenaltyPoints);
+            Assert.AreEqual(100, session.TurnSummaryContext.RoundOpponentPointsEarned);
+            Assert.AreEqual(20, session.TurnSummaryContext.RoundOpponentPenaltyPoints);
         }
 
         [Test]
@@ -153,8 +153,8 @@ namespace Tests.EditMode
             Assert.IsFalse(session.ReceiveOpponentResult(3, Result(300, 0)), "turno fora de ordem deve ser ignorado");
             Assert.IsFalse(session.ReceiveOpponentResult(0, Result(300, 0)), "turno invalido deve ser ignorado");
 
-            Assert.AreEqual(1, session.PlayerTwoHistory.Count);
-            Assert.AreEqual(80, session.PlayerTwoScore);   // 100 - 20, sem inflar a soma de penalidades
+            Assert.AreEqual(1, session.MatchEndContext.PlayerTwoHistory.Count);
+            Assert.AreEqual(80, session.ScoreContext.PlayerTwoScore);   // 100 - 20, sem inflar a soma de penalidades
         }
     }
 }

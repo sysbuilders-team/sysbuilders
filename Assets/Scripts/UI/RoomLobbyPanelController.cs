@@ -15,14 +15,6 @@ namespace UI
         [SerializeField] private TMP_Text _titleText;
         [SerializeField] private string _roomTitle = "SALA DE ESPERA";
 
-        [Header("Painéis do menu que a sala substitui")]
-        [Tooltip("Desligados enquanto a sala está na frente (não dependemos de ordem de renderização).")]
-        [SerializeField] private GameObject[] _panelsToHide;
-        [Tooltip("Volta a aparecer quando o jogador sai da sala, senão a tela ficaria vazia.")]
-        [SerializeField] private GameObject _fallbackPanel;
-        [Tooltip("Se este painel estiver aberto (lista de salas), a sala sai da frente em vez de cobri-lo.")]
-        [SerializeField] private GameObject _lobbyListPanel;
-
         [Header("Ações")]
         [SerializeField] private Button _readyButton;
         [SerializeField] private TMP_Text _readyButtonText;
@@ -34,9 +26,10 @@ namespace UI
         private const float SlotSpacing = 56f;
 
         private readonly List<SlotRow> _rows = new List<SlotRow>(2);
-
+        
         private IRoomLobbySource _source;
         private bool _subscribed;
+        private float _nextSourceSearch;
 
         private sealed class SlotRow
         {
@@ -58,78 +51,68 @@ namespace UI
             EnsureSource();
         }
 
+        private void OnEnable()
+        {
+            EnsureSource();
+
+            if (_source != null && !_subscribed)
+            {
+                _source.OnSlotsChanged += HandleSlotsChanged;
+                _subscribed = true;
+            }
+
+            HandleSlotsChanged();
+        }
+
         private void OnDestroy()
         {
-			if(_subscribed && _source != null)
-			{
-				_source.OnSlotsChanged -= HandleSlotsChanged;
-			}
-			
+            if (_subscribed && _source != null)
+            {
+                _source.OnSlotsChanged -= HandleSlotsChanged;
+            }
+
             if (_readyButton != null) _readyButton.onClick.RemoveListener(ToggleReady);
             ClearRows();
         }
 
         private void Update()
-		{
-			EnsureSource();
-
-			if (_source != null && !_subscribed)
-			{
-				_source.OnSlotsChanged += HandleSlotsChanged;
-				_subscribed = true;
-				// The adapter only fires OnSlotsChanged when its state hash
-				// changes; if we subscribed after a change already happened,
-				// render once to catch the current state. No-ops if the panel
-				// is not yet visible.
-				HandleSlotsChanged();
-			}
-
-			bool inRoom = _source != null && _source.IsInRoom;
-			bool lobbyOpen = _lobbyListPanel != null && _lobbyListPanel.activeSelf;
-			bool shouldShow = inRoom && !lobbyOpen;
-			bool wasShowing = _panelRoot != null && _panelRoot.activeSelf;
-
-			if (_panelRoot != null && wasShowing != shouldShow)
-			{
-				_panelRoot.SetActive(shouldShow);
-
-				// Becoming visible: HandleSlotsChanged skipped renders while
-				// the panel was hidden, so refresh from the current state.
-				if (shouldShow) HandleSlotsChanged();
-			}
-
-			if (shouldShow)
-			{
-				HideMenuPanels();
-			}
-			else if (wasShowing && !inRoom)
-			{
-				RestoreFallbackPanel();
-			}
-		}
-
-		private void HandleSlotsChanged()
-		{
-		    if (_panelRoot == null || !_panelRoot.activeSelf) return;
-		    if (_source == null) return;
-
-		    SyncRows(_source.Slots);
-		    UpdateControls();
-		} 
-        
-        private void HideMenuPanels()
         {
-            if (_panelsToHide == null) return;
+            if (_source != null && _subscribed) return;
 
-            foreach (var panel in _panelsToHide)
+            EnsureSource();
+
+            if (_source != null && !_subscribed)
             {
-                if (panel != null && panel.activeSelf) panel.SetActive(false);
+                _source.OnSlotsChanged += HandleSlotsChanged;
+                _subscribed = true;
+                HandleSlotsChanged();
             }
         }
 
-        private void RestoreFallbackPanel()
+        public void SetSource(IRoomLobbySource source)
         {
-            if (_fallbackPanel != null && !_fallbackPanel.activeSelf) _fallbackPanel.SetActive(true);
+            if (_subscribed && _source != null)
+            {
+                _source.OnSlotsChanged -= HandleSlotsChanged;
+                _subscribed = false;
+            }
+
+            _source = source;
+
+            if (_source != null && isActiveAndEnabled)
+            {
+                _source.OnSlotsChanged += HandleSlotsChanged;
+                _subscribed = true;
+                HandleSlotsChanged();
+            }
+        }
+
+        private void HandleSlotsChanged()
+        {
+            if (_source == null) return;
+
+            SyncRows(_source.Slots);
+            UpdateControls();
         }
 
         private void ToggleReady()
@@ -144,21 +127,14 @@ namespace UI
         {
             if (_source != null) return;
 
-            _source = _sourceBehaviour as IRoomLobbySource ?? FindPort<IRoomLobbySource>();
-        }
-        
-        private static TPort FindPort<TPort>() where TPort : class
-        {
-            foreach (var behaviour in FindObjectsByType<MonoBehaviour>(
-                         FindObjectsInactive.Include, FindObjectsSortMode.None))
+            if (_sourceBehaviour != null)
             {
-                if (behaviour is TPort port) return port;
+                _source = _sourceBehaviour as IRoomLobbySource;
+                if (_source != null) return;
             }
 
-            return null;
+            SceneServices.TryResolve(ref _source, ref _nextSourceSearch);
         }
-
-       
 
         private void SyncRows(IReadOnlyList<RoomSlotInfo> slots)
         {

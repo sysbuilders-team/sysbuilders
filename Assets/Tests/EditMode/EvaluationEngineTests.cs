@@ -97,7 +97,7 @@ namespace Tests.EditMode
         }
 
         [Test]
-        public void DetectCodeSmells_ClassWithFiveMethods_TriggersLargeClass()
+        public void DetectCodeSmells_ClassWithFiveMethods_DoesNotTriggerLargeClass()
         {
             var engine = new EvaluationEngine();
             var diagram = new ClassDiagram();
@@ -110,7 +110,26 @@ namespace Tests.EditMode
 
             var result = engine.Evaluate(diagram, new List<Requirement>());
 
-            Assert.IsTrue(result.DetectedSmells.Any(s => s.Type == CodeSmellType.LargeClass));
+            Assert.IsFalse(result.DetectedSmells.Any(s => s.Type == CodeSmellType.LargeClass),
+                "Threshold foi ampliado para 5: 5 métodos é válido e não deve disparar LargeClass.");
+        }
+
+        [Test]
+        public void DetectCodeSmells_ClassWithSixMethods_TriggersLargeClass()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+            var classNode = new ClassNode("GerenciadorTotal");
+            for (int i = 0; i < 6; i++)
+            {
+                classNode.AddMethod(Method($"Metodo{i}", "Usuario"));
+            }
+            diagram.AddClass(classNode);
+
+            var result = engine.Evaluate(diagram, new List<Requirement>());
+
+            Assert.IsTrue(result.DetectedSmells.Any(s => s.Type == CodeSmellType.LargeClass),
+                "6 métodos ultrapassa o threshold de 5 e deve disparar LargeClass.");
         }
 
         [Test]
@@ -192,6 +211,7 @@ namespace Tests.EditMode
             classNode.AddMethod(Method("Metodo2", "Notificacao"));
             classNode.AddMethod(Method("Metodo3", "Emprestimo"));
             classNode.AddMethod(Method("Metodo4", "Emprestimo"));
+            classNode.AddMethod(Method("Metodo5", "Emprestimo")); // 6 métodos > threshold 5
             diagram.AddClass(classNode);
 
             var result = engine.Evaluate(diagram, new List<Requirement>());
@@ -201,7 +221,7 @@ namespace Tests.EditMode
         }
 
         [Test]
-        public void CalculateScore_OneFulfilledRequirementNoSmells_ReturnsOneHundred()
+        public void CalculateScore_OneFulfilledRequirementNoSmells_IncludesCleanBonus()
         {
             var engine = new EvaluationEngine();
             var diagram = new ClassDiagram();
@@ -212,7 +232,11 @@ namespace Tests.EditMode
 
             var result = engine.Evaluate(diagram, new List<Requirement> { requirement });
 
-            Assert.AreEqual(100, result.TotalScore);
+            // 1 requisito cumprido (100) + Clean Architecture Bonus (50) - 0 penalidades = 150
+            Assert.AreEqual(150, result.RawScore);
+            Assert.AreEqual(50, result.CleanBonus);
+            Assert.AreEqual(0, result.PenaltyScore);
+            Assert.AreEqual(150, result.TotalScore);
         }
 
         [Test]
@@ -286,9 +310,11 @@ namespace Tests.EditMode
 
             var result = engine.Evaluate(diagram, new List<Requirement> { req });
 
+            // LowCohesion agora tem penalidade calibrada de 30 (era 40)
             Assert.AreEqual(100, result.RawScore);
-            Assert.AreEqual(40, result.PenaltyScore);
-            Assert.AreEqual(60, result.TotalScore);
+            Assert.AreEqual(30, result.PenaltyScore);
+            Assert.AreEqual(70, result.TotalScore);
+            Assert.AreEqual(0, result.CleanBonus, "Com smells ativos não deve receber CleanBonus.");
         }
 
         [Test]
@@ -373,7 +399,148 @@ namespace Tests.EditMode
 
             var smell = result.DetectedSmells.SingleOrDefault(s => s.Type == CodeSmellType.LargeClass);
             Assert.IsNotNull(smell);
-            Assert.AreEqual(2, smell.Severity);
+            Assert.AreEqual(1, smell.Severity, "Com threshold 5, 6 métodos gera severidade 6 - 5 = 1.");
         }
+
+        [Test]
+        public void DetectCodeSmells_ClassWithSevenMethods_ScalesLargeClassSeverity()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+
+            var classNode = new ClassNode("BigClass");
+            for (int i = 0; i < 7; i++)
+            {
+                classNode.AddMethod(Method($"M{i}", "CatA"));
+            }
+            diagram.AddClass(classNode);
+
+            var result = engine.Evaluate(diagram, new List<Requirement>());
+
+            var smell = result.DetectedSmells.SingleOrDefault(s => s.Type == CodeSmellType.LargeClass);
+            Assert.IsNotNull(smell);
+            Assert.AreEqual(2, smell.Severity, "Com threshold 5, 7 métodos gera severidade 7 - 5 = 2.");
+        }
+
+        #region New Tests: Clean Architecture Bonus, Anti-Inertia, Contextual LowAffinityCoupling
+        [Test]
+        public void Evaluate_CleanArchitectureBonus_DeniedWhenDiagramHasSmells()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+
+            var classNode = new ClassNode("Leitor");
+            classNode.AddMethod(Method("Cadastrar", "Usuario"));
+            classNode.AddMethod(Method("Notificar", "Notificacao")); // LowCohesion smell
+            diagram.AddClass(classNode);
+
+            var req = RequirementFor("req_01", "Cadastro", Method("Cadastrar", "Usuario"));
+
+            var result = engine.Evaluate(diagram, new List<Requirement> { req });
+
+            Assert.AreEqual(100, result.RawScore);
+            Assert.AreEqual(0, result.CleanBonus);
+            Assert.AreEqual(30, result.PenaltyScore);
+        }
+
+        [Test]
+        public void Evaluate_AntiInertia_PenalizesUnallocatedRequirementMethods()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+
+            var classNode = new ClassNode("Leitor");
+            classNode.AddMethod(Method("Cadastrar", "Usuario"));
+            diagram.AddClass(classNode);
+
+            // Requisito exige 4 métodos, mas o jogador só alocou 1 no diagrama
+            var req = RequirementFor("req_01", "Turno 1",
+                Method("Cadastrar", "Usuario"),
+                Method("Atualizar", "Usuario"),
+                Method("Consultar", "Usuario"),
+                Method("Notificar", "Notificacao"));
+
+            var result = engine.Evaluate(diagram, new List<Requirement> { req });
+
+            // 3 métodos abandonados * 25 = 75 pontos de penalidade
+            Assert.AreEqual(75, result.UnallocatedPenalty);
+            Assert.AreEqual(75, result.PenaltyScore);
+        }
+
+        [Test]
+        public void Evaluate_AntiInertia_EmptyDiagramSuffersFullInactivityPenalty()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram(); // AFK / Inativo
+
+            var req = RequirementFor("req_01", "Turno 1",
+                Method("Cadastrar", "Usuario"),
+                Method("Atualizar", "Usuario"),
+                Method("Consultar", "Usuario"),
+                Method("Notificar", "Notificacao"));
+
+            var result = engine.Evaluate(diagram, new List<Requirement> { req });
+
+            // 4 métodos exigidos abandonados * 25 = 100 pontos de penalidade
+            Assert.AreEqual(100, result.UnallocatedPenalty);
+            Assert.AreEqual(100, result.PenaltyScore);
+            Assert.AreEqual(0, result.RawScore);
+            Assert.AreEqual(0, result.TotalScore);
+        }
+
+        [Test]
+        public void DetectCodeSmells_LowAffinityCoupling_AllowedWhenRequirementDemandsBothCategories()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+
+            var leitor = new ClassNode("Leitor");
+            leitor.AddMethod(Method("Cadastrar", "Usuario"));
+
+            var notificador = new ClassNode("Notificador");
+            notificador.AddMethod(Method("EnviarEmail", "Notificacao"));
+
+            diagram.AddClass(leitor);
+            diagram.AddClass(notificador);
+            diagram.AddRelation(new Relation(leitor, notificador, RelationType.Association));
+
+            // O Requisito 1 pede Usuario + Notificacao no mesmo caso de uso
+            var req = RequirementFor("req_01", "Turno 1",
+                Method("Cadastrar", "Usuario"),
+                Method("EnviarEmail", "Notificacao"));
+
+            var result = engine.Evaluate(diagram, new List<Requirement> { req });
+
+            Assert.IsFalse(result.DetectedSmells.Any(s => s.Type == CodeSmellType.LowAffinityCoupling),
+                "Associação entre classes de categorias diferentes é legítima quando exigida por requisito funcional!");
+        }
+
+        [Test]
+        public void DetectCodeSmells_LowAffinityCoupling_TriggeredWhenNoRequirementDemandsBothCategories()
+        {
+            var engine = new EvaluationEngine();
+            var diagram = new ClassDiagram();
+
+            var leitor = new ClassNode("Leitor");
+            leitor.AddMethod(Method("Cadastrar", "Usuario"));
+
+            var financeiro = new ClassNode("Financeiro");
+            financeiro.AddMethod(Method("Cobrar", "Financeiro"));
+
+            diagram.AddClass(leitor);
+            diagram.AddClass(financeiro);
+            diagram.AddRelation(new Relation(leitor, financeiro, RelationType.Association));
+
+            // O Requisito 1 apenas pede Usuario e Notificacao, nunca pediu Usuario + Financeiro
+            var req = RequirementFor("req_01", "Turno 1",
+                Method("Cadastrar", "Usuario"),
+                Method("EnviarEmail", "Notificacao"));
+
+            var result = engine.Evaluate(diagram, new List<Requirement> { req });
+
+            Assert.IsTrue(result.DetectedSmells.Any(s => s.Type == CodeSmellType.LowAffinityCoupling),
+                "Associação entre classes sem afinidade e sem suporte nos requisitos funcionais ativos deve ser penalizada!");
+        }
+        #endregion
     }
 }

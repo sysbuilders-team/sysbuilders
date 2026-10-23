@@ -1,18 +1,21 @@
 using Core.Diagram;
 using Core.Evaluation;
+using System;
 using System.Collections.Generic;
 
 namespace Core.Session
 {
     public class PlayerState
     {
+        public const int DefaultMaxRefactorPoints = 2;
+
         public string Name { get; }
+        public int MaxRefactorPoints { get; }
         private readonly ClassDiagram _classDiagram;
 
         public IReadOnlyClassDiagram Diagram => _classDiagram;
         private int _refactorPoints;
         public int RefactorPoints => _refactorPoints;
-        // TODO: Counter of classcreations this turns to limit how many allowed, generally 2 or 3 per turn.
         public int RefactorCost { get; }
         private readonly List<EvaluationResult> _evaluationHistory = new List<EvaluationResult>();
         public IReadOnlyList<EvaluationResult> EvaluationHistory => _evaluationHistory;
@@ -20,9 +23,10 @@ namespace Core.Session
         public bool AddRelation(Relation relation) => _classDiagram.AddRelation(relation);
         public bool RemoveRelation(ClassNode origin, ClassNode destination) => _classDiagram.RemoveRelation(origin, destination);
 
-        public PlayerState(string name)
+        public PlayerState(string name, int maxRefactorPoints = DefaultMaxRefactorPoints)
         {
             Name = name;
+            MaxRefactorPoints = maxRefactorPoints > 0 ? maxRefactorPoints : DefaultMaxRefactorPoints;
             _classDiagram = new ClassDiagram();
             _refactorPoints = 0;
             RefactorCost = 1;
@@ -40,17 +44,11 @@ namespace Core.Session
             return _classDiagram.RenameClass(classNode, newName);
         }
 
-        public bool RemoveClass(ClassNode classNode)
-        {
-            if (classNode == null) return false;
-            return _classDiagram.RemoveClass(classNode);
-        }
-
         public void AddRefactorPoints(int points)
         {
             if (points > 0)
             {
-                _refactorPoints += points;
+                _refactorPoints = Math.Min(MaxRefactorPoints, _refactorPoints + points);
             }
         }
 

@@ -1,7 +1,5 @@
 using System;
 using System.Collections;
-using System.Linq;
-using Core.Diagram;
 using Core.Evaluation;
 using Core.Session;
 using UI;
@@ -62,22 +60,67 @@ namespace Managers
         {
             if (Session != null)
             {
-                Debug.LogWarning("[GameManager] StartMatch ignorado: a partida já foi iniciada.");
-                return;
+                Debug.LogWarning("[GameManager] StartMatch: tearing down stale Session from a previous match.");
+                TearDownSession();
             }
 
-            RequireOpponentResult = isNetworkMatch;
+            if (_requirementManager == null)
+            {
+                throw new InvalidOperationException("[GameManager] _requirementManager is not assigned in the Inspector.");
+            }
 
-            var requirements = _requirementManager.GetTrailById(theme, trailId);
-            Session = new MatchSession("Jogador 1", "Jogador 2", requirements, localSlot, isNetworkMatch: isNetworkMatch);
+            // RequirementManager.GetTrailById returns Trail, not IReadOnlyList<Requirement>.
+            // Extract both the per-turn requirements and the trail-specific class budget in
+            // one call — passing only the list would silently discard Trail.MaxClasses and
+            // fall back to Trail.DefaultMaxClasses in MatchSession.
+            var trail = _requirementManager.GetTrailById(theme, trailId);
 
-            Session.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
-            Session.TurnManager.OnPhaseChange += HandlePhaseChange;
+            var newSession = new MatchSession(
+                "Jogador 1",
+                "Jogador 2",
+                trail.RequirementByTurn,
+                localSlot,
+                isNetworkMatch: isNetworkMatch,
+                maxClassesPerMatch: trail.MaxClasses);
 
-            InitializeUI(localSlot);
-            WireUI();
+            try
+            {
+                newSession.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
+                newSession.TurnManager.OnPlayerReady += HandlePlayerReady;
 
-            Session.TurnManager.ForceAdvancePhase();
+                // Commit only after the subscriptions above have succeeded.
+                Session = newSession;
+                RequireOpponentResult = isNetworkMatch;
+
+                InitializeUI(localSlot);
+
+                Session.TurnManager.ForceAdvancePhase();
+            }
+            catch
+            {
+                newSession.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
+                newSession.TurnManager.OnPlayerReady -= HandlePlayerReady;
+                newSession.Dispose();
+
+                if (Session == newSession) Session = null;
+                RequireOpponentResult = false;
+
+                throw;
+            }
+        }
+
+        private void TearDownSession()
+        {
+            if (Session == null) return;
+
+            Session.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
+            Session.TurnManager.OnPlayerReady -= HandlePlayerReady;
+            Session.Dispose();
+
+            Session = null;
+            _localEvaluated = false;
+            _advanceScheduled = false;
+            RequireOpponentResult = false;
         }
 
         private void InitializeUI(PlayerSlot localSlot)
@@ -95,7 +138,9 @@ namespace Managers
                 refactorContext: Session.RefactorContext,
                 turnPlayerActions: turnManager,
                 localSlot: localSlot,
-                turnContext: Session.TurnContext
+                turnContext: Session.TurnContext,
+                diagramActions: Session.DiagramActions,
+                requirementContext: Session.RequirementContext
             );
 
             _toolBox.Initialize(
@@ -125,104 +170,11 @@ namespace Managers
             );
         }
 
-        private void WireUI()
+        private void HandlePlayerReady(PlayerSlot slot)
         {
-            if (_rightBar != null) _rightBar.OnEndTurnTriggered += HandleEndTurnTriggered;
-            if (_evaluationModal != null) _evaluationModal.OnAdvanceClicked += HandleAdvanceClicked;
-
-            if (_rightBar != null && _toolBox != null)
+            if (Session != null && slot == Session.LocalSlot)
             {
-                _rightBar.SetCanEndTurnPredicate(() => !_toolBox.HasPendingMethods);
-                _toolBox.OnPendingMethodsChanged += HandlePendingMethodsChanged;
-            }
-
-            if (_toolBox != null && _diagram != null)
-            {
-                _toolBox.OnAssociationModeToggled += _diagram.SetAssociationMode;
-                _toolBox.OnMethodCardSelected += HandleMethodCardSelected;
-            }
-
-            if (_diagram != null)
-            {
-                _diagram.OnAssociationCreated += HandleAssociationCreated;
-            }
-
-            if(_turnTimer != null)
-            {
-                _turnTimer.OnTimeEnded += HandleTimerEnded;
-            }
-        }
-
-        private void UnwireUI()
-        {
-            if (_rightBar != null) _rightBar.OnEndTurnTriggered -= HandleEndTurnTriggered;
-            if (_evaluationModal != null) _evaluationModal.OnAdvanceClicked -= HandleAdvanceClicked;
-
-            if (_toolBox != null)
-            {
-                _toolBox.OnPendingMethodsChanged -= HandlePendingMethodsChanged;
-                _toolBox.OnMethodCardSelected -= HandleMethodCardSelected;
-                if (_diagram != null)
-                {
-                    _toolBox.OnAssociationModeToggled -= _diagram.SetAssociationMode;
-                }
-            }
-
-            if (_diagram != null)
-            {
-                _diagram.OnAssociationCreated -= HandleAssociationCreated;
-            }
-
-            if (_turnTimer != null)
-                _turnTimer.OnTimeEnded -= HandleTimerEnded;
-        }
-
-        private void HandlePendingMethodsChanged(bool hasPending)
-        {
-            if (_rightBar != null)
-            {
-                _rightBar.RefreshEndTurnButton();
-            }
-        }
-
-        private void HandleEndTurnTriggered()
-        {
-            if (_toolBox != null && _toolBox.HasPendingMethods)
-            {
-                return;
-            }
-            OnLocalPlayerReady?.Invoke();
-        }
-
-        private void HandleAdvanceClicked()
-        {
-            OnLocalPlayerReady?.Invoke();
-        }
-
-        private void HandleMethodCardSelected(MethodData method)
-        {
-            if (method == null || _diagram.IsAssociationMode) return;
-
-            var selected = _diagram.SelectedNode;
-            if (selected == null || selected.Node == null) return;
-            if (selected.Node.Methods.Contains(method)) return;
-
-            _diagram.TryAddMethodToClass(selected.Node, method);
-        }
-
-        private void HandleAssociationCreated(Relation relation)
-        {
-            if (_toolBox != null)
-            {
-                _toolBox.SetAssociationMode(false);
-            }
-        }
-
-        private void HandlePhaseChange(TurnPhase phase)
-        {
-            if (phase == TurnPhase.Evaluate && _diagram != null)
-            {
-                _diagram.RenderDiagram();
+                OnLocalPlayerReady?.Invoke();
             }
             
             if(_turnTimer == null) return;
@@ -288,15 +240,7 @@ namespace Managers
 
         private void OnDestroy()
         {
-            UnwireUI();
-
-            if (Session != null)
-            {
-                Session.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
-                Session.TurnManager.OnPhaseChange -= HandlePhaseChange;
-                Session.Dispose();
-                Session = null;
-            }
+            TearDownSession();
         }
     }
 }

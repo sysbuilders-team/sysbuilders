@@ -25,7 +25,9 @@ namespace Tests.EditMode
         [Test]
         public void MatchSession_FullGameLoop_CreationSelectionRefactoringAndAdvancing()
         {
-            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne);
+            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne, isNetworkMatch: true);
+            var editor = session.DiagramActions;
+            var refactor = session.RefactorContext;
 
             // 1. Turno 1 - Fase Show -> Inicia em Show
             Assert.AreEqual(1, session.TurnManager.CurrentTurn);
@@ -39,32 +41,32 @@ namespace Tests.EditMode
             Assert.AreEqual(TurnPhase.Build, session.TurnManager.CurrentPhase);
 
             // 2. Criação de classe via IDiagramActions
-            bool created = session.TryCreateClass("Leitor", out var leitorNode);
+            bool created = editor.TryCreateClass("Leitor", out var leitorNode);
             Assert.IsTrue(created);
             Assert.IsNotNull(leitorNode);
-            Assert.AreEqual(leitorNode, session.SelectedClass, "A nova classe criada deve ser selecionada automaticamente.");
+            Assert.AreEqual(leitorNode, editor.SelectedClass, "A nova classe criada deve ser selecionada automaticamente.");
 
             // 3. Alocação de método do requisito na classe selecionada
             var req1 = session.CurrentRequirement;
             var metodoUsuario = req1.RequirementMethods.First(m => m.Category == "Usuario");
-            bool methodAdded = session.AddMethodToClass(session.SelectedClass, metodoUsuario);
+            bool methodAdded = editor.AddMethodToClass(editor.SelectedClass, metodoUsuario);
             Assert.IsTrue(methodAdded);
             Assert.AreEqual(1, leitorNode.Methods.Count);
 
             // 4. Criação de segunda classe e modo de associação
-            session.SetAssociationMode(true);
-            Assert.IsTrue(session.IsAssociationMode);
+            editor.SetAssociationMode(true);
+            Assert.IsTrue(editor.IsAssociationMode);
 
-            session.TryCreateClass("Notificador", out var notificadorNode);
-            Assert.AreEqual(notificadorNode, session.SelectedClass);
+            editor.TryCreateClass("Notificador", out var notificadorNode);
+            Assert.AreEqual(notificadorNode, editor.SelectedClass);
 
             var metodoNotificacao = req1.RequirementMethods.First(m => m.Category == "Notificacao");
-            session.AddMethodToClass(session.SelectedClass, metodoNotificacao);
+            editor.AddMethodToClass(editor.SelectedClass, metodoNotificacao);
 
             // Cria associação entre Leitor e Notificador
-            bool assocAdded = session.AddRelation(leitorNode, notificadorNode, RelationType.Association);
+            bool assocAdded = editor.AddRelation(leitorNode, notificadorNode, RelationType.Association);
             Assert.IsTrue(assocAdded);
-            Assert.IsFalse(session.IsAssociationMode, "Após criar a relação, o modo de associação deve desligar automaticamente.");
+            Assert.IsFalse(editor.IsAssociationMode, "Após criar a relação, o modo de associação deve desligar automaticamente.");
 
             // 5. Finalizar Turno 1 -> Avaliação
             session.SetPlayerReady(PlayerSlot.PlayerOne);
@@ -74,7 +76,7 @@ namespace Tests.EditMode
             // Classes foram congeladas na avaliação
             Assert.IsTrue(leitorNode.IsLocked);
             Assert.IsTrue(notificadorNode.IsLocked);
-            Assert.IsNull(session.SelectedClass, "A seleção deve ser limpa ao sair da fase de construção.");
+            Assert.IsNull(editor.SelectedClass, "A seleção deve ser limpa ao sair da fase de construção.");
 
             // 6. Avançar para Turno 2 (Show -> Build)
             session.TurnManager.ForceAdvancePhase(); // Vai para Show do Turno 2
@@ -86,12 +88,12 @@ namespace Tests.EditMode
             Assert.AreEqual(TurnPhase.Build, session.TurnManager.CurrentPhase);
 
             // 7. Teste de Refatoração via IRefactorContext
-            session.SelectClass(leitorNode);
-            Assert.AreEqual(leitorNode, session.SelectedClass);
-            Assert.IsTrue(session.CanRefactorSelected());
+            editor.SelectClass(leitorNode);
+            Assert.AreEqual(leitorNode, editor.SelectedClass);
+            Assert.IsTrue(refactor.CanRefactorSelected());
 
             int initialPoints = session.LocalPlayer.RefactorPoints;
-            bool refactored = session.TryRefactorSelectedClass();
+            bool refactored = refactor.TryRefactorSelectedClass();
             Assert.IsTrue(refactored);
             Assert.IsFalse(leitorNode.IsLocked, "A classe deve ser destravada após ser refatorada.");
             Assert.AreEqual(initialPoints - session.LocalPlayer.RefactorCost, session.LocalPlayer.RefactorPoints);
@@ -99,7 +101,7 @@ namespace Tests.EditMode
             // Consegue adicionar novo método na classe destravada
             var req2 = session.CurrentRequirement;
             var novoMetodo = req2.RequirementMethods[0];
-            bool addedAfterUnlock = session.AddMethodToClass(session.SelectedClass, novoMetodo);
+            bool addedAfterUnlock = editor.AddMethodToClass(editor.SelectedClass, novoMetodo);
             Assert.IsTrue(addedAfterUnlock);
         }
 
@@ -140,22 +142,24 @@ namespace Tests.EditMode
         [Test]
         public void MatchSession_DuplicateAssociation_TriggersOnActionFailed()
         {
-            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne);
+            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne, isNetworkMatch: true);
+            var editor = session.DiagramActions;
+
             // Avança para Build
             session.SetPlayerReady(PlayerSlot.PlayerOne);
             session.SetPlayerReady(PlayerSlot.PlayerTwo);
 
-            session.TryCreateClass("ClasseA", out var nodeA);
-            session.TryCreateClass("ClasseB", out var nodeB);
+            editor.TryCreateClass("ClasseA", out var nodeA);
+            editor.TryCreateClass("ClasseB", out var nodeB);
 
             string failureMessage = null;
-            session.OnActionFailed += msg => failureMessage = msg;
+            editor.OnActionFailed += msg => failureMessage = msg;
 
-            bool firstAdded = session.AddRelation(nodeA, nodeB);
+            bool firstAdded = editor.AddRelation(nodeA, nodeB);
             Assert.IsTrue(firstAdded);
             Assert.IsNull(failureMessage);
 
-            bool secondAdded = session.AddRelation(nodeA, nodeB);
+            bool secondAdded = editor.AddRelation(nodeA, nodeB);
             Assert.IsFalse(secondAdded);
             Assert.IsNotNull(failureMessage);
             Assert.IsTrue(failureMessage.Contains("associação"), $"Mensagem de erro esperada, recebido: {failureMessage}");
@@ -164,19 +168,42 @@ namespace Tests.EditMode
         [Test]
         public void MatchSession_SelfAssociation_TriggersOnActionFailed()
         {
-            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne);
+            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne, isNetworkMatch: true);
+            var editor = session.DiagramActions;
+
             session.SetPlayerReady(PlayerSlot.PlayerOne);
             session.SetPlayerReady(PlayerSlot.PlayerTwo);
 
-            session.TryCreateClass("ClasseA", out var nodeA);
+            editor.TryCreateClass("ClasseA", out var nodeA);
 
             string failureMessage = null;
-            session.OnActionFailed += msg => failureMessage = msg;
+            editor.OnActionFailed += msg => failureMessage = msg;
 
-            bool selfAssoc = session.AddRelation(nodeA, nodeA);
+            bool selfAssoc = editor.AddRelation(nodeA, nodeA);
             Assert.IsFalse(selfAssoc);
             Assert.IsNotNull(failureMessage);
             Assert.IsTrue(failureMessage.Contains("si mesma"), $"Mensagem de erro esperada, recebido: {failureMessage}");
+        }
+
+        [Test]
+        public void MatchSession_HasPendingMethods_TracksUnassignedCurrentRequirementMethods()
+        {
+            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne, isNetworkMatch: false);
+            var editor = session.DiagramActions;
+
+            // Avança de Show para Build
+            session.SetPlayerReady(PlayerSlot.PlayerOne);
+            Assert.AreEqual(TurnPhase.Build, session.TurnManager.CurrentPhase);
+
+            Assert.IsTrue(session.HasPendingMethods, "Deve haver métodos pendentes antes de distribuir os métodos do turno.");
+
+            editor.TryCreateClass("ClasseUnica", out var node);
+            foreach (var method in session.CurrentRequirement.RequirementMethods)
+            {
+                editor.AddMethodToClass(node, method);
+            }
+
+            Assert.IsFalse(session.HasPendingMethods, "Não deve haver métodos pendentes após alocar todos os métodos do requisito atual.");
         }
     }
 }

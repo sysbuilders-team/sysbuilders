@@ -1,3 +1,6 @@
+using System;
+using Core.Evaluation;
+
 namespace Network
 {
     /// <summary>
@@ -14,10 +17,10 @@ namespace Network
     {
         /// <summary>
         /// Per-turn raw score ceiling. Each revealed requirement awards 100,
-        /// and at most one requirement is revealed per turn, so rawScore
-        /// cannot legitimately exceed 100 * turnNumber.
+        /// plus up to 50 for clean architecture bonus, so rawScore
+        /// cannot legitimately exceed 150 * turnNumber.
         /// </summary>
-        public const int MaxRawScorePerTurn = 100;
+        public const int MaxRawScorePerTurn = 150;
 
         /// <summary>
         /// Per-turn penalty ceiling. Penalties scale with diagram size and
@@ -26,6 +29,17 @@ namespace Network
         /// bounding the arithmetic on the server side.
         /// </summary>
         public const int MaxPenaltyPerTurn = 5000;
+
+        /// <summary>Lower/upper bounds for a smell severity. Real severities observed in a
+        /// normal game are 1-5; 20 leaves headroom for future smells without accepting
+        /// arbitrary ints.</summary>
+        public const int MinSmellSeverity = 1;
+        public const int MaxSmellSeverity = 20;
+
+        /// <summary>Per-field cap for a smell's class list. A single class name is at most
+        /// ClassNameRules.MaxLength (32) chars plus a unit separator; 512 leaves room for
+        /// ~15 affected classes in one DuplicateCode smell before the cap bites.</summary>
+        public const int MaxSmellClassFieldLength = 512;
 
         /// <summary>Validates the payload exactly as it arrives from the network.</summary>
         public static bool TryValidate(MatchResultPayload payload, out string reason)
@@ -49,7 +63,7 @@ namespace Network
             string[] smellClasses,
             out string reason)
         {
-            if (rawScore < 0 || rawScore > MaxRawScorePerTurn * turnNumber)
+            if (rawScore < 0 || (long)rawScore > (long)MaxRawScorePerTurn * turnNumber)
             {
                 reason = $"raw {rawScore} out of range for turn {turnNumber}";
                 return false;
@@ -78,6 +92,27 @@ namespace Network
             {
                 reason = $"{smellTypes.Length} smells exceeds cap of {SmellWireCodec.MaxSmellsPerResult}";
                 return false;
+            }
+
+            for (int i = 0; i < smellTypes.Length; i++)
+            {
+                if (!Enum.IsDefined(typeof(CodeSmellType), smellTypes[i]))
+                {
+                    reason = $"unknown smell type {smellTypes[i]}";
+                    return false;
+                }
+
+                if (smellSeverities[i] < MinSmellSeverity || smellSeverities[i] > MaxSmellSeverity)
+                {
+                    reason = $"severity {smellSeverities[i]} out of range [{MinSmellSeverity}, {MaxSmellSeverity}]";
+                    return false;
+                }
+
+                if (smellClasses[i] != null && smellClasses[i].Length > MaxSmellClassFieldLength)
+                {
+                    reason = $"smell class field {i} length {smellClasses[i].Length} exceeds cap {MaxSmellClassFieldLength}";
+                    return false;
+                }
             }
 
             reason = null;

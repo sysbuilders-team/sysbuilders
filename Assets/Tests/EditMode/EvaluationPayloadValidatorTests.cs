@@ -35,18 +35,20 @@ namespace Tests.EditMode
         [Test]
         public void RawScoreAboveTurnCap_Rejected()
         {
+            // MaxRawScorePerTurn = 150: para o turno 2, o teto é 300; 301 deve ser rejeitado
             bool ok = EvaluationPayloadValidator.TryValidate(
-                2, 201, 0, ValidTypes(), ValidSeverities(), ValidClasses(), out string reason);
+                2, 301, 0, ValidTypes(), ValidSeverities(), ValidClasses(), out string reason);
 
             Assert.IsFalse(ok);
-            StringAssert.Contains("raw 201 out of range for turn 2", reason);
+            StringAssert.Contains("raw 301 out of range for turn 2", reason);
         }
 
         [Test]
         public void RawScoreAtExactTurnCap_Passes()
         {
+            // MaxRawScorePerTurn = 150: para o turno 3, o teto é 450; 450 deve ser aceito
             bool ok = EvaluationPayloadValidator.TryValidate(
-                3, 300, 0, ValidTypes(), ValidSeverities(), ValidClasses(), out _);
+                3, 450, 0, ValidTypes(), ValidSeverities(), ValidClasses(), out _);
 
             Assert.IsTrue(ok);
         }
@@ -127,6 +129,9 @@ namespace Tests.EditMode
             var sev = new int[cap];
             var cls = new string[cap];
 
+            // Severity 0 is below MinSmellSeverity, so fill with the minimum valid value.
+            for (int i = 0; i < cap; i++) sev[i] = EvaluationPayloadValidator.MinSmellSeverity;
+
             bool ok = EvaluationPayloadValidator.TryValidate(
                 1, 0, 0, types, sev, cls, out _);
 
@@ -151,6 +156,88 @@ namespace Tests.EditMode
             payload.RawScore = -1;
             Assert.IsFalse(EvaluationPayloadValidator.TryValidate(payload, out string reason));
             StringAssert.Contains("raw", reason);
+        }
+
+        [Test]
+        public void UnknownSmellType_Rejected()
+        {
+            bool ok = EvaluationPayloadValidator.TryValidate(
+                1, 0, 0,
+                smellTypes: new int[] { 99 },
+                smellSeverities: new int[] { 1 },
+                smellClasses: new string[] { "A" },
+                out string reason);
+            Assert.IsFalse(ok);
+            StringAssert.Contains("unknown smell type", reason);
+        }
+
+        [Test]
+        public void SeverityBelowMin_Rejected()
+        {
+            bool ok = EvaluationPayloadValidator.TryValidate(
+                1, 0, 0, ValidTypes(), new int[] { 0 }, ValidClasses(), out string reason);
+            Assert.IsFalse(ok);
+            StringAssert.Contains("severity", reason);
+        }
+
+        [Test]
+        public void SeverityAboveMax_Rejected()
+        {
+            bool ok = EvaluationPayloadValidator.TryValidate(
+                1, 0, 0, ValidTypes(), new int[] { 21 }, ValidClasses(), out string reason);
+            Assert.IsFalse(ok);
+            StringAssert.Contains("severity", reason);
+        }
+
+        [Test]
+        public void OversizedClassField_Rejected()
+        {
+            bool ok = EvaluationPayloadValidator.TryValidate(
+                1, 0, 0, ValidTypes(), ValidSeverities(),
+                new string[] { new string('a', EvaluationPayloadValidator.MaxSmellClassFieldLength + 1) },
+                out string reason);
+            Assert.IsFalse(ok);
+            StringAssert.Contains("smell class field", reason);
+        }
+
+        [Test]
+        public void Encode_ClampsToMaxSmellsPerResult()
+        {
+            var smells = new System.Collections.Generic.List<Core.Evaluation.SmellOccurrence>();
+            for (int i = 0; i < SmellWireCodec.MaxSmellsPerResult + 10; i++)
+            {
+                smells.Add(new Core.Evaluation.SmellOccurrence(
+                    Core.Evaluation.CodeSmellType.LargeClass,
+                    new System.Collections.Generic.List<string> { "A" + i }));
+            }
+
+            SmellWireCodec.Encode(smells, out int[] types, out _, out _);
+            Assert.AreEqual(SmellWireCodec.MaxSmellsPerResult, types.Length);
+        }
+
+        [Test]
+        public void Decode_RejectsUnknownSmellType()
+        {
+            int[] types = new int[] { 99 };
+            int[] severities = new int[] { 1 };
+            string[] classes = new string[] { "A" };
+
+            var decoded = SmellWireCodec.Decode(types, severities, classes);
+            Assert.AreEqual(0, decoded.Count);
+        }
+
+        [Test]
+        public void Decode_SanitizesInjectedClassNames()
+        {
+            int[] types = new int[] { (int)Core.Evaluation.CodeSmellType.LargeClass };
+            int[] severities = new int[] { 1 };
+            string[] classes = new string[] { "<b>huge</b>#Injected" };
+
+            var decoded = SmellWireCodec.Decode(types, severities, classes);
+
+            Assert.AreEqual(1, decoded.Count);
+            StringAssert.DoesNotContain("<", decoded[0].AffectedClassNames[0]);
+            StringAssert.DoesNotContain(">", decoded[0].AffectedClassNames[0]);
         }
     }
 }

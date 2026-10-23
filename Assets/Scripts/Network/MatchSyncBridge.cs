@@ -8,15 +8,6 @@ using Managers;
 
 namespace Network
 {
-	/// <summary>
-	/// Client/server sync bridge for a running match.
-	///
-	/// Trust model: the server validates shape (authorization, bounds, sequence),
-	/// not values. Evaluation scores are computed client-side and relayed; a
-	/// malicious client can still send any in-bound score and win. Closing that
-	/// gap requires the server to recompute from the received diagram, tracked
-	/// as future work.
-	/// </summary>
 	public class MatchSyncBridge : NetworkBehaviour
 	{
 		private const int RequiredPlayers = 2;
@@ -30,11 +21,13 @@ namespace Network
 		private readonly ReadyQuorum _quorum = new ReadyQuorum(RequiredPlayers);	
         private MatchSession _subscribedSession;
 		private readonly MatchAbortCoordinator _abort = new MatchAbortCoordinator();
+		private NetworkConnectionToClient _guest;
 
 		public override void OnStartServer()
 		{
 			base.OnStartServer();
 			_quorum.ClearAll();
+			_guest = null;
 
 			NetworkServer.OnDisconnectedEvent += HandleServerDisconnect;
 
@@ -61,21 +54,32 @@ namespace Network
 				return;
 			}
 
+			try
+			{
+				StartLocalMatch(plan.Theme, plan.TrailId, PlayerSlot.PlayerOne);
+			}
+			catch (Exception ex)
+			{
+				Debug.LogException(ex, this);
+				string reason = MatchAbortCoordinator.SanitizeReason(ex.Message);
+				NotifyMatchStartFailed(reason);
+				AbortLocalMatch(reason);
+				return;
+			}
+
 			_theme = plan.Theme;
 			_trailId = plan.TrailId;
 			Debug.Log($"[MatchSyncBridge] Server: tema={_theme} | trail={_trailId}");
-
-			StartLocalMatch(_theme, _trailId, PlayerSlot.PlayerOne);
 		}
 
 		public override void OnStopServer()
 		{
 			NetworkServer.OnDisconnectedEvent -= HandleServerDisconnect;
 			_quorum.ClearAll();
+			_guest = null;
 			base.OnStopServer();
 		}
 
-		/// <summary>Tells every client why the match could not start. Best effort: never throws.</summary>
 		private void NotifyMatchStartFailed(string reason)
 		{
 			if (!NetworkServer.active) return;
@@ -124,8 +128,13 @@ namespace Network
 
 		private void HandleServerDisconnect(NetworkConnectionToClient conn)
 		{
+			if (_guest == conn) _guest = null;
+			
 			if (_abort.HasAborted) return;
 			if (gameManager == null || gameManager.Session == null) return;
+
+            
+            if (gameManager.Session.TurnManager.CurrentPhase == TurnPhase.Completed) return;
 
 			_quorum.ClearAll();
 
@@ -172,8 +181,16 @@ namespace Network
 
 		private void StartLocalMatch(string theme, string trailId, PlayerSlot slot)
 		{
-			gameManager.StartMatch(theme, trailId, slot, isNetworkMatch: true);
+			if (gameManager == null)
+			{
+				throw new InvalidOperationException("MatchSyncBridge.gameManager is not assigned in the Inspector.");
+			}
+
 			_abort.Reset();
+
+			gameManager.StartMatch(theme, trailId, slot, isNetworkMatch: true);
+
+			Debug.Log($"[MatchSyncBridge] StartLocalMatch slot={slot}: session={(gameManager.Session != null)}");
 
 			if (gameManager.Session != null && _subscribedSession != gameManager.Session)
 			{
@@ -193,20 +210,21 @@ namespace Network
 		{
 			bool isHost = sender == null || sender == NetworkServer.localConnection;
 			if (slot == PlayerSlot.PlayerOne) return isHost;
-			if (slot == PlayerSlot.PlayerTwo) return !isHost;
+			if (slot == PlayerSlot.PlayerTwo) return EnsureGuestCaptured(sender);
 			return false;
 		}
 
-		private static bool IsKnownMatchParticipant(NetworkConnectionToClient sender)
+		private bool EnsureGuestCaptured(NetworkConnectionToClient sender)
 		{
-			if (sender == null) return true;
-			if (sender == NetworkServer.localConnection) return true;
+			if (sender == null || sender == NetworkServer.localConnection) return false;
+			if (_guest == null) _guest = sender;
+			return sender == _guest;
+		}
 
-			foreach (var conn in NetworkServer.connections.Values)
-			{
-				if (ReferenceEquals(conn, sender)) return true;
-			}
-			return false;
+		private bool IsKnownMatchParticipant(NetworkConnectionToClient sender)
+		{
+			if (sender == null || sender == NetworkServer.localConnection) return true;
+			return EnsureGuestCaptured(sender);
 		}
 
 		[Command(requiresAuthority = false)]
@@ -244,9 +262,6 @@ namespace Network
 
 			if (_quorum.IsReadyQuorumMet)
 			{
-				// Clear only the quorum this path owns. Evaluations are cleared by
-				// CmdSendEvaluationResult; wiping them here would erase a late result
-				// instead of letting the evaluation path decide.
 				_quorum.ClearReady();
 				RpcAdvancePhase();
 			}
@@ -298,6 +313,8 @@ namespace Network
 
 		private void HandleReturnToMenu()
 		{
+			if (NetworkManager.singleton == null) return;
+
 			if (NetworkServer.active)
 			{
 				NetworkManager.singleton.StopHost();
@@ -306,6 +323,9 @@ namespace Network
 			{
 				NetworkManager.singleton.StopClient();
 			}
+
+            // FIX: Destrói o NetworkManager para garantir que o Menu carregue um limpo
+            Destroy(NetworkManager.singleton.gameObject);
 		}
 
 		private void HandleLocalEvaluationCompleted(EvaluationResult localResult)
@@ -391,7 +411,7 @@ namespace Network
 				SmellWireCodec.Decode(payload.SmellTypes, payload.SmellSeverities, payload.SmellClasses)
 			);
 
-			Debug.Log($"[MatchSyncBridge] Slot rival {payload.SlotIndex} (turno {payload.TurnNumber}) | raw:{payload.RawScore} penalty:{payload.PenaltyScore} total:{rivalResult.TotalScore}");
+			Debug.Log($"[MatchSyncBridge] Slot rival {payload.SlotIndex} (turno {payload.TurnNumber}) | raw:{payload.RawScore} penalty:{payload.PenaltyScore}");
 			gameManager.ReceiveOpponentEvaluation(payload.TurnNumber, rivalResult);
 		}
 	}

@@ -17,11 +17,17 @@ namespace UI
         [Header("Ações")]
         [SerializeField] private Button _refreshButton;
 
+        [Header("TOFU — chave trocada")]
+        [Tooltip("Exibido quando a chave pública do host não confere com a armazenada. " +
+                 "Clicar confia na nova chave e reconecta.")]
+        [SerializeField] private Button _trustNewKeyButton;
+        [SerializeField] private TMP_Text _trustNewKeyButtonText;
+
         [Header("Portas (opcional: deixe vazio para resolver na cena)")]
         [Tooltip("Componente que implementa IRoomDirectory (ex.: RoomDiscoveryService).")]
         [SerializeField] private MonoBehaviour _directorySource;
 
-        [Tooltip("Componente que implementa IRoomJoinActions (ex.: MenuManager).")]
+        [Tooltip("Componente que implementa IRoomJoinActions (ex.: MenuUIController).")]
         [SerializeField] private MonoBehaviour _joinActionsSource;
 
         [SerializeField] private TMP_Text _statusText;
@@ -34,6 +40,8 @@ namespace UI
 
         private IRoomDirectory _directory;
         private IRoomJoinActions _joinActions;
+        private float _nextDirectorySearch;
+        private float _nextJoinActionsSearch;
 
         public IReadOnlyList<RoomListEntryUI> Entries => _entries;
 
@@ -45,13 +53,19 @@ namespace UI
                 _refreshButton.onClick.AddListener(Refresh);
             }
 
+            if (_trustNewKeyButton != null)
+            {
+                _trustNewKeyButton.onClick.RemoveListener(HandleTrustNewKeyClicked);
+                _trustNewKeyButton.onClick.AddListener(HandleTrustNewKeyClicked);
+            }
+
+            HideTrustNewKeyButton();
+
             EnsurePorts();
         }
-
+        
         private void OnEnable()
         {
-            // O serviço de descoberta pode ser criado no Awake do MenuManager, cuja ordem em
-            // relação a este Awake não é garantida: resolve de novo ao habilitar o painel.
             EnsurePorts();
 
             if (_directory != null)
@@ -60,6 +74,12 @@ namespace UI
                 _directory.OnDiagnostic += HandleDiagnostic;
             }
 
+            if (_joinActions != null)
+            {
+                _joinActions.OnHostKeyMismatch += HandleHostKeyMismatch;
+            }
+
+            HideTrustNewKeyButton();
             Rebuild();
         }
 
@@ -70,14 +90,21 @@ namespace UI
                 _directory.OnRoomsChanged -= Rebuild;
                 _directory.OnDiagnostic -= HandleDiagnostic;
             }
+
+            if (_joinActions != null)
+            {
+                _joinActions.OnHostKeyMismatch -= HandleHostKeyMismatch;
+            }
+
+            HideTrustNewKeyButton();
         }
 
         private void OnDestroy()
         {
             if (_refreshButton != null) _refreshButton.onClick.RemoveListener(Refresh);
+            if (_trustNewKeyButton != null) _trustNewKeyButton.onClick.RemoveListener(HandleTrustNewKeyClicked);
             ClearEntries();
         }
-        
         public void Refresh()
         {
             EnsurePorts();
@@ -102,24 +129,21 @@ namespace UI
         {
             if (_directory == null)
             {
-                _directory = _directorySource as IRoomDirectory ?? FindPort<IRoomDirectory>();
+                if (_directorySource != null)
+                    _directory = _directorySource as IRoomDirectory;
+
+                if (_directory == null)
+                    SceneServices.TryResolve(ref _directory, ref _nextDirectorySearch);
             }
 
             if (_joinActions == null)
             {
-                _joinActions = _joinActionsSource as IRoomJoinActions ?? FindPort<IRoomJoinActions>();
-            }
-        }
-        
-        private static TPort FindPort<TPort>() where TPort : class
-        {
-            foreach (var behaviour in FindObjectsByType<MonoBehaviour>(
-                         FindObjectsInactive.Include, FindObjectsSortMode.None))
-            {
-                if (behaviour is TPort port) return port;
-            }
+                if (_joinActionsSource != null)
+                    _joinActions = _joinActionsSource as IRoomJoinActions;
 
-            return null;
+                if (_joinActions == null)
+                    SceneServices.TryResolve(ref _joinActions, ref _nextJoinActionsSearch);
+            }
         }
 
         private void Rebuild()
@@ -227,6 +251,37 @@ namespace UI
         private void HandleDiagnostic(string message)
         {
             SetStatus(message);
+        }
+        
+        private void HandleHostKeyMismatch(string host, string presentedFingerprint)
+        {
+            if (_trustNewKeyButtonText != null)
+            {
+                _trustNewKeyButtonText.text =
+                    $"A chave do host em {host} mudou. Confiar na nova chave e reconectar?";
+            }
+
+            if (_trustNewKeyButton != null) _trustNewKeyButton.gameObject.SetActive(true);
+
+            SetStatus($"Falha ao verificar a chave do host {host}. Confirme para tentar novamente.");
+        }
+
+        private void HideTrustNewKeyButton()
+        {
+            if (_trustNewKeyButton != null) _trustNewKeyButton.gameObject.SetActive(false);
+        }
+
+        private void HandleTrustNewKeyClicked()
+        {
+            EnsurePorts();
+            if (_joinActions == null) return;
+
+            HideTrustNewKeyButton();
+
+            if (!_joinActions.TrustPendingKeyAndRetry())
+            {
+                SetStatus("Não foi possível reconectar automaticamente. Tente novamente.");
+            }
         }
 
         private void UpdateEmptyState()

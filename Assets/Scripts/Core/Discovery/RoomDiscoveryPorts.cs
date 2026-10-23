@@ -35,5 +35,17 @@ namespace Core.Discovery
     public interface IRoomJoinActions
     {
         void JoinRoom(DiscoveredRoom room);
+
+        /// <summary>
+        /// Raised when a fingerprint mismatch is detected while connecting to a host.
+        /// Subscribers (the room list) can prompt the player to trust the new key.
+        /// </summary>
+        event Action<string, string> OnHostKeyMismatch;
+
+        /// <summary>
+        /// Overwrite the stored fingerprint with the pending one and retry the
+        /// connection. Returns false when there is no pending mismatch.
+        /// </summary>
+        bool TrustPendingKeyAndRetry();
     }
 }

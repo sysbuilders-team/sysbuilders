@@ -2,14 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Core.Diagram;
+using Core.Requirements;
 
 namespace Core.Evaluation
 {   
     public class CodeSmellDetector
     {
-        private const int LargeClassThreshold = 4;
+        public const int LargeClassThreshold = 5;
 
-        public List<SmellOccurrence> DetectCodeSmells(IReadOnlyClassDiagram diagram)
+        public List<SmellOccurrence> DetectCodeSmells(IReadOnlyClassDiagram diagram, IReadOnlyList<Requirement> activeRequirements = null)
         {
             if (diagram == null)
             {
@@ -21,7 +22,7 @@ namespace Core.Evaluation
             smells.AddRange(DetectLargeClasses(diagram));
             smells.AddRange(DetectLowCohesion(diagram));
             smells.AddRange(DetectDuplicateCode(diagram));
-            smells.AddRange(DetectLowAffinityCoupling(diagram));
+            smells.AddRange(DetectLowAffinityCoupling(diagram, activeRequirements));
 
             return smells;
         }
@@ -88,9 +89,36 @@ namespace Core.Evaluation
             }
         }
 
-        private IEnumerable<SmellOccurrence> DetectLowAffinityCoupling(IReadOnlyClassDiagram diagram)
+        private IEnumerable<SmellOccurrence> DetectLowAffinityCoupling(
+            IReadOnlyClassDiagram diagram,
+            IReadOnlyList<Requirement> activeRequirements)
         {
             var seenPairs = new HashSet<(ClassNode, ClassNode)>();
+
+            // Pares de categorias que coocorrem em pelo menos um requisito ativo
+            var cooccurringCategories = new HashSet<(string, string)>();
+            if (activeRequirements != null)
+            {
+                foreach (var req in activeRequirements)
+                {
+                    if (req?.RequirementMethods == null) continue;
+
+                    var categories = req.RequirementMethods
+                        .Select(m => m.Category)
+                        .Where(c => !string.IsNullOrEmpty(c))
+                        .Distinct()
+                        .ToList();
+
+                    for (int i = 0; i < categories.Count; i++)
+                    {
+                        for (int j = i + 1; j < categories.Count; j++)
+                        {
+                            cooccurringCategories.Add((categories[i], categories[j]));
+                            cooccurringCategories.Add((categories[j], categories[i]));
+                        }
+                    }
+                }
+            }
 
             foreach (var relation in diagram.Relations)
             {
@@ -118,8 +146,30 @@ namespace Core.Evaluation
                 }
 
                 bool sharesCategory = sourceCategories.Overlaps(targetCategories);
+                if (sharesCategory)
+                {
+                    continue;
+                }
 
-                if (!sharesCategory)
+                // Se houver requisitos ativos, verifica se qualquer categoria de Origem coocorre com qualquer categoria de Destino
+                bool hasRequirementAffinity = false;
+                if (cooccurringCategories.Count > 0)
+                {
+                    foreach (var sCat in sourceCategories)
+                    {
+                        foreach (var tCat in targetCategories)
+                        {
+                            if (cooccurringCategories.Contains((sCat, tCat)))
+                            {
+                                hasRequirementAffinity = true;
+                                break;
+                            }
+                        }
+                        if (hasRequirementAffinity) break;
+                    }
+                }
+
+                if (!hasRequirementAffinity)
                 {
                     yield return new SmellOccurrence(
                         CodeSmellType.LowAffinityCoupling,

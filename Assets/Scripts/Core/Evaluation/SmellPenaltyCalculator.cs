@@ -5,10 +5,10 @@ namespace Core.Evaluation
 {
     public class SmellPenaltyCalculator
     {
-        private const int PenaltyLargeClass = 30;
-        private const int PenaltyLowCohesion = 40;
-        private const int PenaltyDuplicateCode = 50;
-        private const int PenaltyLowAffinityCoupling = 30;
+        public const int PenaltyLargeClass = 25;
+        public const int PenaltyLowCohesion = 30;
+        public const int PenaltyDuplicateCode = 40;
+        public const int PenaltyLowAffinityCoupling = 20;
 
         // Tabela exaustiva: um CodeSmellType novo (Fase 2: LazyClass, Over-engineering) sem entrada
         // aqui faz o calculo falhar alto em vez de penalizar 0 silenciosamente.
