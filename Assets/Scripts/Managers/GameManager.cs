@@ -23,9 +23,6 @@ namespace Managers
         [Header("Navegação")]
         [SerializeField] private string _menuSceneName = "Menu";
 
-        [Header("Timer")]
-        [SerializeField] private TurnTimerService _turnTimer;
-
         public MatchSession Session { get; private set; }
 
         /// <summary>
@@ -129,8 +126,7 @@ namespace Managers
 
             _topMenu.Initialize(
                 turnContext: Session.TurnContext,
-                requirementContext: Session.RequirementContext,
-                timerContext: _turnTimer
+                requirementContext: Session.RequirementContext
             );
 
             _rightBar.Initialize(
@@ -176,28 +172,12 @@ namespace Managers
             {
                 OnLocalPlayerReady?.Invoke();
             }
-            
-            if(_turnTimer == null) return;
-
-            if(phase == TurnPhase.Build)
-            {
-                _turnTimer.StartTurn(Session.TurnManager.CurrentTurn);
-            }
-            else
-            {
-                _turnTimer.Stop();
-            }
         }
 
         private void HandleLocalEvaluationCompleted(EvaluationResult result)
         {
             _localEvaluated = true;
             TryScheduleAdvance();
-        }
-
-        private void HandleTimerEnded()
-        {
-            OnLocalPlayerReady?.Invoke();
         }
 
         public void ReceiveOpponentEvaluation(int turnNumber, EvaluationResult result)
