@@ -30,7 +30,6 @@ namespace UI
 
         private ClassNodeUI _selectedNodeUI;
         private DiagramBackgroundHandler _backgroundClickHandler;
-        private DiagramBackgroundClick _backgroundClick;
         private bool _isAssociationMode;
         private Vector2 _nextSpawnPosition = new Vector2(1920f, -1080f);
 
@@ -97,8 +96,8 @@ namespace UI
 
             if (_isAssociationMode)
             {
-                bool escapePressed = (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
-                    || Input.GetKeyDown(KeyCode.Escape);
+                bool escapePressed = keyboard != null && keyboard.escapeKey.wasPressedThisFrame;
+
                 if (escapePressed)
                 {
                     SetAssociationMode(false);
@@ -112,9 +111,8 @@ namespace UI
 
             if (_diagramActions.SelectedClass != null)
             {
-                bool deletePressed = (keyboard != null && (keyboard.deleteKey.wasPressedThisFrame || keyboard.backspaceKey.wasPressedThisFrame))
-                    || Input.GetKeyDown(KeyCode.Delete)
-                    || Input.GetKeyDown(KeyCode.Backspace);
+                bool deletePressed = keyboard != null &&
+                    (keyboard.deleteKey.wasPressedThisFrame || keyboard.backspaceKey.wasPressedThisFrame);
 
                 if (deletePressed)
                 {
@@ -150,11 +148,6 @@ namespace UI
             if (_backgroundClickHandler != null)
             {
                 _backgroundClickHandler.OnBackgroundClicked -= HandleBackgroundClicked;
-            }
-
-            if (_backgroundClick != null)
-            {
-                _backgroundClick.OnClicked -= HandleBackgroundClicked;
             }
         }
 
@@ -198,13 +191,6 @@ namespace UI
 
         private void SetupBackgroundClick()
         {
-            _backgroundClick = GetComponent<DiagramBackgroundClick>();
-            if (_backgroundClick != null)
-            {
-                _backgroundClick.OnClicked -= HandleBackgroundClicked;
-                _backgroundClick.OnClicked += HandleBackgroundClicked;
-            }
-
             if (_diagramContent == null) return;
 
             var graphic = _diagramContent.GetComponent<UnityEngine.UI.Graphic>();
