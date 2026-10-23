@@ -44,6 +44,12 @@ namespace Core.Session
             return _classDiagram.RenameClass(classNode, newName);
         }
 
+        public bool RemoveClass(ClassNode classNode)
+        {
+            if (classNode == null) return false;
+            return _classDiagram.RemoveClass(classNode);
+        }
+
         public void AddRefactorPoints(int points)
         {
             if (points > 0)

@@ -13,6 +13,7 @@ namespace Tests.EditMode
         private class FakeDiagramActions : IDiagramActions
         {
             public readonly List<Relation> CreatedRelations = new List<Relation>();
+            public bool CanModifyDiagram => true;
             public event Action OnDiagramChanged;
 
             public int ClassesCreatedThisTurn { get; private set; }
@@ -36,6 +37,13 @@ namespace Tests.EditMode
             {
                 if (node == null || string.IsNullOrWhiteSpace(newName)) return false;
                 node.Rename(newName);
+                OnDiagramChanged?.Invoke();
+                return true;
+            }
+
+            public bool RemoveClass(ClassNode node)
+            {
+                if (node == null || node.IsLocked) return false;
                 OnDiagramChanged?.Invoke();
                 return true;
             }

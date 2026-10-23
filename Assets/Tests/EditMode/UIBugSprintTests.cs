@@ -37,6 +37,7 @@ namespace Tests.EditMode
 
         private class FakeDiagramActions : IDiagramActions
         {
+            public bool CanModifyDiagram => true;
             public bool TryCreateClass(string className, out ClassNode createdNode)
             {
                 createdNode = new ClassNode(className);
@@ -51,6 +52,7 @@ namespace Tests.EditMode
                 TotalClassesCreated < MaxClassesPerMatch;
 
             public bool RenameClass(ClassNode node, string newName) => true;
+            public bool RemoveClass(ClassNode node) => true;
 
             public bool AddMethodToClass(ClassNode node, MethodData method) { node.AddMethod(method); OnDiagramChanged?.Invoke(); return true; }
             public bool RemoveMethodFromClass(ClassNode node, MethodData method) => true;
@@ -64,7 +66,7 @@ namespace Tests.EditMode
             public void SetAssociationMode(bool active) { IsAssociationMode = active; OnAssociationModeChanged?.Invoke(active); }
             public event Action<bool> OnAssociationModeChanged;
             public event Action OnDiagramChanged;
-            public event Action<string> OnActionFailed;
+            public event Action<string> OnActionFailed { add { } remove { } }
         }
 
         private class FakeRefactorContext : IRefactorContext
@@ -89,7 +91,7 @@ namespace Tests.EditMode
             public string PlayerTwoName { get; set; } = "B";
             public int PlayerOneScore { get; set; } = 0;
             public int PlayerTwoScore { get; set; } = 0;
-            public event Action OnScoreUpdated;
+            public event Action OnScoreUpdated { add { } remove { } }
         }
 
         // ─── Setup helpers ────────────────────────────────────────────────────
@@ -353,6 +355,7 @@ namespace Tests.EditMode
             var refactorCtx = new FakeRefactorContext { RefactorPoints = 5, RefactorCost = 1 };
             var scoreCtx = new FakeScoreContext();
             var turnMgr = new TurnManager();
+            turnMgr.ForceAdvancePhase(); // Build phase
             var actions = new FakeDiagramActions();
 
             var ctrl = CreateRightBar(out var refactorBtn);
@@ -368,7 +371,7 @@ namespace Tests.EditMode
             actions.SelectClass(lockedNode);
 
             Assert.IsTrue(refactorBtn.interactable,
-                "Refactor button must be enabled when a locked class is selected and points >= cost.");
+                "Refactor button must be enabled when a locked class is selected and points >= cost in Build phase.");
         }
 
         [Test]
@@ -377,6 +380,7 @@ namespace Tests.EditMode
             var refactorCtx = new FakeRefactorContext { RefactorPoints = 0, RefactorCost = 1 };
             var scoreCtx = new FakeScoreContext();
             var turnMgr = new TurnManager();
+            turnMgr.ForceAdvancePhase(); // Build phase
             var actions = new FakeDiagramActions();
 
             var ctrl = CreateRightBar(out var refactorBtn);

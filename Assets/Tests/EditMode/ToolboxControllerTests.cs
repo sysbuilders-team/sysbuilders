@@ -33,6 +33,7 @@ namespace Tests.EditMode
 
         private class FakeDiagramActions : IDiagramActions
         {
+            public bool CanModifyDiagram => true;
             public int ClassesCreatedThisTurn { get; set; }
             public int MaxClassesPerTurn { get; set; } = DiagramEditor.DefaultMaxClassesPerTurn;
             public int TotalClassesCreated { get; set; }
@@ -56,6 +57,7 @@ namespace Tests.EditMode
                 return true;
             }
             public bool RenameClass(ClassNode node, string newName) => true;
+            public bool RemoveClass(ClassNode node) => true;
             public bool AddMethodToClass(ClassNode node, MethodData method)
             {
                 node?.AddMethod(method);

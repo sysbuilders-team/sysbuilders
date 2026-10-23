@@ -23,6 +23,9 @@ namespace Managers
         [Header("Navegação")]
         [SerializeField] private string _menuSceneName = "Menu";
 
+        [Header("Timer")]
+        [SerializeField] private TurnTimerService _turnTimer;
+
         public MatchSession Session { get; private set; }
 
         /// <summary>
@@ -57,22 +60,14 @@ namespace Managers
         {
             if (Session != null)
             {
-                Debug.LogWarning("[GameManager] StartMatch: tearing down stale Session from a previous match.");
-                TearDownSession();
+                Debug.LogWarning("[GameManager] StartMatch ignorado: a partida já foi iniciada.");
+                return;
             }
 
-            if (_requirementManager == null)
-            {
-                throw new InvalidOperationException("[GameManager] _requirementManager is not assigned in the Inspector.");
-            }
+            RequireOpponentResult = isNetworkMatch;
 
-            // RequirementManager.GetTrailById returns Trail, not IReadOnlyList<Requirement>.
-            // Extract both the per-turn requirements and the trail-specific class budget in
-            // one call — passing only the list would silently discard Trail.MaxClasses and
-            // fall back to Trail.DefaultMaxClasses in MatchSession.
             var trail = _requirementManager.GetTrailById(theme, trailId);
-
-            var newSession = new MatchSession(
+            Session = new MatchSession(
                 "Jogador 1",
                 "Jogador 2",
                 trail.RequirementByTurn,
@@ -80,53 +75,31 @@ namespace Managers
                 isNetworkMatch: isNetworkMatch,
                 maxClassesPerMatch: trail.MaxClasses);
 
-            try
-            {
-                newSession.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
-                newSession.TurnManager.OnPlayerReady += HandlePlayerReady;
+            Session.OnEvaluationCompleted += HandleLocalEvaluationCompleted;
+            Session.TurnManager.OnPlayerReady += HandlePlayerReady;
 
-                // Commit only after the subscriptions above have succeeded.
-                Session = newSession;
-                RequireOpponentResult = isNetworkMatch;
+            InitializeUI(localSlot);
 
-                InitializeUI(localSlot);
-
-                Session.TurnManager.ForceAdvancePhase();
-            }
-            catch
-            {
-                newSession.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
-                newSession.TurnManager.OnPlayerReady -= HandlePlayerReady;
-                newSession.Dispose();
-
-                if (Session == newSession) Session = null;
-                RequireOpponentResult = false;
-
-                throw;
-            }
-        }
-
-        private void TearDownSession()
-        {
-            if (Session == null) return;
-
-            Session.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
-            Session.TurnManager.OnPlayerReady -= HandlePlayerReady;
-            Session.Dispose();
-
-            Session = null;
-            _localEvaluated = false;
-            _advanceScheduled = false;
-            RequireOpponentResult = false;
+            Session.TurnManager.ForceAdvancePhase();
         }
 
         private void InitializeUI(PlayerSlot localSlot)
         {
             var turnManager = Session.TurnManager;
 
+            if (_turnTimer != null)
+            {
+                _turnTimer.Initialize(
+                    turnContext: Session.TurnContext,
+                    turnPlayerActions: turnManager,
+                    localSlot: localSlot
+                );
+            }
+
             _topMenu.Initialize(
                 turnContext: Session.TurnContext,
-                requirementContext: Session.RequirementContext
+                requirementContext: Session.RequirementContext,
+                timerContext: _turnTimer
             );
 
             _rightBar.Initialize(
@@ -220,7 +193,13 @@ namespace Managers
 
         private void OnDestroy()
         {
-            TearDownSession();
+            if (Session != null)
+            {
+                Session.OnEvaluationCompleted -= HandleLocalEvaluationCompleted;
+                Session.TurnManager.OnPlayerReady -= HandlePlayerReady;
+                Session.Dispose();
+                Session = null;
+            }
         }
     }
 }

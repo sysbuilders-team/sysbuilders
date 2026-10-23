@@ -2790,6 +2790,7 @@ GameObject:
   - component: {fileID: 1358678830}
   - component: {fileID: 1358678834}
   - component: {fileID: 1358678833}
+  - component: {fileID: 1358678835}
   m_Layer: 0
   m_Name: '[Managers]'
   m_TagString: Untagged
@@ -2830,6 +2831,7 @@ MonoBehaviour:
   _evaluationModal: {fileID: 1710000005}
   _endGameModal: {fileID: 1720000005}
   _menuSceneName: Menu
+  _turnTimer: {fileID: 1358678835}
 --- !u!4 &1358678832
 Transform:
   m_ObjectHideFlags: 0
@@ -2879,6 +2881,18 @@ MonoBehaviour:
   syncInterval: 0
   gameManager: {fileID: 1358678831}
   requirementManager: {fileID: 1358678830}
+--- !u!114 &1358678835
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1358678829}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 75144701d8327054885c2d79cc0e330f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sys.Managers::Managers.TurnTimerService
 --- !u!1 &1403697131
 GameObject:
   m_ObjectHideFlags: 0
@@ -7719,6 +7733,9 @@ MonoBehaviour:
   _turnInfoText: {fileID: 1671234043}
   _requirementText: {fileID: 1403697134}
   _timerText: {fileID: 1428325842}
+  _normalColor: {r: 1, g: 1, b: 1, a: 1}
+  _urgentColor: {r: 1, g: 0, b: 0, a: 1}
+  _pulseSpeed: 4
 --- !u!1 &1946861819
 GameObject:
   m_ObjectHideFlags: 0
