@@ -23,10 +23,14 @@ namespace UI
         [SerializeField] private Color _normalColor = Color.white;
         [SerializeField] private Color _lockedColor = new Color(0.85f, 0.85f, 0.85f, 1f);
         [SerializeField] private Color _selectedColor = new Color(0.6f, 0.8f, 1f, 1f);
-        [SerializeField] private Color _associationOriginColor = new Color(1f, 0.85f, 0.2f, 1f); // gold
+        [SerializeField] private Color _selectedOutlineColor = new Color(0.1f, 0.5f, 1f, 1f);
 
         private RectTransform _rectTransform;
         private Canvas _canvas;
+        private bool _isSelected;
+        private Outline _outline;
+        [SerializeField] private Color _associationOriginColor = new Color(1f, 0.85f, 0.2f, 1f); // gold
+        
         private NodeSelectionState _selectionState;
 
         public ClassNode Node { get; private set; }
@@ -79,6 +83,14 @@ namespace UI
                 var lockObj = transform.Find("Header_DragArea/Lock_Indicator");
                 if (lockObj != null) _lockIndicator = lockObj.GetComponent<Image>();
             }
+
+            _outline = GetComponent<Outline>() ?? gameObject.AddComponent<Outline>();
+            if(_outline != null)
+            {
+                _outline.effectColor = _selectedOutlineColor;
+                _outline.effectDistance = new Vector2(3.5f, -3.5f);
+                _outline.enabled = false;
+            }
         }
 
         private void OnDestroy()
@@ -124,7 +136,16 @@ namespace UI
         {
             if (_backgroundImage == null) return;
 
-            switch (_selectionState)
+            if (_isSelected)
+            {
+                _backgroundImage.color = _selectedColor;
+                transform.SetAsLastSibling();
+            }
+            else if (Node != null && Node.IsLocked)
+            {
+                _backgroundImage.color = _lockedColor;
+            }
+            else
             {
                 case NodeSelectionState.AssociationOrigin:
                     _backgroundImage.color = _associationOriginColor;
@@ -140,6 +161,12 @@ namespace UI
             if (_lockIndicator != null)
             {
                 _lockIndicator.gameObject.SetActive(Node != null && Node.IsLocked);
+            }
+            
+            if (_outline != null)
+            {
+                _outline.enabled = _isSelected;
+                _outline.effectColor = _selectedOutlineColor;
             }
         }
 
