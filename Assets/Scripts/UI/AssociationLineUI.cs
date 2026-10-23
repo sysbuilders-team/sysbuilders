@@ -1,19 +1,14 @@
-using System;
 using UnityEngine;
-using Core.Diagram;
-using UnityEngine.EventSystems;
-using UnityEngine.PlayerLoop;
 using UnityEngine.UI;
 
 namespace UI
 {
     [RequireComponent(typeof(Image))]
-    public class AssociationLineUI : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
+    public class AssociationLineUI : MonoBehaviour
     {
         [SerializeField] private float _thickness = 3f;
         [SerializeField] private Color _lineColor = new Color(0.2f, 0.2f, 0.2f, 1f);
-        [SerializeField] private Color _hoverColor = new Color(0.8f, 0.8f, 0.8f, 1f);
-        
+
         private RectTransform _rectTransform;
         private Image _image;
         private RectTransform _origin;
@@ -22,11 +17,6 @@ namespace UI
         public RectTransform Origin => _origin;
         public RectTransform Destination => _destination;
 
-        public ClassNode OriginNode { get; private set; }
-        public ClassNode DestinationNode { get; private set; }
-
-        public event Action<AssociationLineUI> OnLineClicked;
-
         private void Awake()
         {
             _rectTransform = GetComponent<RectTransform>();
@@ -34,8 +24,6 @@ namespace UI
             if (_image != null)
             {
                 _image.color = _lineColor;
-                _image.raycastTarget = true;
-                _image.raycastPadding = new Vector4(0f, -8f, 0f, -8f);
             }
             if (_rectTransform != null)
             {
@@ -43,21 +31,10 @@ namespace UI
             }
         }
 
-        public void Connect(RectTransform origin, RectTransform destination, ClassNode originNode = null, ClassNode destinationNode = null)
+        public void Connect(RectTransform origin, RectTransform destination)
         {
             _origin = origin;
             _destination = destination;
-            OriginNode = originNode;
-            DestinationNode = destinationNode;
-            UpdateLine();
-        }
-
-        public void RemoveConnect(RectTransform origin, RectTransform destination)
-        {
-            _origin = null;
-            _destination = null;
-            OriginNode = null;
-            DestinationNode = null;
             UpdateLine();
         }
 
@@ -85,28 +62,6 @@ namespace UI
             _rectTransform.localPosition = startLocal;
             _rectTransform.localRotation = Quaternion.Euler(0, 0, angle);
             _rectTransform.sizeDelta = new Vector2(distance, _thickness);
-        }
-
-        public void OnPointerEnter(PointerEventData eventData)
-        {
-            if (_image != null)
-            {
-                _image.color = _hoverColor;
-            }
-        }
-        public void OnPointerExit(PointerEventData eventData)
-        {
-            if (_image != null)
-            {
-                _image.color = _lineColor;
-            }
-        }
-        public void OnPointerClick(PointerEventData eventData)
-        {
-            if (eventData.button == PointerEventData.InputButton.Left)
-            {
-                OnLineClicked?.Invoke(this);
-            }
         }
     }
 }
