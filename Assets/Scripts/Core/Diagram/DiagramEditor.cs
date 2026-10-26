@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Core.Requirements;
 using Core.Session;
@@ -12,8 +13,9 @@ namespace Core.Diagram
 
         private readonly Func<PlayerState> _localPlayerProvider;
         private readonly Func<bool> _canModifyProvider;
+        private readonly HashSet<ClassNode> _classesCreatedThisTurn = new HashSet<ClassNode>();
 
-        public int ClassesCreatedThisTurn { get; private set; }
+        public int ClassesCreatedThisTurn => _classesCreatedThisTurn.Count;
         public int MaxClassesPerTurn { get; }
         public int TotalClassesCreated => LocalPlayer?.Diagram.Classes.Count ?? 0;
         public int MaxClassesPerMatch { get; }
@@ -62,7 +64,7 @@ namespace Core.Diagram
 
         public void ResetTurnQuota()
         {
-            ClassesCreatedThisTurn = 0;
+            _classesCreatedThisTurn.Clear();
         }
 
         public void SelectClass(ClassNode node)
@@ -127,7 +129,7 @@ namespace Core.Diagram
                 return false;
             }
 
-            ClassesCreatedThisTurn++;
+            _classesCreatedThisTurn.Add(newClass);
             createdNode = newClass;
             SelectClass(newClass);
             OnDiagramChanged?.Invoke();
@@ -185,6 +187,36 @@ namespace Core.Diagram
             {
                 OnActionFailed?.Invoke($"Já existe uma classe chamada '{sanitized}' no diagrama.");
                 return false;
+            }
+
+            OnDiagramChanged?.Invoke();
+            return true;
+        }
+
+        public bool RemoveClass(ClassNode node)
+        {
+            if (node == null) return false;
+
+            if (!CanModifyDiagram)
+            {
+                OnActionFailed?.Invoke("Só é possível remover classes na fase de construção.");
+                return false;
+            }
+
+            if (node.IsLocked)
+            {
+                OnActionFailed?.Invoke($"A classe '{node.Name}' está congelada e não pode ser removida sem refatoração.");
+                return false;
+            }
+
+            bool removed = LocalPlayer.RemoveClass(node);
+            if (!removed) return false;
+
+            _classesCreatedThisTurn.Remove(node);
+
+            if (SelectedClass == node)
+            {
+                ClearSelection();
             }
 
             OnDiagramChanged?.Invoke();

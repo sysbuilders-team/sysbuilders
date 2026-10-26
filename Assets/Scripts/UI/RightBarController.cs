@@ -17,6 +17,7 @@ namespace UI
         [Header("Refatoração")]
         [SerializeField] private TMP_Text _refactorPointsText;
         [SerializeField] private Button _refactorClassButton;
+        [SerializeField] private TMP_Text _refactorButtonText;
 
         [Header("Finalizar Turno")]
         [SerializeField] private Button _endTurnButton;
@@ -29,6 +30,7 @@ namespace UI
         private PlayerSlot _localSlot;
         private IDiagramActions _diagramActions;
         private IRequirementContext _requirementContext;
+        private bool _hasEndedTurn;
 
         private void Awake()
         {
@@ -54,6 +56,7 @@ namespace UI
             _turnContext = turnContext;
             _diagramActions = diagramActions;
             _requirementContext = requirementContext;
+            _hasEndedTurn = false;
 
             if (_diagramActions != null)
             {
@@ -127,6 +130,11 @@ namespace UI
             {
                 _refactorClassButton.onClick.RemoveListener(HandleRefactorClicked);
                 _refactorClassButton.onClick.AddListener(HandleRefactorClicked);
+
+                if (_refactorButtonText == null)
+                {
+                    _refactorButtonText = _refactorClassButton.GetComponentInChildren<TMP_Text>();
+                }
             }
 
             if (_endTurnButton != null)
@@ -153,7 +161,13 @@ namespace UI
 
         private void HandlePhaseChange(TurnPhase newPhase)
         {
+            if (newPhase != TurnPhase.Build)
+            {
+                _hasEndedTurn = false;
+            }
+
             UpdateEndTurnButtonState(newPhase);
+            UpdateRefactorDisplay(_refactorContext != null ? _refactorContext.RefactorPoints : 0);
         }
 
         private void HandleClassSelectionChanged(ClassNode selectedNode)
@@ -187,7 +201,9 @@ namespace UI
             var result = _turnPlayerActions.SetPlayerReady(_localSlot);
             if (result == SetPlayerReadyResult.Success || result == SetPlayerReadyResult.AlreadyReady)
             {
+                _hasEndedTurn = true;
                 SetEndTurnWaitingState();
+                UpdateRefactorDisplay(_refactorContext != null ? _refactorContext.RefactorPoints : 0);
             }
         }
 
@@ -250,7 +266,8 @@ namespace UI
 
             if (_refactorClassButton != null)
             {
-                _refactorClassButton.interactable = _refactorContext != null && _refactorContext.CanRefactorSelected();
+                bool isBuildPhase = _turnContext == null || _turnContext.CurrentPhase == TurnPhase.Build;
+                _refactorClassButton.interactable = isBuildPhase && !_hasEndedTurn && _refactorContext != null && _refactorContext.CanRefactorSelected();
             }
         }
 
@@ -258,7 +275,11 @@ namespace UI
         {
             if (_endTurnButton == null) return;
 
-            if (phase == TurnPhase.Build)
+            if (phase == TurnPhase.Build && _hasEndedTurn)
+            {
+                SetEndTurnWaitingState();
+            }
+            else if (phase == TurnPhase.Build)
             {
                 bool canEnd = _requirementContext == null || !_requirementContext.HasPendingMethods;
                 _endTurnButton.interactable = canEnd;

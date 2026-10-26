@@ -46,8 +46,15 @@ namespace UI
 
         public void SetLobbySource(IRoomLobbySource lobbySource)
         {
+            UnsubscribeLobbySource();
+
             _lobbySource = lobbySource;
             _wasInRoom = _lobbySource != null && _lobbySource.IsInRoom;
+
+            if (_lobbySource != null)
+            {
+                _lobbySource.OnSlotsChanged += HandleLobbyStateChanged;
+            }
         }
 
         private void Awake()
@@ -58,9 +65,26 @@ namespace UI
             ShowScreen(_wasInRoom ? MenuScreen.RoomWait : MenuScreen.Main);
         }
 
-        private void Update()
+        private void OnEnable()
         {
             EnsureLobbySource();
+        }
+
+        private void OnDestroy()
+        {
+            UnsubscribeLobbySource();
+        }
+
+        private void UnsubscribeLobbySource()
+        {
+            if (_lobbySource != null)
+            {
+                _lobbySource.OnSlotsChanged -= HandleLobbyStateChanged;
+            }
+        }
+
+        private void HandleLobbyStateChanged()
+        {
             if (_lobbySource == null) return;
 
             bool inRoom = _lobbySource.IsInRoom;
@@ -106,7 +130,11 @@ namespace UI
         {
             if (_lobbySource != null) return;
 
-            _lobbySource = _lobbySourceBehaviour as IRoomLobbySource ?? FindPort<IRoomLobbySource>();
+            var resolved = _lobbySourceBehaviour as IRoomLobbySource ?? FindPort<IRoomLobbySource>();
+            if (resolved != null)
+            {
+                SetLobbySource(resolved);
+            }
         }
 
         private static TPort FindPort<TPort>() where TPort : class

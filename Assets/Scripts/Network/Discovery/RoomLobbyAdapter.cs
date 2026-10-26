@@ -119,7 +119,8 @@ namespace Network.Discovery
 		        // and never run again, leaving CanSetReady false and the panel stuck on
 		        // "Entrando na sala..." even though the player is fully spawned.
 		        var localPlayer = NetworkClient.localPlayer;
-		        int hash = room.roomSlots.Count;
+		        int hash = IsInRoom ? 1 : 0;
+		        hash = hash * 31 + room.roomSlots.Count;
 		        hash = hash * 31 + (localPlayer != null ? localPlayer.GetInstanceID() : 0);
 
 		        foreach (var slot in room.roomSlots)

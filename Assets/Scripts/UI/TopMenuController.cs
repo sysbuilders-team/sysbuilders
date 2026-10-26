@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Core.Requirements;
 using Core.Session;
 using TMPro;
@@ -12,6 +12,12 @@ namespace UI
         [SerializeField] private TMP_Text _turnInfoText;
         [SerializeField] private TMP_Text _requirementText;
         [SerializeField] private TMP_Text _timerText;
+
+        [Header("Timer Visual")]
+        [SerializeField] private Color _normalColor = Color.white;
+        [SerializeField] private Color _urgentColor = Color.red;
+        private const int UrgentThreshold = 20;
+        private bool _isUrgent;
 
         private ITurnContext _turnContext;
         private IRequirementContext _requirementContext;
@@ -78,8 +84,11 @@ namespace UI
 
         private void HandleTimeEnded()
         {
+            _isUrgent = false;
+
             if (_timerText != null)
             {
+                _timerText.color = _normalColor;
                 _timerText.text = "00:00";
             }
         }
@@ -120,6 +129,8 @@ namespace UI
             if (_timerContext == null)
             {
                 _timerText.text = "--:--";
+                _timerText.color = _normalColor;
+                _isUrgent = false;
                 return;
             }
 
@@ -127,6 +138,16 @@ namespace UI
             int minutes = totalSeconds / 60;
             int seconds = totalSeconds % 60;
             _timerText.text = $"{minutes:00}:{seconds:00}";
+
+            bool shouldBeUrgent = totalSeconds <= UrgentThreshold && totalSeconds > 0;
+            if (shouldBeUrgent != _isUrgent)
+            {
+                _isUrgent = shouldBeUrgent;
+                if (!_isUrgent)
+                {
+                    _timerText.color = _normalColor;
+                }
+            }
         }
 
         private string FormatPhaseName(TurnPhase phase)
@@ -139,6 +160,14 @@ namespace UI
                 TurnPhase.Completed => "Partida Finalizada",
                 _ => phase.ToString()
             };
+        }
+
+        private void Update()
+        {
+            if (!_isUrgent || _timerText == null) return;
+            float secondFraction = 1f - (Time.time % 1f);
+            float intensity = Mathf.Pow(secondFraction, 2f);
+            _timerText.color = Color.Lerp(_normalColor, _urgentColor, intensity);
         }
     }
 }

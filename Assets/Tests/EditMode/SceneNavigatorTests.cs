@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
-using System.Reflection;
 using Core.Discovery;
 using Managers;
 using Network;
@@ -145,7 +144,7 @@ namespace Tests.EditMode
 
             // Cliente clicou para entrar na sala: a tela vai para RoomWait enquanto o handshake ainda está em andamento (IsInRoom == false)
             navigator.ShowScreen(MenuScreen.RoomWait);
-            InvokeUpdate(navigator);
+            fakeLobbySource.TriggerSlotsChanged();
 
             Assert.AreEqual(MenuScreen.RoomWait, navigator.CurrentScreen,
                 "Enquanto o handshake está em curso (_wasInRoom == false), o MenuNavigator não deve expulsar o jogador da tela RoomWait.");
@@ -153,23 +152,16 @@ namespace Tests.EditMode
 
             // Handshake conclui (IsInRoom passa para true)
             fakeLobbySource.IsInRoom = true;
-            InvokeUpdate(navigator);
+            fakeLobbySource.TriggerSlotsChanged();
             Assert.AreEqual(MenuScreen.RoomWait, navigator.CurrentScreen);
 
             // Host encerra a sala ou conexão cai (IsInRoom cai de true para false)
             fakeLobbySource.IsInRoom = false;
-            InvokeUpdate(navigator);
+            fakeLobbySource.TriggerSlotsChanged();
             Assert.AreEqual(MenuScreen.Main, navigator.CurrentScreen,
                 "Quando a sessão da sala encerra (true -> false), o MenuNavigator deve retornar automaticamente ao menu principal.");
             Assert.IsTrue(mainPanel.activeSelf);
             Assert.IsFalse(roomPanel.activeSelf);
-        }
-
-        private static void InvokeUpdate(MonoBehaviour target)
-        {
-            var method = target.GetType().GetMethod("Update", BindingFlags.NonPublic | BindingFlags.Instance);
-            Assert.IsNotNull(method);
-            method.Invoke(target, null);
         }
 
         private sealed class FakeRoomLobbySource : IRoomLobbySource
@@ -182,6 +174,8 @@ namespace Tests.EditMode
             public bool CanSetReady => IsInRoom;
             public void SetLocalReady(bool ready) { }
             public event Action OnSlotsChanged;
+
+            public void TriggerSlotsChanged() => OnSlotsChanged?.Invoke();
         }
     }
 }

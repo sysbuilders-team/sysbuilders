@@ -1,10 +1,11 @@
-﻿{
+{
   "name": "Sys.UI",
   "rootNamespace": "",
   "references": [
     "Sys.Core",
     "Unity.TextMeshPro",
-    "UnityEngine.UI"
+    "UnityEngine.UI",
+    "Unity.InputSystem"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

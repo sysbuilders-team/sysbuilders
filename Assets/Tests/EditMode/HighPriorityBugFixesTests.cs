@@ -174,7 +174,65 @@ namespace Tests.EditMode
         }
         #endregion
 
-        #region B3 Tests: Class Creation Quotas (Turn and Match Limits)
+        #region B3 Tests: Class Creation Quotas & RemoveClass Behavior
+        [Test]
+        public void B3_CanModifyDiagram_IsOnlyTrueDuringBuildPhase()
+        {
+            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne);
+            var editor = session.DiagramActions;
+
+            Assert.IsFalse(editor.CanModifyDiagram, "Na fase Show o diagrama não pode ser modificado.");
+
+            session.SetPlayerReady(PlayerSlot.PlayerOne);
+            Assert.IsTrue(editor.CanModifyDiagram, "Na fase Build o diagrama pode ser modificado.");
+
+            session.SetPlayerReady(PlayerSlot.PlayerOne);
+            Assert.IsFalse(editor.CanModifyDiagram, "Na fase Evaluate o diagrama não pode ser modificado.");
+        }
+
+        [Test]
+        public void B3_RemoveClass_RemovesAssociationsFreesMethodsAndRefundsTurnQuota()
+        {
+            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne);
+            var editor = session.DiagramActions;
+            session.SetPlayerReady(PlayerSlot.PlayerOne);
+
+            editor.TryCreateClass("Origem", out var origem);
+            editor.TryCreateClass("Destino", out var destino);
+            Assert.AreEqual(2, editor.ClassesCreatedThisTurn);
+            Assert.IsFalse(editor.CanCreateClass);
+
+            var metodo = session.CurrentRequirement.RequirementMethods[0];
+            Assert.IsTrue(editor.AddMethodToClass(origem, metodo));
+            Assert.IsTrue(editor.AddRelation(origem, destino));
+            Assert.AreEqual(1, session.LocalPlayer.Diagram.Relations.Count);
+
+            Assert.IsTrue(editor.RemoveClass(origem));
+
+            Assert.AreEqual(1, editor.ClassesCreatedThisTurn, "Remover uma classe criada neste turno deve devolver o slot de criação do turno.");
+            Assert.IsTrue(editor.CanCreateClass);
+            Assert.AreEqual(0, session.LocalPlayer.Diagram.Relations.Count, "Associações de origem e destino devem ser removidas.");
+            Assert.IsTrue(editor.AddMethodToClass(destino, metodo), "O método deve ficar disponível para outra classe após a exclusão.");
+        }
+
+        [Test]
+        public void B3_RemoveClass_RejectsLockedClassAndFiresOnActionFailed()
+        {
+            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne);
+            var editor = session.DiagramActions;
+            session.SetPlayerReady(PlayerSlot.PlayerOne);
+
+            editor.TryCreateClass("Fixa", out var node);
+            node.Lock();
+
+            string failureMessage = null;
+            editor.OnActionFailed += msg => failureMessage = msg;
+
+            Assert.IsFalse(editor.RemoveClass(node));
+            Assert.IsNotNull(failureMessage);
+            Assert.AreEqual(1, session.LocalPlayer.Diagram.Classes.Count);
+        }
+
         [Test]
         public void B3_TryCreateClass_EnforcesTurnAndMatchQuotasAcrossSession()
         {

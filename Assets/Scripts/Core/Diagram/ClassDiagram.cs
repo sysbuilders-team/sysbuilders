@@ -51,6 +51,20 @@ namespace Core.Diagram
             return true;
         }
 
+        public bool RemoveClass(ClassNode classNode)
+        {
+            if (classNode == null || classNode.IsLocked) return false;
+            if (!_classes.Remove(classNode)) return false;
+
+            if (classNode.Name != null)
+            {
+                _classesByName.Remove(classNode.Name);
+            }
+
+            _relations.RemoveAll(r => r.Origin == classNode || r.Destination == classNode);
+            return true;
+        }
+
         public bool AddRelation(Relation relation)
         {
             if (relation == null || relation.Origin == null || relation.Destination == null) return false;

@@ -5,6 +5,8 @@ using System.Linq;
 using Core.Diagram;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 
 namespace UI
 {
@@ -27,9 +29,9 @@ namespace UI
         private readonly List<AssociationLineUI> _activeLineUIs = new List<AssociationLineUI>();
 
         private ClassNodeUI _selectedNodeUI;
+        private DiagramBackgroundHandler _backgroundClickHandler;
         private bool _isAssociationMode;
-        private DiagramBackgroundClick _backgroundClick;
-        private Vector2 _nextSpawnPosition = new Vector2(100f, -100f);
+        private Vector2 _nextSpawnPosition = new Vector2(1920f, -1080f);
 
         public IReadOnlyDictionary<string, ClassNodeUI> ActiveNodes => 
             _activeNodeUIs.ToDictionary(kvp => kvp.Key.Name, kvp => kvp.Value);
@@ -48,16 +50,33 @@ namespace UI
             _diagram = diagram ?? throw new ArgumentNullException(nameof(diagram));
             _diagramActions = diagramActions ?? throw new ArgumentNullException(nameof(diagramActions));
 
+            if (_diagramContent != null)
+            {
+                _diagramContent.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, 3840f);
+                _diagramContent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 2160f);
+
+                if (_diagramContent.parent is RectTransform parentRect)
+                {
+                    float parentWidth = parentRect.rect.width;
+                    float parentHeight = parentRect.rect.height;
+
+                    if (parentWidth <= 0f) parentWidth = 1920f;
+                    if (parentHeight <= 0f) parentHeight = 1080f;
+
+                    float centerX = (parentWidth - 3840f) / 2f;
+                    float centerY = (2160f - parentHeight) / 2f;
+                    _diagramContent.anchoredPosition = new Vector2(centerX, centerY);
+                }
+
+                _nextSpawnPosition = new Vector2(1920f, -1080f);
+            }
+
+            SetupBackgroundClick();
+
             _diagramActions.OnDiagramChanged += HandleDiagramChanged;
             _diagramActions.OnClassSelected += HandleClassSelected;
             _diagramActions.OnAssociationModeChanged += HandleAssociationModeChanged;
             _diagramActions.OnActionFailed += HandleActionFailed;
-
-            _backgroundClick = GetComponent<DiagramBackgroundClick>();
-            if (_backgroundClick != null)
-            {
-                _backgroundClick.OnClicked += HandleBackgroundClicked;
-            }
 
             _isAssociationMode = _diagramActions.IsAssociationMode;
             _selectedNodeUI = null;
@@ -73,11 +92,47 @@ namespace UI
 
         private void Update()
         {
-            if (_isAssociationMode && Input.GetKeyDown(KeyCode.Escape))
+            var keyboard = Keyboard.current;
+
+            if (_isAssociationMode)
             {
-                SetAssociationMode(false);
-                _diagramActions?.ClearSelection();
+                bool escapePressed = keyboard != null && keyboard.escapeKey.wasPressedThisFrame;
+
+                if (escapePressed)
+                {
+                    SetAssociationMode(false);
+                    _diagramActions?.ClearSelection();
+                    return;
+                }
             }
+
+            if (_diagramActions == null || !_diagramActions.CanModifyDiagram) return;
+            if (IsTypingInInputField()) return;
+
+            if (_diagramActions.SelectedClass != null)
+            {
+                bool deletePressed = keyboard != null &&
+                    (keyboard.deleteKey.wasPressedThisFrame || keyboard.backspaceKey.wasPressedThisFrame);
+
+                if (deletePressed)
+                {
+                    var selected = _diagramActions.SelectedClass;
+                    if (!selected.IsLocked)
+                    {
+                        _diagramActions.RemoveClass(selected);
+                    }
+                }
+            }
+        }
+
+        private static bool IsTypingInInputField()
+        {
+            var eventSystem = EventSystem.current;
+            var selected = eventSystem != null ? eventSystem.currentSelectedGameObject : null;
+            if (selected == null) return false;
+
+            return selected.GetComponent<TMP_InputField>() != null
+                || selected.GetComponent<UnityEngine.UI.InputField>() != null;
         }
 
         private void UnsubscribeFromEvents()
@@ -90,9 +145,9 @@ namespace UI
                 _diagramActions.OnActionFailed -= HandleActionFailed;
             }
 
-            if (_backgroundClick != null)
+            if (_backgroundClickHandler != null)
             {
-                _backgroundClick.OnClicked -= HandleBackgroundClicked;
+                _backgroundClickHandler.OnBackgroundClicked -= HandleBackgroundClicked;
             }
         }
 
@@ -125,38 +180,99 @@ namespace UI
             // explicitly picks an origin (Bug 3a).
             if (active && _selectedNodeUI != null && _selectedNodeUI.SelectionState != NodeSelectionState.AssociationOrigin)
             {
-                _selectedNodeUI.SetSelectionState(NodeSelectionState.None);
-                _selectedNodeUI = null;
+                ClearSelectionState();
             }
             else if (!active && _selectedNodeUI != null)
             {
-                _selectedNodeUI.SetSelectionState(NodeSelectionState.None);
-                _selectedNodeUI = null;
+                ClearSelectionUI();
             }
             OnAssociationModeHint?.Invoke(active ? "Selecione a classe de origem" : null);
         }
 
-        /// <summary>Clicking the empty diagram area cancels an in-progress association.</summary>
+        private void SetupBackgroundClick()
+        {
+            if (_diagramContent == null) return;
+
+            var graphic = _diagramContent.GetComponent<UnityEngine.UI.Graphic>();
+            if (graphic == null)
+            {
+                var image = _diagramContent.gameObject.AddComponent<UnityEngine.UI.Image>();
+                image.color = new Color(0.96f, 0.90f, 0.60f, 1f);
+                image.raycastTarget = true;
+            }
+            else
+            {
+                graphic.raycastTarget = true;
+            }
+
+            if (_backgroundClickHandler == null)
+            {
+                _backgroundClickHandler = _diagramContent.GetComponent<DiagramBackgroundHandler>()
+                    ?? _diagramContent.gameObject.AddComponent<DiagramBackgroundHandler>();
+            }
+
+            _backgroundClickHandler.OnBackgroundClicked -= HandleBackgroundClicked;
+            _backgroundClickHandler.OnBackgroundClicked += HandleBackgroundClicked;
+        }
+
+        public void MoveDiagramUp() => _backgroundClickHandler?.PanBy(new Vector2(0f, -200f));
+        public void MoveDiagramDown() => _backgroundClickHandler?.PanBy(new Vector2(0f, 200f));
+        public void MoveDiagramLeft() => _backgroundClickHandler?.PanBy(new Vector2(200f, 0f));
+        public void MoveDiagramRight() => _backgroundClickHandler?.PanBy(new Vector2(-200f, 0f));
+
+        /// <summary>Clicking the empty diagram area cancels an in-progress association and clears selection.</summary>
         private void HandleBackgroundClicked()
         {
-            if (!_isAssociationMode) return;
+            if (_isAssociationMode)
+            {
+                SetAssociationMode(false);
+            }
 
-            SetAssociationMode(false);
-            _diagramActions?.ClearSelection();
+            ClearSelectionState();
+        }
+
+        private void ClearSelectionUI()
+        {
+            if (_selectedNodeUI != null)
+            {
+                _selectedNodeUI.SetSelectionState(NodeSelectionState.None);
+                _selectedNodeUI = null;
+            }
+        }
+
+        private void ClearSelectionState()
+        {
+            ClearSelectionUI();
+
+            if (_diagramActions != null && _diagramActions.SelectedClass != null)
+            {
+                _diagramActions.ClearSelection();
+            }
+        }
+
+        public void ShowFeedback(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message)) return;
+            HandleActionFailed(message);
         }
 
         public void SetAssociationMode(bool active)
         {
+            bool wasActive = _isAssociationMode;
             _isAssociationMode = active;
+
             if (_diagramActions != null && _diagramActions.IsAssociationMode != active)
             {
                 _diagramActions.SetAssociationMode(active);
             }
 
-            if (_selectedNodeUI != null)
+            if (active)
             {
-                _selectedNodeUI.SetSelectionState(NodeSelectionState.None);
-                _selectedNodeUI = null;
+                if (!wasActive) ClearSelectionState();
+            }
+            else
+            {
+                ClearSelectionUI();
             }
         }
 
@@ -189,8 +305,7 @@ namespace UI
             foreach (var node in toRemove)
             {
                 var nodeUI = _activeNodeUIs[node];
-                nodeUI.OnNodeClicked -= HandleNodeClicked;
-                nodeUI.OnRenameRequested -= HandleRenameRequested;
+                UnsubscribeNodeUI(nodeUI);
                 DestroyNodeGameObject(nodeUI.gameObject);
                 _activeNodeUIs.Remove(node);
             }
@@ -231,18 +346,28 @@ namespace UI
             nodeUI.RectTransform.anchorMin = new Vector2(0f, 1f);
             nodeUI.RectTransform.anchorMax = new Vector2(0f, 1f);
             nodeUI.RectTransform.pivot = new Vector2(0.5f, 0.5f);
-            nodeUI.RectTransform.anchoredPosition = _nextSpawnPosition;
-            _nextSpawnPosition += new Vector2(160f, -40f);
 
-            if (_nextSpawnPosition.x > 600f)
+            _nextSpawnPosition.x = Mathf.Clamp(_nextSpawnPosition.x, 300f, 3500f);
+            _nextSpawnPosition.y = Mathf.Clamp(_nextSpawnPosition.y, -1900f, -300f);
+
+            nodeUI.RectTransform.anchoredPosition = _nextSpawnPosition;
+            _nextSpawnPosition += new Vector2(200f, -100f);
+
+            if (_nextSpawnPosition.x > 3300f)
             {
-                _nextSpawnPosition = new Vector2(100f, _nextSpawnPosition.y - 120f);
+                _nextSpawnPosition = new Vector2(800f, _nextSpawnPosition.y - 200f);
+            }
+
+            if (_nextSpawnPosition.y < -1900f)
+            {
+                _nextSpawnPosition = new Vector2(1920f, -600f);
             }
 
             nodeUI.OnNodeClicked += HandleNodeClicked;
             nodeUI.OnRenameRequested += HandleRenameRequested;
             nodeUI.OnMethodDropped += HandleMethodDropped;
             nodeUI.OnRemoveMethodRequested += HandleRemoveMethodRequested;
+            nodeUI.OnDeleteRequested += HandleDeleteRequested;
             return nodeUI;
         }
 
@@ -252,6 +377,7 @@ namespace UI
             {
                 if (line != null)
                 {
+                    line.OnLineClicked -= HandleLineClicked;
                     DestroyNodeGameObject(line.gameObject);
                 }
             }
@@ -267,7 +393,8 @@ namespace UI
                     _activeNodeUIs.TryGetValue(relation.Destination, out var destUI))
                 {
                     var lineUI = CreateLineUI();
-                    lineUI.Connect(originUI.RectTransform, destUI.RectTransform);
+                    lineUI.Connect(originUI.RectTransform, destUI.RectTransform, relation.Origin, relation.Destination);
+                    lineUI.OnLineClicked += HandleLineClicked;
                     _activeLineUIs.Add(lineUI);
                 }
             }
@@ -302,6 +429,14 @@ namespace UI
             _diagramActions.RemoveMethodFromClass(nodeUI.Node, method);
         }
 
+        private void HandleDeleteRequested(ClassNodeUI nodeUI)
+        {
+            if (_diagramActions == null || nodeUI == null || nodeUI.Node == null) return;
+            if (nodeUI.Node.IsLocked) return;
+
+            _diagramActions.RemoveClass(nodeUI.Node);
+        }
+
         private void HandleRenameRequested(ClassNodeUI nodeUI, string newName)
         {
             if (_diagramActions == null || nodeUI == null || nodeUI.Node == null) return;
@@ -311,6 +446,13 @@ namespace UI
             {
                 nodeUI.UpdateDisplay();
             }
+        }
+
+        private void HandleLineClicked(AssociationLineUI lineUI)
+        {
+            if (_isAssociationMode) return;
+            if (lineUI == null || lineUI.OriginNode == null || lineUI.DestinationNode == null) return;
+            _diagramActions?.RemoveRelation(lineUI.OriginNode, lineUI.DestinationNode);
         }
 
         private void HandleNodeClicked(ClassNodeUI clickedNodeUI)
@@ -359,10 +501,7 @@ namespace UI
             {
                 if (nodeUI != null)
                 {
-                    nodeUI.OnNodeClicked -= HandleNodeClicked;
-                    nodeUI.OnRenameRequested -= HandleRenameRequested;
-                    nodeUI.OnMethodDropped -= HandleMethodDropped;
-                    nodeUI.OnRemoveMethodRequested -= HandleRemoveMethodRequested;
+                    UnsubscribeNodeUI(nodeUI);
                     DestroyNodeGameObject(nodeUI.gameObject);
                 }
             }
@@ -372,10 +511,22 @@ namespace UI
             {
                 if (line != null)
                 {
+                    line.OnLineClicked -= HandleLineClicked;
                     DestroyNodeGameObject(line.gameObject);
                 }
             }
             _activeLineUIs.Clear();
+        }
+
+        private void UnsubscribeNodeUI(ClassNodeUI nodeUI)
+        {
+            if (nodeUI == null) return;
+
+            nodeUI.OnNodeClicked -= HandleNodeClicked;
+            nodeUI.OnRenameRequested -= HandleRenameRequested;
+            nodeUI.OnMethodDropped -= HandleMethodDropped;
+            nodeUI.OnRemoveMethodRequested -= HandleRemoveMethodRequested;
+            nodeUI.OnDeleteRequested -= HandleDeleteRequested;
         }
 
         private void DestroyNodeGameObject(GameObject go)

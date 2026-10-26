@@ -956,7 +956,6 @@ GameObject:
   - component: {fileID: 309630012}
   - component: {fileID: 309630011}
   - component: {fileID: 309630013}
-  - component: {fileID: 309630014}
   - component: {fileID: 309630015}
   m_Layer: 5
   m_Name: Diagram
@@ -1038,7 +1037,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.RectMask2D
   m_Padding: {x: 0, y: 0, z: 0, w: 0}
   m_Softness: {x: 0, y: 0}
---- !u!114 &309630014
+--- !u!114 &309630015
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1049,24 +1048,12 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8588df4ff9d3bf548b9360fbcd11f9b3, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Sys.UI::UI.DiagramController
+  m_EditorClassIdentifier: Sys.UI::UI.DiagramBackgroundClick
   _diagramContent: {fileID: 1601828205}
   _classNodePrefab: {fileID: 3111330731245404416, guid: 0f9e3f001ca128442a62bc410441850b, type: 3}
   _associationLinePrefab: {fileID: 0}
   _feedbackText: {fileID: 0}
   _feedbackContainer: {fileID: 0}
---- !u!114 &309630015
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 309630009}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8b9925d7bbcabad44870801e4c0be014, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Sys.UI::UI.DiagramBackgroundClick
 --- !u!1 &366906062
 GameObject:
   m_ObjectHideFlags: 0
@@ -2671,6 +2658,7 @@ MonoBehaviour:
   _enemyScoreText: {fileID: 1023127116}
   _refactorPointsText: {fileID: 51060670}
   _refactorClassButton: {fileID: 73693218}
+  _refactorButtonText: {fileID: 0}
   _endTurnButton: {fileID: 252776227}
   _endTurnButtonText: {fileID: 1797870859}
 --- !u!1 &1087735654
@@ -2790,6 +2778,7 @@ GameObject:
   - component: {fileID: 1358678830}
   - component: {fileID: 1358678834}
   - component: {fileID: 1358678833}
+  - component: {fileID: 1358678835}
   m_Layer: 0
   m_Name: '[Managers]'
   m_TagString: Untagged
@@ -2826,10 +2815,11 @@ MonoBehaviour:
   _topMenu: {fileID: 1924822439}
   _rightBar: {fileID: 1049728271}
   _toolBox: {fileID: 1597275349}
-  _diagram: {fileID: 309630014}
+  _diagram: {fileID: 309630015}
   _evaluationModal: {fileID: 1710000005}
   _endGameModal: {fileID: 1720000005}
   _menuSceneName: Menu
+  _turnTimer: {fileID: 1358678835}
 --- !u!4 &1358678832
 Transform:
   m_ObjectHideFlags: 0
@@ -2879,6 +2869,18 @@ MonoBehaviour:
   syncInterval: 0
   gameManager: {fileID: 1358678831}
   requirementManager: {fileID: 1358678830}
+--- !u!114 &1358678835
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1358678829}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 75144701d8327054885c2d79cc0e330f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Sys.Managers::Managers.TurnTimerService
 --- !u!1 &1403697131
 GameObject:
   m_ObjectHideFlags: 0
@@ -3353,7 +3355,6 @@ MonoBehaviour:
   _createClassButton: {fileID: 681111796}
   _createClassButtonText: {fileID: 826461029}
   _classNameInputField: {fileID: 0}
-  _maxClassesPerTurn: 2
   _methodsContainer: {fileID: 514805094}
   _methodCardPrefab: {fileID: 0}
   _associationButton: {fileID: 1946861822}
@@ -7719,6 +7720,8 @@ MonoBehaviour:
   _turnInfoText: {fileID: 1671234043}
   _requirementText: {fileID: 1403697134}
   _timerText: {fileID: 1428325842}
+  _normalColor: {r: 1, g: 1, b: 1, a: 1}
+  _urgentColor: {r: 1, g: 0, b: 0, a: 1}
 --- !u!1 &1946861819
 GameObject:
   m_ObjectHideFlags: 0
