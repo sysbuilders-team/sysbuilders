@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using Core.Evaluation;
 using Core.Session;
@@ -135,7 +135,8 @@ namespace Managers
                 endContext: Session.MatchEndContext,
                 navigationActions: _sceneNavigator,
                 turnContext: Session.TurnContext,
-                localSlot: localSlot
+                localSlot: localSlot,
+                requirementContext: Session.RequirementContext
             );
         }
 
