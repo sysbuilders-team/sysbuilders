@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Core.Diagram;
@@ -95,26 +95,38 @@ namespace Core.Evaluation
         {
             var seenPairs = new HashSet<(ClassNode, ClassNode)>();
 
-            // Pares de categorias que coocorrem em pelo menos um requisito ativo
+            // Category pairs with recognized domain affinity in active requirements
             var cooccurringCategories = new HashSet<(string, string)>();
             if (activeRequirements != null)
             {
                 foreach (var req in activeRequirements)
                 {
-                    if (req?.RequirementMethods == null) continue;
-
-                    var categories = req.RequirementMethods
-                        .Select(m => m.Category)
-                        .Where(c => !string.IsNullOrEmpty(c))
-                        .Distinct()
-                        .ToList();
-
-                    for (int i = 0; i < categories.Count; i++)
+                    // If the requirement explicitly specifies association rules, only those rules define affinity between different categories.
+                    if (req?.RequiredAssociations != null && req.RequiredAssociations.Count > 0)
                     {
-                        for (int j = i + 1; j < categories.Count; j++)
+                        foreach (var rule in req.RequiredAssociations)
                         {
-                            cooccurringCategories.Add((categories[i], categories[j]));
-                            cooccurringCategories.Add((categories[j], categories[i]));
+                            cooccurringCategories.Add((rule.SourceCategory, rule.TargetCategory));
+                            cooccurringCategories.Add((rule.TargetCategory, rule.SourceCategory));
+                        }
+                    }
+                    else if (req?.RequirementMethods != null)
+                    {
+                        // Fallback for requirements without domain association rules (legacy):
+                        // methods co-occurring in the requirement have affinity.
+                        var categories = req.RequirementMethods
+                            .Select(m => m.Category)
+                            .Where(c => !string.IsNullOrEmpty(c))
+                            .Distinct()
+                            .ToList();
+
+                        for (int i = 0; i < categories.Count; i++)
+                        {
+                            for (int j = i + 1; j < categories.Count; j++)
+                            {
+                                cooccurringCategories.Add((categories[i], categories[j]));
+                                cooccurringCategories.Add((categories[j], categories[i]));
+                            }
                         }
                     }
                 }
@@ -122,36 +134,24 @@ namespace Core.Evaluation
 
             foreach (var relation in diagram.Relations)
             {
-                if (relation.Origin == relation.Destination)
-                {
-                    continue;
-                }
+                if (relation.Origin == relation.Destination) continue;
 
-                // Chave canonica por identidade de referencia: registrar os dois sentidos do par evita
-                // depender de ordenacao por hash (que colide e reportava o mesmo par duas vezes).
+                // Canonical key by reference identity: registering both directions prevents
+                // depending on hash ordering (which collides and could report the same pair twice).
                 var pairKey = (relation.Origin, relation.Destination);
-                if (!seenPairs.Add(pairKey) || !seenPairs.Add((relation.Destination, relation.Origin)))
-                {
-                    continue;
-                }
+                if (!seenPairs.Add(pairKey) || !seenPairs.Add((relation.Destination, relation.Origin))) continue;
 
                 var sourceCategories = new HashSet<string>(
                     relation.Origin.Methods.Select(m => m.Category).Where(c => !string.IsNullOrEmpty(c)));
                 var targetCategories = new HashSet<string>(
                     relation.Destination.Methods.Select(m => m.Category).Where(c => !string.IsNullOrEmpty(c)));
 
-                if (sourceCategories.Count == 0 || targetCategories.Count == 0)
-                {
-                    continue;
-                }
+                if (sourceCategories.Count == 0 || targetCategories.Count == 0) continue;
 
                 bool sharesCategory = sourceCategories.Overlaps(targetCategories);
-                if (sharesCategory)
-                {
-                    continue;
-                }
+                if (sharesCategory) continue;
 
-                // Se houver requisitos ativos, verifica se qualquer categoria de Origem coocorre com qualquer categoria de Destino
+                // If active requirements exist, check if any Origin category co-occurs with any Destination category
                 bool hasRequirementAffinity = false;
                 if (cooccurringCategories.Count > 0)
                 {
