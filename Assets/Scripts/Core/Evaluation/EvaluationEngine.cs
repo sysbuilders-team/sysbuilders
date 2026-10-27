@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using Core.Diagram;
 using Core.Requirements;
@@ -78,7 +78,10 @@ namespace Core.Evaluation
                 cleanBonus,
                 unallocatedPenalty,
                 checkResult.DomainPoints,
-                checkResult.SatisfiedAssociations
+                checkResult.SatisfiedAssociations,
+                checkResult.CollocatedAssociations,
+                checkResult.AssociationsTotal,
+                checkResult.AssociationsPending
             );
         }
     }

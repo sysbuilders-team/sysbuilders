@@ -16,6 +16,9 @@ namespace Tests.EditMode
             public int RoundPenaltyPoints { get; set; } = 15;
             public int RoundOpponentPointsEarned { get; set; } = 30;
             public int RoundOpponentPenaltyPoints { get; set; } = 5;
+            public int RoundDomainPoints { get; set; } = 0;
+            public int PendingAssociationsCount { get; set; } = 0;
+            public int AssociationsTotalCount { get; set; } = 0;
         }
 
         private GameObject _go;
@@ -24,6 +27,8 @@ namespace Tests.EditMode
         private TMP_Text _playerPointsText;
         private TMP_Text _playerPenaltiesText;
         private TMP_Text _playerTotalText;
+        private TMP_Text _domainBonusText;
+        private TMP_Text _pendingAssociationsText;
         private Button _advanceBtn;
         private TMP_Text _advanceBtnText;
 
@@ -63,6 +68,18 @@ namespace Tests.EditMode
             SetPrivateField(_controller, "_playerPointsEarnedText", _playerPointsText);
             SetPrivateField(_controller, "_playerPenaltiesText", _playerPenaltiesText);
             SetPrivateField(_controller, "_playerTotalText", _playerTotalText);
+
+            var domainBonusGo = new GameObject("DomainBonus");
+            domainBonusGo.transform.SetParent(_modalRoot.transform);
+            _domainBonusText = domainBonusGo.AddComponent<TextMeshProUGUI>();
+
+            var pendingAssocGo = new GameObject("PendingAssociations");
+            pendingAssocGo.transform.SetParent(_modalRoot.transform);
+            _pendingAssociationsText = pendingAssocGo.AddComponent<TextMeshProUGUI>();
+
+            SetPrivateField(_controller, "_domainSectionRoot", domainBonusGo);
+            SetPrivateField(_controller, "_domainBonusText", _domainBonusText);
+            SetPrivateField(_controller, "_pendingAssociationsText", _pendingAssociationsText);
             SetPrivateField(_controller, "_advanceButton", _advanceBtn);
             SetPrivateField(_controller, "_advanceButtonText", _advanceBtnText);
 
@@ -124,6 +141,27 @@ namespace Tests.EditMode
 
             Assert.AreEqual(TurnPhase.Build, _turnManager.CurrentPhase);
             Assert.IsFalse(_controller.IsModalOpen);
+        }
+
+        [Test]
+        public void ShowModal_WithDomainDeltaFormatsWithSignAndHidesWhenNoAssociations()
+        {
+            _controller.Initialize(_summaryContext, _turnManager, _turnManager, PlayerSlot.PlayerOne);
+
+            _summaryContext.RoundDomainPoints = 25;
+            _summaryContext.AssociationsTotalCount = 2;
+            _summaryContext.PendingAssociationsCount = 1;
+            _controller.ShowModal();
+            StringAssert.Contains("+25", _domainBonusText.text);
+            StringAssert.Contains("Pendentes: 1", _pendingAssociationsText.text);
+
+            _summaryContext.RoundDomainPoints = -10;
+            _controller.ShowModal();
+            StringAssert.Contains("-10", _domainBonusText.text);
+
+            _summaryContext.AssociationsTotalCount = 0;
+            _controller.ShowModal();
+            Assert.IsFalse(_pendingAssociationsText.gameObject.activeSelf);
         }
 
         private static void SetPrivateField(object target, string fieldName, object value)

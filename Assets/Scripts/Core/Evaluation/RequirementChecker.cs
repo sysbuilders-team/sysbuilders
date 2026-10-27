@@ -10,40 +10,45 @@ namespace Core.Evaluation
         public IReadOnlyList<string> FulfilledIds { get; }
         public int DomainPoints { get; }
         public IReadOnlyList<AssociationRule> SatisfiedAssociations { get; }
+        public IReadOnlyList<AssociationRule> CollocatedAssociations { get; }
+        public int AssociationsTotal { get; }
+        public int AssociationsPending { get; }
 
         public RequirementCheckResult(
-            IReadOnlyList<string> fulfilledIds, 
-            int domainPoints, 
-            IReadOnlyList<AssociationRule> satisfiedAssociations)
+            IReadOnlyList<string> fulfilledIds,
+            int domainPoints,
+            IReadOnlyList<AssociationRule> satisfiedAssociations,
+            IReadOnlyList<AssociationRule> collocatedAssociations,
+            int associationsTotal,
+            int associationsPending)
         {
             FulfilledIds = fulfilledIds;
             DomainPoints = domainPoints;
             SatisfiedAssociations = satisfiedAssociations;
+            CollocatedAssociations = collocatedAssociations;
+            AssociationsTotal = associationsTotal;
+            AssociationsPending = associationsPending;
         }
     }
 
     public class RequirementChecker
     {
         public RequirementCheckResult CheckRequirements(
-            IReadOnlyClassDiagram diagram, 
+            IReadOnlyClassDiagram diagram,
             IReadOnlyList<Requirement> activeRequirements)
         {
             if (diagram == null || activeRequirements == null)
-                return new RequirementCheckResult(new List<string>(), 0, new List<AssociationRule>());
+                return new RequirementCheckResult(
+                    new List<string>(), 0, new List<AssociationRule>(), new List<AssociationRule>(), 0, 0);
 
-            // One entry per EVALUATED requirement (position), not by Id: EvaluationEngine's RawScore
-            // is calculated by position, so two requirements with the same Id must count twice.
+            // One entry per EVALUATED requirement (position), not by Id.
             var fulfilledIds = new List<string>(activeRequirements.Count);
             var components = diagram.GetConnectedComponents();
 
-            // 1. Method verification
             foreach (var requirement in activeRequirements)
             {
                 if (requirement == null) continue;
-
-                // A requirement without required methods is invalid data: it cannot be fulfilled by vacuity.
-                // RequirementLoader rejects this trail at loading; here the guard is defense in depth.
-                if (requirement.RequirementMethods == null || requirement.RequirementMethods.Count == 0) 
+                if (requirement.RequirementMethods == null || requirement.RequirementMethods.Count == 0)
                     continue;
 
                 bool isFulfilled = components.Any(component =>
@@ -59,9 +64,10 @@ namespace Core.Evaluation
                 if (isFulfilled) fulfilledIds.Add(requirement.Id);
             }
 
-            // 2. Domain associations verification
+            // Domain associations
             int totalDomainPoints = 0;
             var satisfiedRules = new List<AssociationRule>();
+            var collocatedRules = new List<AssociationRule>();
             var seenPairs = new HashSet<(string, string)>();
 
             foreach (var req in activeRequirements)
@@ -70,20 +76,17 @@ namespace Core.Evaluation
 
                 foreach (var rule in req.RequiredAssociations)
                 {
-                    var key = string.CompareOrdinal(rule.SourceCategory, rule.TargetCategory) <= 0
-                        ? (rule.SourceCategory, rule.TargetCategory)
-                        : (rule.TargetCategory, rule.SourceCategory);
-                    
+                    var key = AssociationRule.GetPairKey(rule.SourceCategory, rule.TargetCategory);
                     if (!seenPairs.Add(key)) continue;
 
                     var sources = diagram.Classes
                         .Where(c => c.Methods.Any(m => m.Category == rule.SourceCategory))
                         .ToList();
-                        
+
                     var targets = diagram.Classes
                         .Where(c => c.Methods.Any(m => m.Category == rule.TargetCategory))
                         .ToList();
-                        
+
                     if (sources.Count == 0 || targets.Count == 0) continue;
 
                     bool connected = diagram.Relations.Any(r => r.Origin != r.Destination &&
@@ -97,12 +100,17 @@ namespace Core.Evaluation
                     }
                     else if (sources.Intersect(targets).Any())
                     {
-                        satisfiedRules.Add(rule);
+                        // Same class: satisfied without bonus (discourages God Class)
+                        collocatedRules.Add(rule);
                     }
                 }
             }
 
-            return new RequirementCheckResult(fulfilledIds, totalDomainPoints, satisfiedRules);
+            int total = seenPairs.Count;
+            int pending = total - satisfiedRules.Count;
+
+            return new RequirementCheckResult(
+                fulfilledIds, totalDomainPoints, satisfiedRules, collocatedRules, total, pending);
         }
     }
 }

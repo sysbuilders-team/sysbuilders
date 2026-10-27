@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Core.Diagram;
@@ -43,6 +43,9 @@ namespace Tests.EditMode
             public int RoundPenaltyPoints => 0;
             public int RoundOpponentPointsEarned => 5;
             public int RoundOpponentPenaltyPoints => 0;
+            public int RoundDomainPoints => 0;
+            public int PendingAssociationsCount => 0;
+            public int AssociationsTotalCount => 0;
         }
 
         private class FakeRequirementContext : IRequirementContext

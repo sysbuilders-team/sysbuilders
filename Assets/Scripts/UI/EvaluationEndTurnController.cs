@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Core.Session;
 using TMPro;
 using UnityEngine;
@@ -23,6 +23,11 @@ namespace UI
         [SerializeField] private TMP_Text _opponentPointsEarnedText;
         [SerializeField] private TMP_Text _opponentPenaltiesText;
         [SerializeField] private TMP_Text _opponentTotalText;
+
+        [Header("Bônus de Domínio")]
+        [SerializeField] private GameObject _domainSectionRoot;
+        [SerializeField] private TMP_Text _domainBonusText;
+        [SerializeField] private TMP_Text _pendingAssociationsText;
 
         [Header("Avançar")]
         [SerializeField] private Button _advanceButton;
@@ -186,6 +191,27 @@ namespace UI
             if (_opponentPointsEarnedText != null) _opponentPointsEarnedText.text = $"Adversário Obtidos: +{oppEarned}";
             if (_opponentPenaltiesText != null) _opponentPenaltiesText.text = $"Adversário Penalidades: -{oppPenalty}";
             if (_opponentTotalText != null) _opponentTotalText.text = $"Total do Adversário: {oppTotal} pts";
+
+            if (_domainSectionRoot != null)
+            {
+                bool hasAssociations = _summaryContext.AssociationsTotalCount > 0;
+                _domainSectionRoot.SetActive(hasAssociations);
+
+                if (hasAssociations)
+                {
+                    int domainDelta = _summaryContext.RoundDomainPoints;
+                    if (_domainBonusText != null)
+                        _domainBonusText.text = $"Bônus de Domínio: {domainDelta:+0;-0;0}";
+
+                    if (_pendingAssociationsText != null)
+                    {
+                        int pending = _summaryContext.PendingAssociationsCount;
+                        _pendingAssociationsText.text = pending > 0
+                            ? $"Conexões Pendentes: {pending}"
+                            : "Domínio Completo!";
+                    }
+                }
+            }
         }
     }
 }

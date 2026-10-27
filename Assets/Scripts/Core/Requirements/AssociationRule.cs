@@ -16,5 +16,12 @@ namespace Core.Requirements
             Reason = reason;
             Hint = hint;
         }
+
+        public static (string, string) GetPairKey(string source, string target)
+        {
+            return string.CompareOrdinal(source, target) <= 0
+                ? (source, target)
+                : (target, source);
+        }
     }
 }
