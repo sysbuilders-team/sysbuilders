@@ -12,6 +12,15 @@
             { "Name": "AtualizarContato", "Category": "Usuario" },
             { "Name": "ConsultarFichaLeitor", "Category": "Usuario" },
             { "Name": "NotificarAtrasoEmail", "Category": "Notificacao" }
+          ],
+          "RequiredAssociations": [
+            {
+              "SourceCategory": "Usuario",
+              "TargetCategory": "Notificacao",
+              "Points": 25,
+              "Reason": "O leitor precisa ser notificado pelo sistema.",
+              "Hint": "Como o sistema avisa o leitor sobre pendências?"
+            }
           ]
         },
         {
@@ -22,6 +31,15 @@
             { "Name": "BuscarPorTitulo", "Category": "Acervo" },
             { "Name": "RegistrarBaixaLivro", "Category": "Acervo" },
             { "Name": "EnviarAlertaNovoLivro", "Category": "Notificacao" }
+          ],
+          "RequiredAssociations": [
+            {
+              "SourceCategory": "Acervo",
+              "TargetCategory": "Notificacao",
+              "Points": 25,
+              "Reason": "Os leitores ficam sabendo de novos livros.",
+              "Hint": "Como os leitores descobrem que chegaram novos livros?"
+            }
           ]
         },
         {
@@ -31,6 +49,22 @@
             { "Name": "RegistrarEmprestimo", "Category": "Circulacao" },
             { "Name": "DefinirDataDevolucao", "Category": "Circulacao" },
             { "Name": "ValidarLimiteEmprestimos", "Category": "Circulacao" }
+          ],
+          "RequiredAssociations": [
+            {
+              "SourceCategory": "Circulacao",
+              "TargetCategory": "Usuario",
+              "Points": 25,
+              "Reason": "Um empréstimo precisa saber quem é o leitor.",
+              "Hint": "Um empréstimo sem leitor não faz sentido. Quem está pegando o livro?"
+            },
+            {
+              "SourceCategory": "Circulacao",
+              "TargetCategory": "Acervo",
+              "Points": 25,
+              "Reason": "Um empréstimo precisa saber qual é o livro.",
+              "Hint": "Um empréstimo sem livro não faz sentido. Qual obra está sendo retirada?"
+            }
           ]
         },
         {
@@ -50,6 +84,22 @@
             { "Name": "ProcessarPagamentoMulta", "Category": "Financeiro" },
             { "Name": "EmitirReciboQuitacao", "Category": "Financeiro" },
             { "Name": "EnviarCobrancaSms", "Category": "Notificacao" }
+          ],
+          "RequiredAssociations": [
+            {
+              "SourceCategory": "Financeiro",
+              "TargetCategory": "Circulacao",
+              "Points": 25,
+              "Reason": "As multas são geradas por empréstimos atrasados.",
+              "Hint": "De onde vêm as multas? De qual parte do sistema?"
+            },
+            {
+              "SourceCategory": "Financeiro",
+              "TargetCategory": "Notificacao",
+              "Points": 25,
+              "Reason": "O leitor precisa ser avisado sobre a multa.",
+              "Hint": "Como o leitor é avisado da multa pendente?"
+            }
           ]
         }
       ]

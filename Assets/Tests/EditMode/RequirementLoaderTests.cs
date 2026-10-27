@@ -40,6 +40,49 @@ namespace Tests.EditMode
             Assert.AreEqual("M1", trails[0].RequirementByTurn[0].RequirementMethods[0].Name);
             Assert.AreEqual("Usuario", trails[0].RequirementByTurn[0].RequirementMethods[0].Category);
         }
+        
+        [Test]
+public void LoadFromJson_WithValidAssociationRule_LoadsCorrectly()
+{
+    const string json = @"{""Biblioteca"":[{""Id"":""t1"",""RequirementsByTurn"":[
+        {""Id"":""r1"",""RequiredMethods"":[{""Name"":""M1"",""Category"":""A""}],""RequiredAssociations"":[{""SourceCategory"":""A"",""TargetCategory"":""B"",""Points"":25}]},
+        {""Id"":""r2"",""RequiredMethods"":[{""Name"":""M2"",""Category"":""B""}]},
+        {""Id"":""r3"",""RequiredMethods"":[{""Name"":""M3"",""Category"":""A""}]},
+        {""Id"":""r4"",""RequiredMethods"":[{""Name"":""M4"",""Category"":""A""}]},
+        {""Id"":""r5"",""RequiredMethods"":[{""Name"":""M5"",""Category"":""A""}]}
+    ]}]}";
+    var result = RequirementLoader.LoadFromJson(json);
+    var trail = result["Biblioteca"][0];
+    Assert.AreEqual(1, trail.RequirementByTurn[0].RequiredAssociations.Count);
+    Assert.AreEqual("A", trail.RequirementByTurn[0].RequiredAssociations[0].SourceCategory);
+}
+
+[Test]
+public void LoadFromJson_WithInvalidCategoryInAssociation_ThrowsFormatException()
+{
+    const string json = @"{""Biblioteca"":[{""Id"":""t1"",""RequirementsByTurn"":[
+        {""Id"":""r1"",""RequiredMethods"":[{""Name"":""M1"",""Category"":""A""}],""RequiredAssociations"":[{""SourceCategory"":""A"",""TargetCategory"":""Z"",""Points"":25}]},
+        {""Id"":""r2"",""RequiredMethods"":[{""Name"":""M2"",""Category"":""B""}]},
+        {""Id"":""r3"",""RequiredMethods"":[{""Name"":""M3"",""Category"":""A""}]},
+        {""Id"":""r4"",""RequiredMethods"":[{""Name"":""M4"",""Category"":""A""}]},
+        {""Id"":""r5"",""RequiredMethods"":[{""Name"":""M5"",""Category"":""A""}]}
+    ]}]}";
+    Assert.Throws<FormatException>(() => RequirementLoader.LoadFromJson(json));
+}
+
+[Test]
+public void LoadFromJson_OldJsonWithoutAssociations_StillLoads()
+{
+    const string json = @"{""Biblioteca"":[{""Id"":""t1"",""RequirementsByTurn"":[
+        {""Id"":""r1"",""RequiredMethods"":[{""Name"":""M1"",""Category"":""A""}]},
+        {""Id"":""r2"",""RequiredMethods"":[{""Name"":""M2"",""Category"":""A""}]},
+        {""Id"":""r3"",""RequiredMethods"":[{""Name"":""M3"",""Category"":""A""}]},
+        {""Id"":""r4"",""RequiredMethods"":[{""Name"":""M4"",""Category"":""A""}]},
+        {""Id"":""r5"",""RequiredMethods"":[{""Name"":""M5"",""Category"":""A""}]}
+    ]}]}";
+    var result = RequirementLoader.LoadFromJson(json);
+    Assert.AreEqual(0, result["Biblioteca"][0].RequirementByTurn[0].RequiredAssociations.Count);
+}
 
         [Test]
         public void LoadFromJson_WithInvalidMaxClasses_ThrowsFormatException()

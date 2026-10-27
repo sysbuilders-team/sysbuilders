@@ -1,0 +1,58 @@
+{
+  "Biblioteca": [
+    {
+      "Id": "trail_biblioteca_01",
+      "MaxClasses": 7,
+      "RequirementsByTurn": [
+        {
+          "Id": "req_turno_1",
+          "Description": "O sistema deve permitir o cadastro de novos leitores, atualização de dados de contato e consulta à ficha cadastral do leitor.",
+          "RequiredMethods": [
+            { "Name": "CadastrarLeitor", "Category": "Usuario" },
+            { "Name": "AtualizarContato", "Category": "Usuario" },
+            { "Name": "ConsultarFichaLeitor", "Category": "Usuario" },
+            { "Name": "NotificarAtrasoEmail", "Category": "Notificacao" }
+          ]
+        },
+        {
+          "Id": "req_turno_2",
+          "Description": "O sistema deve permitir catalogar livros no acervo, pesquisar obras por título e registrar a baixa de exemplares danificados.",
+          "RequiredMethods": [
+            { "Name": "CadastrarLivro", "Category": "Acervo" },
+            { "Name": "BuscarPorTitulo", "Category": "Acervo" },
+            { "Name": "RegistrarBaixaLivro", "Category": "Acervo" },
+            { "Name": "EnviarAlertaNovoLivro", "Category": "Notificacao" }
+          ]
+        },
+        {
+          "Id": "req_turno_3",
+          "Description": "O sistema deve registrar a retirada de livros pelos leitores em empréstimo, definindo a data prevista para entrega e validando o limite máximo de livros por usuário.",
+          "RequiredMethods": [
+            { "Name": "RegistrarEmprestimo", "Category": "Circulacao" },
+            { "Name": "DefinirDataDevolucao", "Category": "Circulacao" },
+            { "Name": "ValidarLimiteEmprestimos", "Category": "Circulacao" }
+          ]
+        },
+        {
+          "Id": "req_turno_4",
+          "Description": "O sistema deve processar a devolução de livros emprestados, calcular os dias de atraso se houver pendência e registrar a inspeção de integridade física do exemplar.",
+          "RequiredMethods": [
+            { "Name": "RegistrarDevolucao", "Category": "Circulacao" },
+            { "Name": "CalcularDiasAtraso", "Category": "Circulacao" },
+            { "Name": "VerificarIntegridadeExemplar", "Category": "Acervo" }
+          ]
+        },
+        {
+          "Id": "req_turno_5",
+          "Description": "O sistema deve calcular o valor de multas devidas por devoluções atrasadas, registrar o pagamento de débitos pendentes e emitir o recibo fiscal de quitação.",
+          "RequiredMethods": [
+            { "Name": "CalcularValorMulta", "Category": "Financeiro" },
+            { "Name": "ProcessarPagamentoMulta", "Category": "Financeiro" },
+            { "Name": "EmitirReciboQuitacao", "Category": "Financeiro" },
+            { "Name": "EnviarCobrancaSms", "Category": "Notificacao" }
+          ]
+        }
+      ]
+    }
+  ]
+}
