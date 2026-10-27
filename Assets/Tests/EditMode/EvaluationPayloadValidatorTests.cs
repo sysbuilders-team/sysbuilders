@@ -1,4 +1,4 @@
-using Network;
+﻿using Network;
 using NUnit.Framework;
 
 namespace Tests.EditMode
@@ -35,20 +35,20 @@ namespace Tests.EditMode
         [Test]
         public void RawScoreAboveTurnCap_Rejected()
         {
-            // MaxRawScorePerTurn = 150: para o turno 2, o teto é 300; 301 deve ser rejeitado
+            // MaxRawScorePerTurn = 250: para o turno 2, o teto é 500; 501 deve ser rejeitado
             bool ok = EvaluationPayloadValidator.TryValidate(
-                2, 301, 0, ValidTypes(), ValidSeverities(), ValidClasses(), out string reason);
+                2, 501, 0, ValidTypes(), ValidSeverities(), ValidClasses(), out string reason);
 
             Assert.IsFalse(ok);
-            StringAssert.Contains("raw 301 out of range for turn 2", reason);
+            StringAssert.Contains("raw 501 out of range for turn 2", reason);
         }
 
         [Test]
         public void RawScoreAtExactTurnCap_Passes()
         {
-            // MaxRawScorePerTurn = 150: para o turno 3, o teto é 450; 450 deve ser aceito
+            // MaxRawScorePerTurn = 250: para o turno 3, o teto é 750; 750 deve ser aceito
             bool ok = EvaluationPayloadValidator.TryValidate(
-                3, 450, 0, ValidTypes(), ValidSeverities(), ValidClasses(), out _);
+                3, 750, 0, ValidTypes(), ValidSeverities(), ValidClasses(), out _);
 
             Assert.IsTrue(ok);
         }
