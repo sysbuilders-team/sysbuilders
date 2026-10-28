@@ -78,7 +78,7 @@ namespace Core.Session
             IReadOnlyList<Requirement> activeRequirements,
             PlayerSlot localSlot,
             IEvaluationService evaluator = null,
-            bool isNetworkMatch = false,
+            int requiredPlayers  = 1,
             IRefactorPointPolicy refactorPointPolicy = null,
             int maxClassesPerMatch = Trail.DefaultMaxClasses)
         {
@@ -93,7 +93,7 @@ namespace Core.Session
             PlayerOne = new PlayerState(playerOneId);
             PlayerTwo = new PlayerState(playerTwoId);
             LocalSlot = localSlot;
-            TurnManager = new TurnManager(isNetworkMatch ? 2 : 1);
+            TurnManager = new TurnManager(requiredPlayers);
 
             _evaluator = evaluator ?? new EvaluationEngine();
             _activeRequirements = activeRequirements;

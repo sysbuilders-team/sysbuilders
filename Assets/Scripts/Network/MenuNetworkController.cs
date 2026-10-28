@@ -91,10 +91,6 @@ namespace Network
 			{
 				NetworkManager.singleton.StopClient();
 			}
-
-			// Mirror keeps state across StopHost/StopClient; destroying the manager is what made
-			// a second host session start clean.
-			UnityEngine.Object.Destroy(NetworkManager.singleton.gameObject);
 		}
 
 		public void StartBrowsing()

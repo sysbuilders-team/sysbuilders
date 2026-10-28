@@ -26,7 +26,7 @@ namespace Tests.EditMode
         [Test]
         public void B1_TryCreateClass_WithNullOrEmptyName_GeneratesUniqueSequentialNames()
         {
-            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne, isNetworkMatch: true);
+            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne, requiredPlayers: 2);
             var editor = session.DiagramActions;
             session.SetPlayerReady(PlayerSlot.PlayerOne);
             session.SetPlayerReady(PlayerSlot.PlayerTwo); // Now in Build phase
@@ -57,7 +57,7 @@ namespace Tests.EditMode
         [Test]
         public void B1_TryCreateClass_WithExplicitName_UsesGivenNameAndRejectsDuplicate()
         {
-            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne, isNetworkMatch: true);
+            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne, requiredPlayers: 2);
             var editor = session.DiagramActions;
             session.SetPlayerReady(PlayerSlot.PlayerOne);
             session.SetPlayerReady(PlayerSlot.PlayerTwo);
@@ -118,7 +118,7 @@ namespace Tests.EditMode
         [Test]
         public void B2_TryRefactorClass_ConsumesPointUnlocksClassAndRaisesEvents()
         {
-            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne, isNetworkMatch: true);
+            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne, requiredPlayers: 2);
             var editor = session.DiagramActions;
             var refactor = session.RefactorContext;
             session.SetPlayerReady(PlayerSlot.PlayerOne);
@@ -146,7 +146,7 @@ namespace Tests.EditMode
         [Test]
         public void B2_TryRefactorClass_RejectsUnlockedOrForeignClassWithoutFiringEvents()
         {
-            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne, isNetworkMatch: true);
+            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne, requiredPlayers: 2);
             var editor = session.DiagramActions;
             var refactor = session.RefactorContext;
             session.SetPlayerReady(PlayerSlot.PlayerOne);
@@ -236,7 +236,7 @@ namespace Tests.EditMode
         [Test]
         public void B3_TryCreateClass_EnforcesTurnAndMatchQuotasAcrossSession()
         {
-            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne, isNetworkMatch: true, maxClassesPerMatch: 3);
+            var session = new MatchSession("Alice", "Bob", CreateDummyRequirements(), PlayerSlot.PlayerOne, requiredPlayers: 2, maxClassesPerMatch: 3);
             var editor = session.DiagramActions;
             session.SetPlayerReady(PlayerSlot.PlayerOne);
             session.SetPlayerReady(PlayerSlot.PlayerTwo); // Build Turn 1

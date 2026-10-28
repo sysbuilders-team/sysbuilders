@@ -72,7 +72,7 @@ namespace Managers
                 "Jogador 2",
                 trail.RequirementByTurn,
                 localSlot,
-                isNetworkMatch: isNetworkMatch,
+                requiredPlayers: isNetworkMatch ? 2 : 1,
                 maxClassesPerMatch: trail.MaxClasses);
 
             Session.OnEvaluationCompleted += HandleLocalEvaluationCompleted;

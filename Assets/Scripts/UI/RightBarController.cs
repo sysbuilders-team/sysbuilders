@@ -75,6 +75,7 @@ namespace UI
             if (_turnContext != null)
             {
                 _turnContext.OnPhaseChange += HandlePhaseChange;
+                _turnContext.OnReadyPlayersChanged += HandleReadyPlayersChanged;
             }
 
             UpdateAllDisplays();
@@ -110,6 +111,7 @@ namespace UI
             if (_turnContext != null)
             {
                 _turnContext.OnPhaseChange -= HandlePhaseChange;
+                _turnContext.OnReadyPlayersChanged -= HandleReadyPlayersChanged;
             }
 
             if (_diagramActions != null)
@@ -175,6 +177,11 @@ namespace UI
             UpdateRefactorDisplay(_refactorContext != null ? _refactorContext.RefactorPoints : 0);
         }
 
+        private void HandleReadyPlayersChanged(int readyCount, int requiredPlayers)
+        {
+            UpdateEndTurnButtonState(_turnContext != null ? _turnContext.CurrentPhase : TurnPhase.Build);
+        }
+
         private void HandleDiagramChanged()
         {
             UpdateEndTurnButtonState(_turnContext != null ? _turnContext.CurrentPhase : TurnPhase.Build);
@@ -222,7 +229,10 @@ namespace UI
 
             if (_endTurnButtonText != null)
             {
-                _endTurnButtonText.text = "Aguardando adversário...";
+                int ready = _turnContext != null ? _turnContext.ReadyPlayersCount : 0;
+                int total = _turnContext != null ? _turnContext.RequiredPlayers : 1;
+                string countSuffix = total > 1 ? $" ({ready}/{total})" : string.Empty;
+                _endTurnButtonText.text = $"Aguardando adversário...{countSuffix}";
             }
         }
 
@@ -275,6 +285,10 @@ namespace UI
         {
             if (_endTurnButton == null) return;
 
+            int ready = _turnContext != null ? _turnContext.ReadyPlayersCount : 0;
+            int total = _turnContext != null ? _turnContext.RequiredPlayers : 1;
+            string countSuffix = total > 1 ? $" ({ready}/{total})" : string.Empty;
+
             if (phase == TurnPhase.Build && _hasEndedTurn)
             {
                 SetEndTurnWaitingState();
@@ -285,7 +299,9 @@ namespace UI
                 _endTurnButton.interactable = canEnd;
                 if (_endTurnButtonText != null)
                 {
-                    _endTurnButtonText.text = canEnd ? "Finalizar Turno" : "Distribua os Métodos";
+                    _endTurnButtonText.text = canEnd
+                        ? $"Finalizar Turno{countSuffix}"
+                        : $"Distribua os Métodos";
                 }
             }
             else

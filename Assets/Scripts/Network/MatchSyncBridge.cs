@@ -259,6 +259,7 @@ namespace Network
 
 			_quorum.MarkReady(slot);
 			Debug.Log($"[MatchSyncBridge] Server: slot {slot} pronto ({_quorum.ReadyCount}/{RequiredPlayers})");
+			RpcNotifyPlayerReady(slotIndex, turnNumber, phase);
 
 			if (_quorum.IsReadyQuorumMet)
 			{
@@ -267,6 +268,20 @@ namespace Network
 			}
 		}
 
+		[ClientRpc]
+		private void RpcNotifyPlayerReady(int slotIndex, int turnNumber, int phase)
+		{
+			if (gameManager == null || gameManager.Session == null) return;
+
+			var tm = gameManager.Session.TurnManager;
+			if (tm == null) return;
+
+			if (tm.CurrentTurn != turnNumber) return;
+			if ((int)tm.CurrentPhase != phase) return;
+
+			tm.MarkPlayerReady((PlayerSlot)slotIndex);
+		}
+		
 		[ClientRpc]
 		private void RpcAdvancePhase()
 		{
@@ -323,9 +338,6 @@ namespace Network
 			{
 				NetworkManager.singleton.StopClient();
 			}
-
-            // FIX: Destrói o NetworkManager para garantir que o Menu carregue um limpo
-            Destroy(NetworkManager.singleton.gameObject);
 		}
 
 		private void HandleLocalEvaluationCompleted(EvaluationResult localResult)

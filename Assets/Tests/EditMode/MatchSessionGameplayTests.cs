@@ -25,7 +25,7 @@ namespace Tests.EditMode
         [Test]
         public void MatchSession_FullGameLoop_CreationSelectionRefactoringAndAdvancing()
         {
-            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne, isNetworkMatch: true);
+            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne, requiredPlayers: 2);
             var editor = session.DiagramActions;
             var refactor = session.RefactorContext;
 
@@ -142,7 +142,7 @@ namespace Tests.EditMode
         [Test]
         public void MatchSession_DuplicateAssociation_TriggersOnActionFailed()
         {
-            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne, isNetworkMatch: true);
+            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne, requiredPlayers: 2);
             var editor = session.DiagramActions;
 
             // Avança para Build
@@ -168,7 +168,7 @@ namespace Tests.EditMode
         [Test]
         public void MatchSession_SelfAssociation_TriggersOnActionFailed()
         {
-            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne, isNetworkMatch: true);
+            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne, requiredPlayers: 2);
             var editor = session.DiagramActions;
 
             session.SetPlayerReady(PlayerSlot.PlayerOne);
@@ -188,7 +188,7 @@ namespace Tests.EditMode
         [Test]
         public void MatchSession_HasPendingMethods_TracksUnassignedCurrentRequirementMethods()
         {
-            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne, isNetworkMatch: false);
+            var session = new MatchSession("Alice", "Bob", _requirements, PlayerSlot.PlayerOne, requiredPlayers: 1);
             var editor = session.DiagramActions;
 
             // Avança de Show para Build

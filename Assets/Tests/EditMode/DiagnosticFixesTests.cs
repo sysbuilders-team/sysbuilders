@@ -165,7 +165,7 @@ namespace Tests.EditMode
             {
                 new Core.Requirements.Requirement("req1", "Req 1", new List<Core.Diagram.MethodData>())
             };
-            var session = new MatchSession("P1", "P2", reqList, PlayerSlot.PlayerOne, isNetworkMatch: false);
+            var session = new MatchSession("P1", "P2", reqList, PlayerSlot.PlayerOne, requiredPlayers: 1);
             session.TurnManager.ForceAdvancePhase(); // Show -> Build
             Assert.AreEqual(TurnPhase.Build, session.TurnManager.CurrentPhase);
 
@@ -184,7 +184,7 @@ namespace Tests.EditMode
             {
                 new Core.Requirements.Requirement("req1", "Req 1", new List<Core.Diagram.MethodData>())
             };
-            var session = new MatchSession("P1", "P2", reqList, PlayerSlot.PlayerOne, isNetworkMatch: true);
+            var session = new MatchSession("P1", "P2", reqList, PlayerSlot.PlayerOne, requiredPlayers: 2);
             session.TurnManager.ForceAdvancePhase(); // Show -> Build
             Assert.AreEqual(TurnPhase.Build, session.TurnManager.CurrentPhase);
 

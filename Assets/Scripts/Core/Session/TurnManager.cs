@@ -31,6 +31,8 @@ namespace Core.Session
         private readonly int _maxPlayers;
         private readonly HashSet<PlayerSlot> _readyPlayers = new HashSet<PlayerSlot>();
         public IReadOnlyCollection<PlayerSlot> ReadyPlayers => _readyPlayers;
+        public int ReadyCount => _readyPlayers.Count;
+        public int MaxPlayers => _maxPlayers;
         
         public PlayerReadinessTracker(int maxPlayers)
         {
@@ -70,10 +72,26 @@ namespace Core.Session
         public int CurrentTurn { get; private set; }
         public TurnPhase CurrentPhase { get; private set; }
         private readonly PlayerReadinessTracker _playerReadinessTracker;
+        private readonly HashSet<PlayerSlot> _replicatedReady = new HashSet<PlayerSlot>();
+
+        public int ReadyPlayersCount
+        {
+            get
+            {
+                int count = _playerReadinessTracker.ReadyCount;
+                foreach (var slot in _replicatedReady)
+                {
+                    if (!_playerReadinessTracker.IsPlayerReady(slot)) count++;
+                }
+                return count;
+            }
+        }
+        public int RequiredPlayers => _playerReadinessTracker.MaxPlayers;
         
         // some requirementmanager will subscribe to this, maybe also pass turn number, see this
         public event Action<TurnPhase> OnPhaseChange;
         public event Action<PlayerSlot> OnPlayerReady;
+        public event Action<int, int> OnReadyPlayersChanged;
 
         // requiredPlayers: 2 numa partida de rede, 1 numa partida solo/local (o unico jogador avanca sozinho).
         // maxTurns: por padrao o tamanho de uma trilha, para nao existir uma segunda fonte de verdade para "5 turnos".
@@ -121,6 +139,8 @@ namespace Core.Session
             if (!_playerReadinessTracker.IsBothPlayersReady() || CurrentPhase == TurnPhase.Completed) return;
 
             _playerReadinessTracker.ClearPlayers();
+            _replicatedReady.Clear();
+            OnReadyPlayersChanged?.Invoke(ReadyPlayersCount, RequiredPlayers);
 
             AdvanceCurrentPhase();
         }
@@ -130,6 +150,8 @@ namespace Core.Session
             if (CurrentPhase == TurnPhase.Completed) return;
 
             _playerReadinessTracker.ClearPlayers();
+            _replicatedReady.Clear();
+            OnReadyPlayersChanged?.Invoke(ReadyPlayersCount, RequiredPlayers);
 
             AdvanceCurrentPhase();
         }
@@ -148,17 +170,28 @@ namespace Core.Session
 
             _playerReadinessTracker.SetPlayerReady(player);
             OnPlayerReady?.Invoke(player);
+            OnReadyPlayersChanged?.Invoke(ReadyPlayersCount, RequiredPlayers);
 
             AdvancePhase();
 
             return SetPlayerReadyResult.Success;
         }
 
+        public void MarkPlayerReady(PlayerSlot player)
+        {
+            if (CurrentPhase == TurnPhase.Completed) return;
+            if (_playerReadinessTracker.IsPlayerReady(player)) return;
+            if (_replicatedReady.Contains(player)) return;
+
+            _replicatedReady.Add(player);
+            OnReadyPlayersChanged?.Invoke(ReadyPlayersCount, RequiredPlayers);
+        }
     
         public bool IsBothPlayersReady()
         {
             return _playerReadinessTracker.IsBothPlayersReady();
         }
+        
         
     }
 }
