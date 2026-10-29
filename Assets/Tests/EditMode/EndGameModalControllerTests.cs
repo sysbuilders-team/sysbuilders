@@ -1,7 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
+using Core.Diagram;
 using Core.Evaluation;
+using Core.Requirements;
 using Core.Session;
 using NUnit.Framework;
 using TMPro;
@@ -38,6 +40,14 @@ namespace Tests.EditMode
             public void RestartMatch() => RestartMatchCalled = true;
         }
 
+        private class FakeRequirementContext : IRequirementContext
+        {
+            public Requirement CurrentRequirement => null;
+            public IReadOnlyList<Requirement> RequirementsHistory { get; set; } = new List<Requirement>();
+            public bool HasPendingMethods => false;
+            public event Action<Requirement> OnRequirementChanged { add { } remove { } }
+        }
+
         private GameObject _go;
         private GameObject _modalRoot;
         private EndGameModalController _controller;
@@ -45,6 +55,7 @@ namespace Tests.EditMode
         private TMP_Text _finalScoreboardText;
         private TMP_Text _playerSmellsText;
         private TMP_Text _opponentSmellsText;
+        private TMP_Text _playerDomainReportText;
         private Button _mainMenuBtn;
         private Button _restartBtn;
 
@@ -90,6 +101,12 @@ namespace Tests.EditMode
             SetPrivateField(_controller, "_finalScoreboardText", _finalScoreboardText);
             SetPrivateField(_controller, "_playerSmellsReportText", _playerSmellsText);
             SetPrivateField(_controller, "_opponentSmellsReportText", _opponentSmellsText);
+
+            var domainGo = new GameObject("PlayerDomainReport");
+            domainGo.transform.SetParent(_modalRoot.transform);
+            _playerDomainReportText = domainGo.AddComponent<TextMeshProUGUI>();
+            SetPrivateField(_controller, "_playerDomainReportText", _playerDomainReportText);
+
             SetPrivateField(_controller, "_mainMenuButton", _mainMenuBtn);
             SetPrivateField(_controller, "_restartButton", _restartBtn);
 
@@ -262,6 +279,84 @@ namespace Tests.EditMode
             StringAssert.Contains("Duplicate Code", SmellReportFormatter.TranslateSmell(CodeSmellType.DuplicateCode));
             StringAssert.Contains("Baixa Coesão", SmellReportFormatter.TranslateSmell(CodeSmellType.LowCohesion));
             StringAssert.Contains("Acoplamento", SmellReportFormatter.TranslateSmell(CodeSmellType.LowAffinityCoupling));
+        }
+
+        [Test]
+        public void ShowModal_WithCollocatedRule_ShowsMesmaClasseState()
+        {
+            var reqContext = new FakeRequirementContext();
+            var rule = new AssociationRule("Usuario", "Notificacao", 25, "O leitor precisa ser notificado.", "Dica...");
+            reqContext.RequirementsHistory = new List<Requirement>
+            {
+                new Requirement("r1", "Req", new List<MethodData>(), new List<AssociationRule> { rule })
+            };
+
+            var lastResult = new EvaluationResult(
+                100, 0, new List<string>(), new List<SmellOccurrence>(),
+                0, 0, 0,
+                satisfiedAssociations: new List<AssociationRule>(),
+                collocatedAssociations: new List<AssociationRule> { rule },
+                associationsTotal: 1, associationsPending: 1);
+            _endContext.P1History.Add(lastResult);
+            _endContext.PlayerOneScore = 100;
+            _endContext.PlayerTwoScore = 50;
+
+            _controller.Initialize(_endContext, _navActions, _turnManager, PlayerSlot.PlayerOne, reqContext);
+            _controller.ShowModal();
+
+            StringAssert.Contains("[Mesma classe]", _playerDomainReportText.text);
+            StringAssert.DoesNotContain("[Acertou]", _playerDomainReportText.text);
+            StringAssert.Contains("Separe as categorias", _playerDomainReportText.text);
+        }
+
+        [Test]
+        public void ShowModal_WithSatisfiedRule_ShowsAcertouState()
+        {
+            var reqContext = new FakeRequirementContext();
+            var rule = new AssociationRule("Usuario", "Notificacao", 25, "O leitor precisa ser notificado.", "Dica...");
+            reqContext.RequirementsHistory = new List<Requirement>
+            {
+                new Requirement("r1", "Req", new List<MethodData>(), new List<AssociationRule> { rule })
+            };
+
+            var lastResult = new EvaluationResult(
+                125, 0, new List<string>(), new List<SmellOccurrence>(),
+                0, 0, 25,
+                satisfiedAssociations: new List<AssociationRule> { rule },
+                collocatedAssociations: new List<AssociationRule>(),
+                associationsTotal: 1, associationsPending: 0);
+            _endContext.P1History.Add(lastResult);
+            _endContext.PlayerOneScore = 125;
+            _endContext.PlayerTwoScore = 50;
+
+            _controller.Initialize(_endContext, _navActions, _turnManager, PlayerSlot.PlayerOne, reqContext);
+            _controller.ShowModal();
+
+            StringAssert.Contains("[Acertou]", _playerDomainReportText.text);
+            StringAssert.Contains("O leitor precisa ser notificado.", _playerDomainReportText.text);
+        }
+
+        [Test]
+        public void ShowModal_WithMissedRule_ShowsFaltouState()
+        {
+            var reqContext = new FakeRequirementContext();
+            var rule = new AssociationRule("Usuario", "Notificacao", 25, "O leitor precisa ser notificado.", "Dica...");
+            reqContext.RequirementsHistory = new List<Requirement>
+            {
+                new Requirement("r1", "Req", new List<MethodData>(), new List<AssociationRule> { rule })
+            };
+
+            var lastResult = new EvaluationResult(
+                100, 0, new List<string>(), new List<SmellOccurrence>(),
+                0, 0, 0, null, null, 1, 1);
+            _endContext.P1History.Add(lastResult);
+            _endContext.PlayerOneScore = 100;
+            _endContext.PlayerTwoScore = 50;
+
+            _controller.Initialize(_endContext, _navActions, _turnManager, PlayerSlot.PlayerOne, reqContext);
+            _controller.ShowModal();
+
+            StringAssert.Contains("[Faltou]", _playerDomainReportText.text);
         }
 
         private static int CountOccurrences(string text, string value)

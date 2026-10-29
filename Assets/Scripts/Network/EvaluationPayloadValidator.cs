@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Core.Evaluation;
 
 namespace Network
@@ -17,10 +17,11 @@ namespace Network
     {
         /// <summary>
         /// Per-turn raw score ceiling. Each revealed requirement awards 100,
-        /// plus up to 50 for clean architecture bonus, so rawScore
-        /// cannot legitimately exceed 150 * turnNumber.
+        /// plus up to 50 for clean architecture bonus, plus 25 per domain association rule,
+        /// so rawScore can legitimately exceed 150 per turn with the domain features.
+        /// Assuming a maximum of 4 rules per turn, the ceiling is 100 + 50 + 100 = 250.
         /// </summary>
-        public const int MaxRawScorePerTurn = 150;
+        public const int MaxRawScorePerTurn = 250;
 
         /// <summary>
         /// Per-turn penalty ceiling. Penalties scale with diagram size and

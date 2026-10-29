@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using Core.Diagram;
@@ -540,6 +540,211 @@ namespace Tests.EditMode
 
             Assert.IsTrue(result.DetectedSmells.Any(s => s.Type == CodeSmellType.LowAffinityCoupling),
                 "Associação entre classes sem afinidade e sem suporte nos requisitos funcionais ativos deve ser penalizada!");
+        }
+
+        [Test]
+        public void Evaluate_WithSatisfiedDomainRule_AwardsDomainPoints()
+        {
+            var diagram = new ClassDiagram();
+            var leitor = new ClassNode("Leitor");
+            leitor.AddMethod(new MethodData("Cadastrar", "Usuario"));
+            var notificador = new ClassNode("Notificador");
+            notificador.AddMethod(new MethodData("EnviarEmail", "Notificacao"));
+            diagram.AddClass(leitor);
+            diagram.AddClass(notificador);
+            diagram.AddRelation(new Relation(leitor, notificador, RelationType.Association));
+
+            var rule = new AssociationRule("Usuario", "Notificacao", 25);
+            var req = new Requirement("r1", "Req", new List<MethodData>(), new List<AssociationRule> { rule });
+
+            var result = new EvaluationEngine().Evaluate(diagram, new List<Requirement> { req });
+
+            Assert.AreEqual(25, result.DomainPoints);
+            Assert.AreEqual(1, result.SatisfiedAssociations.Count);
+        }
+
+        [Test]
+        public void Evaluate_WithSameClassDomainRule_SatisfiesWithoutBonus()
+        {
+            var diagram = new ClassDiagram();
+            var godClass = new ClassNode("Tudo");
+            godClass.AddMethod(new MethodData("Cadastrar", "Usuario"));
+            godClass.AddMethod(new MethodData("EnviarEmail", "Notificacao"));
+            diagram.AddClass(godClass);
+
+            var rule = new AssociationRule("Usuario", "Notificacao", 25);
+            var req = new Requirement("r1", "Req", new List<MethodData>(), new List<AssociationRule> { rule });
+
+            var result = new EvaluationEngine().Evaluate(diagram, new List<Requirement> { req });
+
+            Assert.AreEqual(0, result.DomainPoints);
+            Assert.AreEqual(1, result.SatisfiedAssociations.Count);
+        }
+
+        [Test]
+        public void Evaluate_RuleWithoutRelation_AwardsZeroPoints()
+        {
+            var diagram = new ClassDiagram();
+            var leitor = new ClassNode("Leitor");
+            leitor.AddMethod(new MethodData("Cadastrar", "Usuario"));
+            var notificador = new ClassNode("Notificador");
+            notificador.AddMethod(new MethodData("EnviarEmail", "Notificacao"));
+            diagram.AddClass(leitor);
+            diagram.AddClass(notificador);
+
+            var rule = new AssociationRule("Usuario", "Notificacao", 25);
+            var req = new Requirement("r1", "Req", new List<MethodData>(), new List<AssociationRule> { rule });
+
+            var result = new EvaluationEngine().Evaluate(diagram, new List<Requirement> { req });
+
+            Assert.AreEqual(0, result.DomainPoints);
+            Assert.AreEqual(0, result.SatisfiedAssociations.Count);
+        }
+
+        [Test]
+        public void Evaluate_CategorySpreadAcrossTwoClasses_ConnectionOnSecondStillAwardsPoints()
+        {
+            var diagram = new ClassDiagram();
+            var leitor = new ClassNode("Leitor");
+            leitor.AddMethod(new MethodData("Cadastrar", "Usuario"));
+            var fichaleitor = new ClassNode("FichaLeitor");
+            fichaleitor.AddMethod(new MethodData("Atualizar", "Usuario"));
+            var emprestimo = new ClassNode("Emprestimo");
+            emprestimo.AddMethod(new MethodData("Registrar", "Circulacao"));
+            
+            diagram.AddClass(leitor);
+            diagram.AddClass(fichaleitor);
+            diagram.AddClass(emprestimo);
+            diagram.AddRelation(new Relation(fichaleitor, emprestimo, RelationType.Association));
+
+            var rule = new AssociationRule("Usuario", "Circulacao", 25);
+            var req = new Requirement("r1", "Req", new List<MethodData>(), new List<AssociationRule> { rule });
+
+            var result = new EvaluationEngine().Evaluate(diagram, new List<Requirement> { req });
+
+            Assert.AreEqual(25, result.DomainPoints);
+            Assert.AreEqual(1, result.SatisfiedAssociations.Count);
+        }
+
+        [Test]
+        public void Evaluate_SameRuleInTwoActiveRequirements_AwardsOnlyOnce()
+        {
+            var diagram = new ClassDiagram();
+            var leitor = new ClassNode("Leitor");
+            leitor.AddMethod(new MethodData("Cadastrar", "Usuario"));
+            var notificador = new ClassNode("Notificador");
+            notificador.AddMethod(new MethodData("EnviarEmail", "Notificacao"));
+            diagram.AddClass(leitor);
+            diagram.AddClass(notificador);
+            diagram.AddRelation(new Relation(leitor, notificador, RelationType.Association));
+
+            var rule1 = new AssociationRule("Usuario", "Notificacao", 25);
+            var rule2 = new AssociationRule("Usuario", "Notificacao", 25);
+            var req1 = new Requirement("r1", "Req1", new List<MethodData>(), new List<AssociationRule> { rule1 });
+            var req2 = new Requirement("r2", "Req2", new List<MethodData>(), new List<AssociationRule> { rule2 });
+
+            var result = new EvaluationEngine().Evaluate(diagram, new List<Requirement> { req1, req2 });
+
+            Assert.AreEqual(25, result.DomainPoints);
+            Assert.AreEqual(1, result.SatisfiedAssociations.Count);
+        }
+
+        [Test]
+        public void DetectCodeSmells_DomainRuleRequiredRelation_DoesNotTriggerLowAffinityCoupling()
+        {
+            var diagram = new ClassDiagram();
+            var classA = new ClassNode("A");
+            classA.AddMethod(new MethodData("M1", "CatX"));
+            var classB = new ClassNode("B");
+            classB.AddMethod(new MethodData("M2", "CatY"));
+            diagram.AddClass(classA);
+            diagram.AddClass(classB);
+            diagram.AddRelation(new Relation(classA, classB, RelationType.Association));
+
+            var rule = new AssociationRule("CatX", "CatY");
+            var req = new Requirement("r1", "Req", new List<MethodData>(), new List<AssociationRule> { rule });
+
+            var result = new EvaluationEngine().Evaluate(diagram, new List<Requirement> { req });
+
+            Assert.IsFalse(result.DetectedSmells.Any(s => s.Type == CodeSmellType.LowAffinityCoupling));
+        }
+
+        [Test]
+        public void DetectCodeSmells_UnjustifiedRelationWithoutRule_StillTriggersLowAffinityCoupling()
+        {
+            var diagram = new ClassDiagram();
+            var classA = new ClassNode("A");
+            classA.AddMethod(new MethodData("M1", "CatX"));
+            var classB = new ClassNode("B");
+            classB.AddMethod(new MethodData("M2", "CatY"));
+            diagram.AddClass(classA);
+            diagram.AddClass(classB);
+            diagram.AddRelation(new Relation(classA, classB, RelationType.Association));
+
+            // Requirement specifies an association for another pair, so CatX -> CatY has no affinity rule
+            var otherRule = new AssociationRule("CatX", "CatZ", 25);
+            var req = new Requirement("r1", "Req", new List<MethodData>
+            {
+                new MethodData("M1", "CatX"),
+                new MethodData("M2", "CatY")
+            }, new List<AssociationRule> { otherRule });
+
+            var result = new EvaluationEngine().Evaluate(diagram, new List<Requirement> { req });
+
+            Assert.IsTrue(result.DetectedSmells.Any(s => s.Type == CodeSmellType.LowAffinityCoupling));
+        }
+
+        [Test]
+        public void RankingTest_GoodDesignBeatsConnectAllAndGodClass()
+        {
+            var rule1 = new AssociationRule("Usuario", "Notificacao", 25);
+            var rule2 = new AssociationRule("Acervo", "Notificacao", 25);
+            var req = new Requirement("r1", "Req", new List<MethodData>
+            {
+                new MethodData("Cadastrar", "Usuario"),
+                new MethodData("EnviarEmail", "Notificacao"),
+                new MethodData("CadastrarLivro", "Acervo")
+            }, new List<AssociationRule> { rule1, rule2 });
+
+            var good = new ClassDiagram();
+            var leitor = new ClassNode("Leitor");
+            leitor.AddMethod(new MethodData("Cadastrar", "Usuario"));
+            var notificador = new ClassNode("Notificador");
+            notificador.AddMethod(new MethodData("EnviarEmail", "Notificacao"));
+            var acervo = new ClassNode("Acervo");
+            acervo.AddMethod(new MethodData("CadastrarLivro", "Acervo"));
+            good.AddClass(leitor);
+            good.AddClass(notificador);
+            good.AddClass(acervo);
+            good.AddRelation(new Relation(leitor, notificador, RelationType.Association));
+            good.AddRelation(new Relation(acervo, notificador, RelationType.Association));
+            var goodResult = new EvaluationEngine().Evaluate(good, new List<Requirement> { req });
+
+            var god = new ClassDiagram();
+            var godClass = new ClassNode("Tudo");
+            godClass.AddMethod(new MethodData("Cadastrar", "Usuario"));
+            godClass.AddMethod(new MethodData("EnviarEmail", "Notificacao"));
+            godClass.AddMethod(new MethodData("CadastrarLivro", "Acervo"));
+            god.AddClass(godClass);
+            var godResult = new EvaluationEngine().Evaluate(god, new List<Requirement> { req });
+
+            var all = new ClassDiagram();
+            var a = new ClassNode("A");
+            a.AddMethod(new MethodData("Cadastrar", "Usuario"));
+            var b = new ClassNode("B");
+            b.AddMethod(new MethodData("EnviarEmail", "Notificacao"));
+            var c = new ClassNode("C");
+            c.AddMethod(new MethodData("CadastrarLivro", "Acervo"));
+            all.AddClass(a);
+            all.AddClass(b);
+            all.AddClass(c);
+            all.AddRelation(new Relation(a, b, RelationType.Association));
+            all.AddRelation(new Relation(a, c, RelationType.Association));
+            all.AddRelation(new Relation(b, c, RelationType.Association));
+            var allResult = new EvaluationEngine().Evaluate(all, new List<Requirement> { req });
+
+            Assert.Greater(goodResult.TotalScore, godResult.TotalScore);
+            Assert.Greater(goodResult.TotalScore, allResult.TotalScore);
         }
         #endregion
     }

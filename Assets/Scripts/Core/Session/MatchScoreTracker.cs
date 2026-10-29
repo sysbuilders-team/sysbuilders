@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Core.Evaluation;
@@ -19,9 +19,9 @@ namespace Core.Session
         public string PlayerOneName => _playerOne.Name;
         public string PlayerTwoName => _playerTwo.Name;
 
-        // Regra B: o RawScore de cada avaliação já é acumulado (re-verifica todos os requisitos
-        // revelados) e a penalidade é recalculada por turno.
-        // Placar = RawScore da última avaliação - soma das penalidades de cada turno.
+        // Rule B: the RawScore of each evaluation is already cumulative (re-verifies all revealed requirements)
+        // and the penalty is recalculated per turn.
+        // Score = RawScore of last evaluation - sum of penalties of each turn.
         public int PlayerOneScore => CalculateScore(_playerOne);
         public int PlayerTwoScore => CalculateScore(_playerTwo);
 
@@ -30,6 +30,23 @@ namespace Core.Session
 
         public int RoundOpponentPointsEarned => RoundRawDelta(OpponentPlayer);
         public int RoundOpponentPenaltyPoints => OpponentPlayer.EvaluationHistory.LastOrDefault()?.PenaltyScore ?? 0;
+
+        public int RoundDomainPoints
+        {
+            get
+            {
+                var h = LocalPlayer.EvaluationHistory;
+                if (h.Count == 0) return 0;
+                int prev = h.Count > 1 ? h[h.Count - 2].DomainPoints : 0;
+                return h[h.Count - 1].DomainPoints - prev;
+            }
+        }
+
+        public int PendingAssociationsCount =>
+            LocalPlayer.EvaluationHistory.LastOrDefault()?.AssociationsPending ?? 0;
+
+        public int AssociationsTotalCount =>
+            LocalPlayer.EvaluationHistory.LastOrDefault()?.AssociationsTotal ?? 0;
 
         public IReadOnlyList<EvaluationResult> PlayerOneHistory => _playerOne.EvaluationHistory;
         public IReadOnlyList<EvaluationResult> PlayerTwoHistory => _playerTwo.EvaluationHistory;

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using Core.Diagram;
 using System;
@@ -57,7 +57,22 @@ namespace Core.Requirements
                             .Select(m => new MethodData(m.Name, m.Category))
                             .ToList();
 
-                          return new Requirement(r.Id, r.Description ?? string.Empty, methods);
+                        var associations = new List<AssociationRule>();
+                        if (r.RequiredAssociations != null)
+                        {
+                            foreach (var assoc in r.RequiredAssociations)
+                            {
+                                ValidateAssociationDto(assoc, r, dto.RequirementsByTurn);
+                                associations.Add(new AssociationRule(
+                                    assoc.SourceCategory, 
+                                    assoc.TargetCategory, 
+                                    assoc.Points, 
+                                    assoc.Reason, 
+                                    assoc.Hint));
+                            }
+                        }
+
+                        return new Requirement(r.Id, r.Description ?? string.Empty, methods, associations);
                     }).ToList();
 
                     // A duracao da partida e o tamanho da trilha (TurnManager.MaxTurns usa Trail.TurnCount):
@@ -130,6 +145,26 @@ namespace Core.Requirements
                     $"O requisito '{dto.Id}' da trilha '{trailId}' contem um metodo nulo em 'RequiredMethods'.");
             }
         }
+
+        private static void ValidateAssociationDto(AssociationDto assoc, RequirementDto currentReq, List<RequirementDto> allTrailReqs)
+        {
+            if (assoc == null) throw new FormatException($"Regra de associação nula no requisito '{currentReq.Id}'.");
+            if (string.IsNullOrWhiteSpace(assoc.SourceCategory) || string.IsNullOrWhiteSpace(assoc.TargetCategory))
+                throw new FormatException($"Regra de associação no requisito '{currentReq.Id}' tem categoria vazia.");
+            if (assoc.Points <= 0)
+                throw new FormatException($"Regra de associação no requisito '{currentReq.Id}' tem pontos inválidos ({assoc.Points}).");
+
+            bool CategoryExists(string c) => allTrailReqs.Any(req =>
+                req?.RequiredMethods != null &&
+                req.RequiredMethods.Any(m => m != null && m.Category == c));
+
+            bool sourceExists = CategoryExists(assoc.SourceCategory);
+            bool targetExists = CategoryExists(assoc.TargetCategory);
+
+            if (!sourceExists || !targetExists)
+                throw new FormatException($"A regra '{assoc.SourceCategory} -> {assoc.TargetCategory}' no requisito '{currentReq.Id}' aponta para categoria inexistente na trilha.");
+        }
+
         private class TrailDto
         {
             public string Id { get; set; }
@@ -142,12 +177,22 @@ namespace Core.Requirements
             public string Id { get; set; }
             public string Description { get; set; }
             public List<MethodDto> RequiredMethods { get; set;}
+            public List<AssociationDto> RequiredAssociations { get; set; }
         }
 
         private class MethodDto
         {
             public string Name { get; set; }
             public string Category { get; set;}
+        }
+
+        private class AssociationDto
+        {
+            public string SourceCategory { get; set; }
+            public string TargetCategory { get; set; }
+            public int Points { get; set; } = 25;
+            public string Reason { get; set; }
+            public string Hint { get; set; }
         }
     }
 }

@@ -9,14 +9,19 @@ namespace Core.Requirements
         public string Id { get; }
         public string Description { get; }
         public IReadOnlyList<MethodData> RequirementMethods { get; }
+        public IReadOnlyList<AssociationRule> RequiredAssociations { get; }
 
-        public Requirement(string id, string description, IReadOnlyList<MethodData> requirementMethods)
+        public Requirement(
+            string id, 
+            string description, 
+            IReadOnlyList<MethodData> requirementMethods,
+            IReadOnlyList<AssociationRule> requiredAssociations = null)
         {
             Id = id;
             Description = description;
             RequirementMethods = requirementMethods ?? new List<MethodData>();
+            RequiredAssociations = requiredAssociations ?? new List<AssociationRule>();
         }
-
     }
 
     public class Trail

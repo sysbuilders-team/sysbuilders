@@ -1,4 +1,6 @@
-using System;
+﻿using System;
+using System.Linq;
+using Core.Requirements;
 using Core.Session;
 using TMPro;
 using UnityEngine;
@@ -19,6 +21,9 @@ namespace UI
         [SerializeField] private TMP_Text _playerSmellsReportText;
         [SerializeField] private TMP_Text _opponentSmellsReportText;
 
+        [Header("Relatório de Domínio")]
+        [SerializeField] private TMP_Text _playerDomainReportText;
+
         [Header("Navegação")]
         [SerializeField] private Button _mainMenuButton;
         [SerializeField] private Button _restartButton;
@@ -27,6 +32,7 @@ namespace UI
         private ISceneNavigationActions _navigationActions;
         private ITurnContext _turnContext;
         private PlayerSlot _localSlot;
+        private IRequirementContext _requirementContext;
 
         public bool IsModalOpen => _modalRoot != null && _modalRoot.activeSelf;
 
@@ -44,7 +50,8 @@ namespace UI
             IMatchEndContext endContext,
             ISceneNavigationActions navigationActions,
             ITurnContext turnContext = null,
-            PlayerSlot localSlot = PlayerSlot.PlayerOne)
+            PlayerSlot localSlot = PlayerSlot.PlayerOne,
+            IRequirementContext requirementContext = null)
         {
             UnsubscribeFromEvents();
             SetupButtons();
@@ -53,6 +60,7 @@ namespace UI
             _navigationActions = navigationActions;
             _turnContext = turnContext;
             _localSlot = localSlot;
+            _requirementContext = requirementContext;
 
             if (_turnContext != null)
             {
@@ -182,6 +190,15 @@ namespace UI
             if (_opponentSmellsReportText != null)
             {
                 _opponentSmellsReportText.text = SmellReportFormatter.FormatSmellReport("Code Smells do Adversário (estado final do diagrama)", oppHistory);
+            }
+
+            if (_playerDomainReportText != null && _requirementContext != null)
+            {
+                var lastResult = myHistory.LastOrDefault();
+                _playerDomainReportText.text = DomainReportFormatter.FormatDomainReport(
+                    "Sua Modelagem de Domínio",
+                    _requirementContext.RequirementsHistory,
+                    lastResult);
             }
         }
     }
