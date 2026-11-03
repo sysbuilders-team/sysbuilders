@@ -343,6 +343,7 @@ namespace UI
             }
 
             var nodeUI = nodeGo.GetComponent<ClassNodeUI>() ?? nodeGo.AddComponent<ClassNodeUI>();
+
             nodeUI.RectTransform.anchorMin = new Vector2(0f, 1f);
             nodeUI.RectTransform.anchorMax = new Vector2(0f, 1f);
             nodeUI.RectTransform.pivot = new Vector2(0.5f, 0.5f);
@@ -368,6 +369,8 @@ namespace UI
             nodeUI.OnMethodDropped += HandleMethodDropped;
             nodeUI.OnRemoveMethodRequested += HandleRemoveMethodRequested;
             nodeUI.OnDeleteRequested += HandleDeleteRequested;
+            nodeUI.SetCanModifyProvider(() => _diagramActions != null && _diagramActions.CanModifyDiagram);
+
             return nodeUI;
         }
 

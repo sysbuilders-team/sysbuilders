@@ -160,7 +160,7 @@ namespace Core.Session
 
         public bool CanModifyDiagram()
         {
-            return TurnManager.CurrentPhase == TurnPhase.Build;
+            return TurnManager.CurrentPhase == TurnPhase.Build && !TurnManager.IsPlayerReady(LocalSlot);
         }
 
         public PlayerState GetPlayerBySlot(PlayerSlot slot)

@@ -33,6 +33,9 @@ namespace UI
         private Canvas _canvas;
         private Outline _outline;
         private NodeSelectionState _selectionState;
+        private Func<bool> _canModifyProvider;
+        public void SetCanModifyProvider(Func<bool> provider) => _canModifyProvider = provider;
+        private bool CanInteract() => _canModifyProvider == null || _canModifyProvider();
 
         public ClassNode Node { get; private set; }
         public RectTransform RectTransform => _rectTransform != null ? _rectTransform : (_rectTransform = GetComponent<RectTransform>());
@@ -43,7 +46,7 @@ namespace UI
         public event Action<ClassNodeUI, MethodData> OnMethodDropped;
         public event Action<ClassNodeUI> OnDeleteRequested;
 
-        public bool CanRename => Node != null && !Node.IsLocked;
+        public bool CanRename => Node != null && !Node.IsLocked && CanInteract();
         public NodeSelectionState SelectionState => _selectionState;
 
         private void Awake()
@@ -202,7 +205,7 @@ namespace UI
             if (_classNameInput != null)
             {
                 _classNameInput.text = Node.Name;
-                _classNameInput.interactable = !Node.IsLocked;
+                _classNameInput.interactable = !Node.IsLocked && CanInteract();
             }
 
             UpdateLockVisuals();
@@ -271,7 +274,7 @@ namespace UI
                 text.color = Node.IsLocked ? Color.gray : Color.black;
 
                 var btn = methodGo.GetComponent<Button>();
-                btn.interactable = !Node.IsLocked;
+                btn.interactable = !Node.IsLocked && CanInteract();
                 var capturedMethod = method;
                 btn.onClick.AddListener(() =>
                 {
@@ -285,7 +288,7 @@ namespace UI
 
         private void HandleDeleteClicked()
         {
-            if (Node != null && !Node.IsLocked)
+            if (Node != null && !Node.IsLocked && CanInteract())
             {
                 OnDeleteRequested?.Invoke(this);
             }
@@ -347,11 +350,13 @@ namespace UI
 
         public void OnBeginDrag(PointerEventData eventData)
         {
+            if(Node == null) return;
             transform.SetAsLastSibling();
         }
 
         public void OnDrag(PointerEventData eventData)
         {
+            if(Node == null) return;
             if (_canvas == null) _canvas = GetComponentInParent<Canvas>();
             float scaleFactor = _canvas != null ? _canvas.scaleFactor : 1f;
             RectTransform.anchoredPosition += eventData.delta / scaleFactor;

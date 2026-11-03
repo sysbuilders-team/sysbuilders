@@ -278,6 +278,7 @@ namespace Core.Diagram
             }
 
             if (origin == null || destination == null) return false;
+            if (origin.IsLocked && destination.IsLocked) return false;
 
             if (!LocalPlayer.Diagram.Classes.Contains(origin) || !LocalPlayer.Diagram.Classes.Contains(destination))
             {
@@ -304,7 +305,8 @@ namespace Core.Diagram
         }
 
         public bool RemoveRelation(ClassNode origin, ClassNode destination)
-        {
+        {   
+            if(origin.IsLocked && destination.IsLocked) return false;
             if (!CanModifyDiagram || origin == null || destination == null) return false;
 
             bool removed = LocalPlayer.RemoveRelation(origin, destination);

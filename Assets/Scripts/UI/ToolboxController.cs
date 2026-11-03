@@ -39,6 +39,8 @@ namespace UI
         public int MaxClassesPerMatch => _diagramActions?.MaxClassesPerMatch ?? DiagramEditor.DefaultMaxClassesPerMatch;
         public bool IsAssociationModeActive => _isAssociationModeActive;
         public IReadOnlyList<MethodCardUI> ActiveCards => _activeCards;
+        private bool CanEdit() => _diagramActions != null && _diagramActions.CanModifyDiagram;
+
         public bool HasPendingMethods => _activeCards.Any(c => c != null && c.IsCurrentTurn);
 
         private void Awake()
@@ -194,6 +196,7 @@ namespace UI
 
         private void HandleAssociationButtonClicked()
         {
+            if(!CanEdit()) return;
             if (_turnContext == null || _turnContext.CurrentPhase != TurnPhase.Build) return;
 
             SetAssociationMode(!_isAssociationModeActive);
@@ -328,7 +331,7 @@ namespace UI
 
             if (_associationButton != null)
             {
-                _associationButton.interactable = isBuildPhase;
+                _associationButton.interactable = isBuildPhase && CanEdit();
             }
         }
     }

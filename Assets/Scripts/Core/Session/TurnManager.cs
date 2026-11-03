@@ -192,6 +192,9 @@ namespace Core.Session
             return _playerReadinessTracker.IsBothPlayersReady();
         }
         
-        
+        public bool IsPlayerReady(PlayerSlot player)
+        {
+            return _playerReadinessTracker.IsPlayerReady(player);
+        }
     }
 }
