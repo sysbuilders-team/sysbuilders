@@ -24,6 +24,8 @@ namespace UI
         [SerializeField] private MonoBehaviour _lobbySourceBehaviour;
 
         private IRoomLobbySource _lobbySource;
+        private IRoomLobbySource _subscribedSource;
+
         private bool _wasInRoom;
 
         public MenuScreen CurrentScreen { get; private set; } = MenuScreen.Main;
@@ -49,20 +51,27 @@ namespace UI
             UnsubscribeLobbySource();
 
             _lobbySource = lobbySource;
-            _wasInRoom = _lobbySource != null && _lobbySource.IsInRoom;
+            _wasInRoom = IsAlive(lobbySource) && lobbySource.IsInRoom;
 
             if (_lobbySource != null)
             {
                 _lobbySource.OnSlotsChanged += HandleLobbyStateChanged;
+                _subscribedSource = _lobbySource;
             }
         }
 
         private void Awake()
         {
             EnsureLobbySource();
-            _wasInRoom = _lobbySource != null && _lobbySource.IsInRoom;
+            _wasInRoom = IsAlive(_lobbySource) && _lobbySource.IsInRoom;
 
             ShowScreen(_wasInRoom ? MenuScreen.RoomWait : MenuScreen.Main);
+        }
+
+        private void Update()
+        {
+            EnsureLobbySource();
+            SyncScreenWithRoomState();
         }
 
         private void OnEnable()
@@ -77,35 +86,12 @@ namespace UI
 
         private void UnsubscribeLobbySource()
         {
-            if (_lobbySource != null)
-            {
-                _lobbySource.OnSlotsChanged -= HandleLobbyStateChanged;
-            }
+            if (_subscribedSource == null) return;
+            _subscribedSource.OnSlotsChanged -= HandleLobbyStateChanged;
+            _subscribedSource = null;
         }
 
-        private void HandleLobbyStateChanged()
-        {
-            if (_lobbySource == null) return;
-
-            bool inRoom = _lobbySource.IsInRoom;
-
-            if (!_wasInRoom && inRoom)
-            {
-                _wasInRoom = true;
-                if (CurrentScreen != MenuScreen.RoomWait)
-                {
-                    ShowScreen(MenuScreen.RoomWait);
-                }
-            }
-            else if (_wasInRoom && !inRoom)
-            {
-                _wasInRoom = false;
-                if (CurrentScreen == MenuScreen.RoomWait)
-                {
-                    ShowScreen(MenuScreen.Main);
-                }
-            }
-        }
+        private void HandleLobbyStateChanged() => SyncScreenWithRoomState();
 
         public void ShowScreen(MenuScreen screen)
         {
@@ -126,16 +112,38 @@ namespace UI
         public void ShowSettings() => ShowScreen(MenuScreen.Settings);
         public void ShowTutorial() => ShowScreen(MenuScreen.Tutorial);
 
-        private void EnsureLobbySource()
+        private void SyncScreenWithRoomState()
         {
-            if (_lobbySource != null) return;
+            if (!IsAlive(_lobbySource)) return;
 
-            var resolved = _lobbySourceBehaviour as IRoomLobbySource ?? FindPort<IRoomLobbySource>();
-            if (resolved != null)
+            bool inRoom = _lobbySource.IsInRoom;
+            if (inRoom == _wasInRoom) return;
+
+            _wasInRoom = inRoom;
+
+            if (inRoom)
             {
-                SetLobbySource(resolved);
+                if (CurrentScreen != MenuScreen.RoomWait) ShowScreen(MenuScreen.RoomWait);
+            }
+            else if (CurrentScreen == MenuScreen.RoomWait)
+            {
+                ShowScreen(MenuScreen.Main);
             }
         }
+        private void EnsureLobbySource()
+        {
+            if(IsAlive(_lobbySource)) return;
+
+            UnsubscribeLobbySource();
+            _lobbySource = null;
+
+            var resolved = _lobbySourceBehaviour as IRoomLobbySource;
+            if (!IsAlive(resolved)) resolved = FindPort<IRoomLobbySource>();
+            if (resolved != null) SetLobbySource(resolved);
+        }
+
+        private static bool IsAlive(IRoomLobbySource source)
+            => source != null && (source is not UnityEngine.Object unityObject  || unityObject != null);
 
         private static TPort FindPort<TPort>() where TPort : class
         {

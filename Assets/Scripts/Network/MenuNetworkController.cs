@@ -73,6 +73,13 @@ namespace Network
 			if (room != null) room.SetChosenTheme(theme);
 
 			NetworkManager.singleton.StartHost();
+
+			if (!NetworkServer.active)
+			{
+				Debug.LogWarning("[MenuNetwork] StartHost nao iniciou. Sala NAO anunciada.");
+				return;
+			}
+
 			StartAdvertising(theme, playerName);
 			ResolveDiscovery()?.StartBrowsing();
 

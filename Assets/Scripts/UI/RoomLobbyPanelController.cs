@@ -28,6 +28,7 @@ namespace UI
         private readonly List<SlotRow> _rows = new List<SlotRow>(2);
         
         private IRoomLobbySource _source;
+        private IRoomLobbySource _subscribedSource;
         private bool _subscribed;
         private float _nextSourceSearch;
 
@@ -54,63 +55,35 @@ namespace UI
         private void OnEnable()
         {
             EnsureSource();
-
-            if (_source != null && !_subscribed)
-            {
-                _source.OnSlotsChanged += HandleSlotsChanged;
-                _subscribed = true;
-            }
-
+            SubscribeIfNeeded();
             HandleSlotsChanged();
         }
 
         private void OnDestroy()
         {
-            if (_subscribed && _source != null)
-            {
-                _source.OnSlotsChanged -= HandleSlotsChanged;
-            }
-
+            UnsubscribeSource();
             if (_readyButton != null) _readyButton.onClick.RemoveListener(ToggleReady);
             ClearRows();
         }
 
         private void Update()
         {
-            if (_source != null && _subscribed) return;
+            if (IsAlive(_source) && ReferenceEquals(_subscribedSource, _source)) return;
 
             EnsureSource();
-
-            if (_source != null && !_subscribed)
-            {
-                _source.OnSlotsChanged += HandleSlotsChanged;
-                _subscribed = true;
-                HandleSlotsChanged();
-            }
+            SubscribeIfNeeded();
         }
 
         public void SetSource(IRoomLobbySource source)
         {
-            if (_subscribed && _source != null)
-            {
-                _source.OnSlotsChanged -= HandleSlotsChanged;
-                _subscribed = false;
-            }
-
+            UnsubscribeSource();
             _source = source;
-
-            if (_source != null && isActiveAndEnabled)
-            {
-                _source.OnSlotsChanged += HandleSlotsChanged;
-                _subscribed = true;
-                HandleSlotsChanged();
-            }
+            SubscribeIfNeeded();
         }
 
         private void HandleSlotsChanged()
         {
-            if (_source == null) return;
-
+            if (!IsAlive(_source)) return;
             SyncRows(_source.Slots);
             UpdateControls();
         }
@@ -118,22 +91,44 @@ namespace UI
         private void ToggleReady()
         {
             EnsureSource();
-            if (_source == null) return;
-
+            if (!IsAlive(_source)) return;
             _source.SetLocalReady(!_source.IsLocalPlayerReady);
         }
 
         private void EnsureSource()
         {
-            if (_source != null) return;
+            if (IsAlive(_source)) return;
+
+            var previous = _subscribedSource;
+            UnsubscribeSource();         
+            _source = null;
 
             if (_sourceBehaviour != null)
             {
                 _source = _sourceBehaviour as IRoomLobbySource;
-                if (_source != null) return;
+                if (IsAlive(_source)) return;
+                _source = null;
             }
 
             SceneServices.TryResolve(ref _source, ref _nextSourceSearch);
+        }
+
+        private void SubscribeIfNeeded()
+        {
+            if (!IsAlive(_source)) return;
+            if (ReferenceEquals(_subscribedSource, _source)) return;
+
+            UnsubscribeSource();
+            _source.OnSlotsChanged += HandleSlotsChanged;
+            _subscribedSource = _source;
+            HandleSlotsChanged();
+        }
+
+        private void UnsubscribeSource()
+        {
+            if (_subscribedSource == null) return;
+            _subscribedSource.OnSlotsChanged -= HandleSlotsChanged;
+            _subscribedSource = null;
         }
 
         private void SyncRows(IReadOnlyList<RoomSlotInfo> slots)
@@ -253,5 +248,8 @@ namespace UI
             if (Application.isPlaying) Destroy(row.Root);
             else DestroyImmediate(row.Root);
         }
+
+        private static bool IsAlive(IRoomLobbySource source)
+            => source != null && (source is not UnityEngine.Object unityObject || unityObject != null);
     }
 }
