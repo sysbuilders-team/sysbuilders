@@ -27,6 +27,7 @@ namespace UI
         private IRoomLobbySource _subscribedSource;
 
         private bool _wasInRoom;
+        private float _nextSourceSearch;
 
         public MenuScreen CurrentScreen { get; private set; } = MenuScreen.Main;
 
@@ -130,6 +131,7 @@ namespace UI
                 ShowScreen(MenuScreen.Main);
             }
         }
+
         private void EnsureLobbySource()
         {
             if(IsAlive(_lobbySource)) return;
@@ -137,9 +139,19 @@ namespace UI
             UnsubscribeLobbySource();
             _lobbySource = null;
 
-            var resolved = _lobbySourceBehaviour as IRoomLobbySource;
-            if (!IsAlive(resolved)) resolved = FindPort<IRoomLobbySource>();
-            if (resolved != null) SetLobbySource(resolved);
+            if (_lobbySourceBehaviour != null)
+            {
+                var resolved = _lobbySourceBehaviour as IRoomLobbySource;
+                if (IsAlive(resolved))
+                {
+                    SetLobbySource(resolved);
+                    return;
+                }
+            }
+            if (SceneServices.TryResolve(ref _lobbySource, ref _nextSourceSearch))
+            {
+                SetLobbySource(_lobbySource);
+            }
         }
 
         private static bool IsAlive(IRoomLobbySource source)
