@@ -40,6 +40,9 @@ namespace UI
 
         private IRoomDirectory _directory;
         private IRoomJoinActions _joinActions;
+        private IRoomDirectory _subscribedDirectory;
+        private IRoomJoinActions _subscribedJoinActions;
+
         private float _nextDirectorySearch;
         private float _nextJoinActionsSearch;
 
@@ -67,44 +70,39 @@ namespace UI
         private void OnEnable()
         {
             EnsurePorts();
-
-            if (_directory != null)
-            {
-                _directory.OnRoomsChanged += Rebuild;
-                _directory.OnDiagnostic += HandleDiagnostic;
-            }
-
-            if (_joinActions != null)
-            {
-                _joinActions.OnHostKeyMismatch += HandleHostKeyMismatch;
-            }
-
+            SubscribeDirectory();
+            SubscribeJoinActions();
             HideTrustNewKeyButton();
             Rebuild();
         }
 
         private void OnDisable()
         {
-            if (_directory != null)
-            {
-                _directory.OnRoomsChanged -= Rebuild;
-                _directory.OnDiagnostic -= HandleDiagnostic;
-            }
-
-            if (_joinActions != null)
-            {
-                _joinActions.OnHostKeyMismatch -= HandleHostKeyMismatch;
-            }
-
+            UnsubscribeDirectory();
+            UnsubscribeJoinActions();
             HideTrustNewKeyButton();
         }
 
         private void OnDestroy()
         {
+            UnsubscribeDirectory();
+            UnsubscribeJoinActions();
+
             if (_refreshButton != null) _refreshButton.onClick.RemoveListener(Refresh);
             if (_trustNewKeyButton != null) _trustNewKeyButton.onClick.RemoveListener(HandleTrustNewKeyClicked);
             ClearEntries();
         }
+
+        private void Update()
+        {
+            // Garante que, caso os serviços de descoberta tenham inicializado após o Awake,
+            // eles sejam resolvidos e os eventos de salas sejam assinados.
+            if (_directory == null || _subscribedDirectory == null || _joinActions == null || _subscribedJoinActions == null)
+            {
+                EnsurePorts();
+            }
+        }
+
         public void Refresh()
         {
             EnsurePorts();
@@ -115,8 +113,10 @@ namespace UI
                 return;
             }
 
+            SubscribeDirectory();
             _directory.Refresh();
             SetStatus($"Procurando salas em {_directory.ActiveInterface}...");
+            Rebuild();
         }
 
         public void StopBrowsing()
@@ -134,6 +134,16 @@ namespace UI
 
                 if (_directory == null)
                     SceneServices.TryResolve(ref _directory, ref _nextDirectorySearch);
+
+                if (_directory != null)
+                {
+                    SubscribeDirectory();
+                    Rebuild();
+                }
+            }
+            else if (_subscribedDirectory == null)
+            {
+                SubscribeDirectory();
             }
 
             if (_joinActions == null)
@@ -143,7 +153,50 @@ namespace UI
 
                 if (_joinActions == null)
                     SceneServices.TryResolve(ref _joinActions, ref _nextJoinActionsSearch);
+
+                if (_joinActions != null)
+                {
+                    SubscribeJoinActions();
+                }
             }
+            else if (_subscribedJoinActions == null)
+            {
+                SubscribeJoinActions();
+            }
+        }
+
+        private void SubscribeDirectory()
+        {
+            if (_directory == null || _subscribedDirectory == _directory) return;
+            UnsubscribeDirectory();
+
+            _directory.OnRoomsChanged += Rebuild;
+            _directory.OnDiagnostic += HandleDiagnostic;
+            _subscribedDirectory = _directory;
+        }
+
+        private void UnsubscribeDirectory()
+        {
+            if (_subscribedDirectory == null) return;
+            _subscribedDirectory.OnRoomsChanged -= Rebuild;
+            _subscribedDirectory.OnDiagnostic -= HandleDiagnostic;
+            _subscribedDirectory = null;
+        }
+
+        private void SubscribeJoinActions()
+        {
+            if (_joinActions == null || _subscribedJoinActions == _joinActions) return;
+            UnsubscribeJoinActions();
+
+            _joinActions.OnHostKeyMismatch += HandleHostKeyMismatch;
+            _subscribedJoinActions = _joinActions;
+        }
+
+        private void UnsubscribeJoinActions()
+        {
+            if (_subscribedJoinActions == null) return;
+            _subscribedJoinActions.OnHostKeyMismatch -= HandleHostKeyMismatch;
+            _subscribedJoinActions = null;
         }
 
         private void Rebuild()
@@ -209,6 +262,10 @@ namespace UI
                 labelObject.transform.SetParent(entryObject.transform, false);
 
                 var label = labelObject.GetComponent<TextMeshProUGUI>();
+                if (_statusText != null && _statusText.font != null)
+                {
+                    label.font = _statusText.font;
+                }
                 label.fontSize = 16;
                 label.color = Color.white;
                 label.alignment = TextAlignmentOptions.Left;

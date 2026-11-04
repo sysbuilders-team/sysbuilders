@@ -35,6 +35,17 @@ namespace Network
 			ChosenTheme = string.IsNullOrWhiteSpace(theme) ? "Biblioteca" : theme;
 		}
 
+		public override void Awake()
+		{
+			base.Awake();
+
+			if (_discovery == null)
+			{
+				_discovery = GetComponent<RoomDiscoveryService>();
+				if (_discovery == null) _discovery = gameObject.AddComponent<RoomDiscoveryService>();
+			}
+		}
+
 		public override void Start()
 		{
 			base.Start();

@@ -81,20 +81,31 @@ namespace Network
 
 		public void StopRoom()
 		{
-			if (NetworkManager.singleton == null) return;
+			var manager = NetworkManager.singleton;
+			if (manager == null) return;
 
 			if (NetworkServer.active)
 			{
-				NetworkManager.singleton.StopHost();
+				manager.StopHost();
 			}
 			else if (NetworkClient.active)
 			{
-				NetworkManager.singleton.StopClient();
+				manager.StopClient();
 			}
 
-			// Mirror keeps state across StopHost/StopClient; destroying the manager is what made
-			// a second host session start clean.
-			UnityEngine.Object.Destroy(NetworkManager.singleton.gameObject);
+			// Para de anunciar/procurar salas: sem isso o menu continuaria publicando uma sala
+			// que não existe mais depois de sair.
+			var discovery = ResolveDiscovery();
+			if (discovery != null)
+			{
+				discovery.StopAdvertising();
+				discovery.StopBrowsing();
+			}
+
+			_advertisement = null;
+
+			// O NetworkManager NÃO é destruído: ele é um objeto da MenuScene e é reutilizado no
+			// próximo "Criar sala". Destruí-lo deixava o menu sem rede até recarregar a cena.
 		}
 
 		public void StartBrowsing()
