@@ -1,0 +1,19 @@
+﻿# Binary assets: tell git not to diff them as text
+*.ttf binary
+*.otf binary
+*.ttc binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.psd binary
+*.tga binary
+*.wav binary
+*.mp3 binary
+*.ogg binary
+
+# TextMeshPro font assets: YAML with base64-embedded atlas.
+# Technically text, functionally binaries.
+Assets/Art/Fonts/TMP_*.asset binary
+
+# TextMeshPro built-in fallback (path has spaces + ampersand -> quote it)
+"Assets/TextMesh Pro/Resources/Fonts & Materials/*.asset" binary
