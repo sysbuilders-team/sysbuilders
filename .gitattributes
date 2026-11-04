@@ -1,4 +1,4 @@
-﻿# Binary assets: tell git not to diff them as text
+# Binary assets: tell git not to diff them as text
 *.ttf binary
 *.otf binary
 *.ttc binary
