@@ -1,7 +1,14 @@
 {
     "name": "Tests1",
     "references": [
-        "Sys.Core"
+        "Sys.Core",
+        "Sys.Managers",
+        "Sys.UI",
+        "Unity.TextMeshPro",
+        "Sys.Network",
+        "Mirror",
+        "Mirror.Components",
+        "Mirror.Transports"
     ],
     "includePlatforms": [
         "Editor"

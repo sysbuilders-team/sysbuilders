@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Core.Requirements;
 
 namespace Core.Session
 {
@@ -62,22 +63,31 @@ namespace Core.Session
         public SetPlayerReadyResult SetPlayerReady(PlayerSlot player);
     }
 
-    public class TurnManager : ITurnPlayerActions
+    public class TurnManager : ITurnPlayerActions, ITurnContext
     {
-        private const int MaxTurns = 5;
-
+        public int MaxTurns { get; }
+        
         public int CurrentTurn { get; private set; }
         public TurnPhase CurrentPhase { get; private set; }
         private readonly PlayerReadinessTracker _playerReadinessTracker;
         
         // some requirementmanager will subscribe to this, maybe also pass turn number, see this
         public event Action<TurnPhase> OnPhaseChange;
+        public event Action<PlayerSlot> OnPlayerReady;
 
-        public TurnManager()
+        // requiredPlayers: 2 numa partida de rede, 1 numa partida solo/local (o unico jogador avanca sozinho).
+        // maxTurns: por padrao o tamanho de uma trilha, para nao existir uma segunda fonte de verdade para "5 turnos".
+        public TurnManager(int requiredPlayers = 2, int maxTurns = Trail.TurnCount)
         {
+            if (maxTurns < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxTurns), maxTurns, "A partida precisa de pelo menos um turno.");
+            }
+
+            MaxTurns = maxTurns;
             CurrentTurn = 1;
             CurrentPhase = TurnPhase.Show;
-            _playerReadinessTracker = new PlayerReadinessTracker(2);
+            _playerReadinessTracker = new PlayerReadinessTracker(Math.Max(1, requiredPlayers));
         }
         
 
@@ -137,7 +147,8 @@ namespace Core.Session
             }
 
             _playerReadinessTracker.SetPlayerReady(player);
-            
+            OnPlayerReady?.Invoke(player);
+
             AdvancePhase();
 
             return SetPlayerReadyResult.Success;
@@ -149,10 +160,5 @@ namespace Core.Session
             return _playerReadinessTracker.IsBothPlayersReady();
         }
         
-        
-
-        
-        
     }
 }
-	
